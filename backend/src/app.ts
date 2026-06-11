@@ -15,6 +15,10 @@ import { errorHandler, notFoundHandler } from './shared/middleware/error.middlew
 export function createApp() {
   const app = express();
 
+  // Behind the Nginx reverse proxy (one hop). Lets express-rate-limit and
+  // req.ip / req.protocol read the X-Forwarded-* headers correctly.
+  app.set('trust proxy', 1);
+
   // Serve the static API documentation page at the root. Mounted before helmet
   // so the HTML (which uses inline styles/scripts) is not blocked by the
   // default Content-Security-Policy that helmet applies to the API responses.

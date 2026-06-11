@@ -91,14 +91,15 @@
         <a href="#env">Env</a>
         <a href="#build">Build</a>
         <a href="#pm2">PM2</a>
+        <a href="#nginx">Nginx</a>
         <a href="#verify">Verify</a>
         <a href="#ops">Day-to-day</a>
       </div>
 
       <p class="meta">
         Target: <code>Ubuntu 24.04 (noble)</code> · App dir: <code>/home/mobile-app/backend</code> ·
-        Runtime: <code>Node 20</code> + <code>MongoDB 8.0</code> + <code>PM2</code> ·
-        Public URL: <code>http://187.127.180.2:4000</code>
+        Runtime: <code>Node 20</code> + <code>MongoDB 8.0</code> + <code>PM2</code> + <code>Nginx</code> ·
+        Public URL: <code>http://187.127.180.2</code> (port 80) → app on <code>127.0.0.1:4000</code>
       </p>
 
       <section id="prereq">
@@ -202,21 +203,50 @@ systemctl enable --now pm2-root</pre>
         </div>
       </section>
 
-      <section id="verify">
-        <h2><span class="step">Step 6</span> Verify</h2>
+      <section id="nginx">
+        <h2><span class="step">Step 6</span> Nginx reverse proxy (drop the port)</h2>
+        <p class="note">
+          Serves the app on standard port 80 so the public URL has no <code class="inline">:4000</code>.
+          The app keeps serving <code class="inline">/api/v1</code>, <code class="inline">/socket.io</code>,
+          <code class="inline">/uploads</code> and the docs at root — Nginx just forwards to it.
+        </p>
         <div class="block">
-          <pre>curl http://localhost:4000/health
+          <pre>apt-get install -y nginx
+
+<span class="pre-comment"># Site config lives at /etc/nginx/sites-available/whereabout</span>
+<span class="pre-comment"># (proxies / and /socket.io to 127.0.0.1:4000 with websocket upgrade)</span>
+ln -sf /etc/nginx/sites-available/whereabout /etc/nginx/sites-enabled/whereabout
+rm -f /etc/nginx/sites-enabled/default
+
+nginx -t                       <span class="pre-comment"># validate config</span>
+systemctl enable --now nginx
+systemctl reload nginx</pre>
+        </div>
+        <div class="callout">
+          App config: <code class="inline">app.set('trust proxy', 1)</code> and
+          <code class="inline">APP_URL=http://187.127.180.2</code> (no port) so generated links
+          (emails, profile photos) are absolute and port-less.
+        </div>
+      </section>
+
+      <section id="verify">
+        <h2><span class="step">Step 7</span> Verify</h2>
+        <div class="block">
+          <pre><span class="pre-comment"># Public URLs — no port</span>
+curl http://187.127.180.2/health
 <span class="pre-comment"># {"success":true,"data":{"status":"ok","service":"whereabout-backend"}}</span>
 
 <span class="pre-comment"># Socket.IO handshake</span>
-curl "http://localhost:4000/socket.io/?EIO=4&transport=polling"
+curl "http://187.127.180.2/socket.io/?EIO=4&transport=polling"
 
-<span class="pre-comment"># Open the API docs in a browser</span>
-<span class="pre-comment"># http://187.127.180.2:4000/</span></pre>
+<span class="pre-comment"># API base &amp; docs in a browser</span>
+<span class="pre-comment"># http://187.127.180.2/api/v1/...</span>
+<span class="pre-comment"># http://187.127.180.2/</span></pre>
         </div>
         <div class="callout warn">
           Reachable externally only if the firewall / security group allows inbound
-          <code class="inline">TCP 4000</code>. On UFW: <code class="inline">ufw allow 4000/tcp</code>.
+          <code class="inline">TCP 80</code>. On UFW: <code class="inline">ufw allow 'Nginx HTTP'</code>
+          (or <code class="inline">ufw allow 80/tcp</code>). Port 4000 stays internal.
         </div>
       </section>
 
