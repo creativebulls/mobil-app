@@ -40,6 +40,8 @@ const envSchema = z.object({
   PLACES_DEFAULT_LAT: z.coerce.number().default(28.6139),
   PLACES_DEFAULT_LON: z.coerce.number().default(77.209),
   PLACES_USER_AGENT: z.string().default('WhereAboutApp/1.0 (support@whereabout.app)'),
+  ADMIN_EMAIL: z.string().email().default('admin@whereabout.app'),
+  ADMIN_PASSWORD: z.string().min(8).default('admin-change-me'),
 });
 
 const parsed = envSchema.safeParse(process.env);

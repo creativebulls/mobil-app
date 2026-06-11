@@ -29,6 +29,12 @@ export type PasswordResetPayload = {
   type: 'password_reset';
 };
 
+export type AdminTokenPayload = {
+  sub: 'admin';
+  email: string;
+  type: 'admin';
+};
+
 export function signAccessToken(userId: string, email: string): string {
   const payload: AccessTokenPayload = { sub: userId, email, type: 'access' };
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: accessExpiresIn });
@@ -76,6 +82,19 @@ export function verifyPendingSessionToken(token: string): PendingSessionPayload 
 export function verifyPasswordResetToken(token: string): PasswordResetPayload {
   const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as PasswordResetPayload;
   if (payload.type !== 'password_reset') {
+    throw new Error('Invalid token type');
+  }
+  return payload;
+}
+
+export function signAdminToken(email: string): string {
+  const payload: AdminTokenPayload = { sub: 'admin', email, type: 'admin' };
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: '8h' });
+}
+
+export function verifyAdminToken(token: string): AdminTokenPayload {
+  const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as AdminTokenPayload;
+  if (payload.type !== 'admin') {
     throw new Error('Invalid token type');
   }
   return payload;

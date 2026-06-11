@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import path from 'path';
 
 import { env, uploadsRoot } from './config/env';
+import { adminRouter } from './modules/admin/admin.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { notificationRouter } from './modules/notifications/notification.routes';
 import { placesRouter } from './modules/places/places.routes';
@@ -48,6 +49,7 @@ export function createApp() {
   });
 
   app.use('/api/v1/auth', authLimiter, authRouter);
+  app.use('/api/v1/admin', authLimiter, adminRouter);
   app.use('/api/v1/posts', postRouter);
   app.use('/api/v1/comments', commentRouter);
   app.use('/api/v1/notifications', notificationRouter);
