@@ -1,4 +1,13 @@
+# Backend-specific (root .gitignore also applies)
+
 node_modules/
 dist/
+
+# Secrets
 .env
+.env.*
+!.env.example
+!.env*.example
+
+# Uploaded media (Multer)
 uploads/
