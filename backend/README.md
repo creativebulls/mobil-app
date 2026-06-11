@@ -24,10 +24,33 @@ docker compose up -d
 npm install
 
 # 3. Configure environment
-cp .env.example .env
+cp .env.development.example .env.development
 
 # 4. Run API + Socket.IO
 npm run dev
+```
+
+## Environment configuration (local vs production)
+
+Config is segregated per environment and loaded automatically based on `NODE_ENV`:
+
+| NODE_ENV | File loaded | Template |
+|----------|-------------|----------|
+| `development` (default) | `.env.development` | `.env.development.example` |
+| `production` | `.env.production` | `.env.production.example` |
+
+Loading order (first match wins, real process env is never overwritten):
+`.env.<NODE_ENV>` → `.env.local` → `.env` (shared fallback). Only the
+`*.example` files are committed; the real `.env.*` files are gitignored.
+
+### Run in production
+
+```bash
+cp .env.production.example .env.production   # then fill in real secrets
+# set APP_URL to your server, e.g. http://187.127.180.2:4000
+npm install
+npm run build
+npm run start:prod
 ```
 
 API: `http://localhost:4000`  

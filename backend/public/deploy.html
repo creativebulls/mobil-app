@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhereAbout API · Deployment Runbook</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #131a2e;
+        --panel-2: #1a2238;
+        --border: #263050;
+        --text: #e6ebf5;
+        --muted: #93a0bd;
+        --accent: #5b8cff;
+        --green: #2ecc71;
+        --code: #d6e2ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: radial-gradient(1200px 600px at 80% -10%, #1b2746 0%, var(--bg) 55%);
+        color: var(--text);
+        line-height: 1.55;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 90px; }
+      header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+      .logo {
+        width: 52px; height: 52px; border-radius: 14px;
+        background: linear-gradient(135deg, #5b8cff, #8a5bff);
+        display: grid; place-items: center; font-size: 26px; font-weight: 700;
+        box-shadow: 0 10px 30px rgba(91,140,255,0.35);
+      }
+      h1 { font-size: 26px; margin: 0; }
+      .sub { color: var(--muted); margin: 2px 0 0; font-size: 14px; }
+      .nav { margin: 22px 0 8px; display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav a { font-size: 13px; background: var(--panel); border: 1px solid var(--border); padding: 6px 12px; border-radius: 999px; color: var(--muted); }
+      .nav a:hover { border-color: var(--accent); color: var(--text); text-decoration: none; }
+      .meta { color: var(--muted); font-size: 13px; margin-top: 10px; }
+      .meta code { background: var(--panel-2); padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); color: var(--text); }
+      section { margin-top: 34px; }
+      h2 { font-size: 18px; margin: 0 0 4px; display: flex; align-items: baseline; gap: 10px; }
+      h2 .step { font-size: 12px; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; }
+      .note { color: var(--muted); font-size: 13.5px; margin: 6px 0 12px; }
+      .block {
+        position: relative; background: #0d1326; border: 1px solid var(--border);
+        border-radius: 12px; margin: 12px 0; overflow: hidden;
+      }
+      .block pre {
+        margin: 0; padding: 16px 18px; overflow-x: auto;
+        font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px; color: var(--code); line-height: 1.65;
+      }
+      .block .copy {
+        position: absolute; top: 10px; right: 10px; cursor: pointer;
+        border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+        padding: 4px 10px; border-radius: 7px; font-size: 12px;
+      }
+      .block .copy:hover { color: var(--text); border-color: var(--accent); }
+      .block .copy.done { color: var(--green); border-color: var(--green); }
+      .pre-comment { color: #6b7aa3; }
+      .callout {
+        background: rgba(91,140,255,0.08); border: 1px solid rgba(91,140,255,0.35);
+        border-radius: 12px; padding: 12px 16px; font-size: 13.5px; color: #c8d6ff;
+      }
+      .callout.warn { background: rgba(241,196,15,0.08); border-color: rgba(241,196,15,0.4); color: #f3e2a8; }
+      footer { margin-top: 50px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); padding-top: 20px; }
+      ul { margin: 8px 0; padding-left: 20px; }
+      li { margin: 4px 0; }
+      code.inline { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; border: 1px solid var(--border); color: var(--text); font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="logo">W</div>
+        <div>
+          <h1>WhereAbout API · Deployment Runbook</h1>
+          <p class="sub">Every command to bring the backend up on a fresh Ubuntu server</p>
+        </div>
+      </header>
+
+      <div class="nav">
+        <a href="/">← API docs</a>
+        <a href="#prereq">Prerequisites</a>
+        <a href="#node">Node</a>
+        <a href="#mongo">MongoDB</a>
+        <a href="#env">Env</a>
+        <a href="#build">Build</a>
+        <a href="#pm2">PM2</a>
+        <a href="#verify">Verify</a>
+        <a href="#ops">Day-to-day</a>
+      </div>
+
+      <p class="meta">
+        Target: <code>Ubuntu 24.04 (noble)</code> · App dir: <code>/home/mobile-app/backend</code> ·
+        Runtime: <code>Node 20</code> + <code>MongoDB 8.0</code> + <code>PM2</code> ·
+        Public URL: <code>http://187.127.180.2:4000</code>
+      </p>
+
+      <section id="prereq">
+        <h2><span class="step">Step 0</span> Get the code</h2>
+        <p class="note">Generate an SSH key, add the public key to GitHub, then clone the repo.</p>
+        <div class="block">
+          <pre><span class="pre-comment"># Create an SSH key and print the public half to add at GitHub → Settings → SSH keys</span>
+ssh-keygen -t ed25519 -C "you@example.com" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+
+<span class="pre-comment"># Clone and enter the backend</span>
+git clone git@github.com:mohit49/social-mobile-app.git /home/mobile-app
+cd /home/mobile-app/backend</pre>
+        </div>
+      </section>
+
+      <section id="node">
+        <h2><span class="step">Step 1</span> Install Node.js 20 + npm</h2>
+        <p class="note">Via the official NodeSource repository.</p>
+        <div class="block">
+          <pre>apt-get update -y
+apt-get install -y ca-certificates curl gnupg
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+  | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+  > /etc/apt/sources.list.d/nodesource.list
+apt-get update -y
+apt-get install -y nodejs
+
+<span class="pre-comment"># Verify</span>
+node -v   # v20.x
+npm -v</pre>
+        </div>
+      </section>
+
+      <section id="mongo">
+        <h2><span class="step">Step 2</span> Install &amp; start MongoDB 8.0</h2>
+        <div class="block">
+          <pre>curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc \
+  | gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" \
+  > /etc/apt/sources.list.d/mongodb-org-8.0.list
+apt-get update -y
+apt-get install -y mongodb-org
+
+<span class="pre-comment"># Start now and enable on boot</span>
+systemctl enable --now mongod
+systemctl status mongod --no-pager</pre>
+        </div>
+      </section>
+
+      <section id="env">
+        <h2><span class="step">Step 3</span> Configure environment</h2>
+        <p class="note">
+          Config is segregated per <code class="inline">NODE_ENV</code>:
+          <code class="inline">.env.development</code> for local, <code class="inline">.env.production</code> for prod.
+          Only the <code class="inline">*.example</code> files are committed.
+        </p>
+        <div class="block">
+          <pre><span class="pre-comment"># Create the production env file from the template, then edit it</span>
+cp .env.production.example .env.production
+
+<span class="pre-comment"># Generate strong JWT secrets and paste them in</span>
+openssl rand -hex 32   # -> JWT_ACCESS_SECRET
+openssl rand -hex 32   # -> JWT_REFRESH_SECRET</pre>
+        </div>
+        <div class="callout">
+          Set <code class="inline">APP_URL=http://187.127.180.2:4000</code>,
+          <code class="inline">MONGODB_URI=mongodb://127.0.0.1:27017/whereabout</code>, and tighten
+          <code class="inline">CORS_ORIGIN</code> to your real client origins.
+        </div>
+      </section>
+
+      <section id="build">
+        <h2><span class="step">Step 4</span> Install dependencies &amp; build</h2>
+        <div class="block">
+          <pre>npm install
+npm run build   <span class="pre-comment"># compiles TypeScript -> dist/</span></pre>
+        </div>
+      </section>
+
+      <section id="pm2">
+        <h2><span class="step">Step 5</span> Run continuously with PM2</h2>
+        <p class="note">PM2 keeps the app alive, restarts on crash, and brings it back after reboot.</p>
+        <div class="block">
+          <pre><span class="pre-comment"># Install PM2 into the system prefix so it uses the persistent Node</span>
+npm install -g pm2 --prefix /usr
+
+<span class="pre-comment"># Start from the ecosystem config (single fork instance — Socket.IO safe)</span>
+pm2 start ecosystem.config.cjs
+
+<span class="pre-comment"># Persist the process list and enable boot startup</span>
+pm2 save
+pm2 startup systemd -u root --hp /root
+systemctl enable --now pm2-root</pre>
+        </div>
+        <div class="callout warn">
+          Cluster mode would break Socket.IO (websockets need sticky sessions). The
+          <code class="inline">ecosystem.config.cjs</code> runs a single fork instance on purpose.
+        </div>
+      </section>
+
+      <section id="verify">
+        <h2><span class="step">Step 6</span> Verify</h2>
+        <div class="block">
+          <pre>curl http://localhost:4000/health
+<span class="pre-comment"># {"success":true,"data":{"status":"ok","service":"whereabout-backend"}}</span>
+
+<span class="pre-comment"># Socket.IO handshake</span>
+curl "http://localhost:4000/socket.io/?EIO=4&transport=polling"
+
+<span class="pre-comment"># Open the API docs in a browser</span>
+<span class="pre-comment"># http://187.127.180.2:4000/</span></pre>
+        </div>
+        <div class="callout warn">
+          Reachable externally only if the firewall / security group allows inbound
+          <code class="inline">TCP 4000</code>. On UFW: <code class="inline">ufw allow 4000/tcp</code>.
+        </div>
+      </section>
+
+      <section id="ops">
+        <h2><span class="step">Ops</span> Day-to-day commands</h2>
+        <div class="block">
+          <pre>pm2 status                 <span class="pre-comment"># list processes</span>
+pm2 logs whereabout-backend  <span class="pre-comment"># tail logs</span>
+pm2 restart whereabout-backend --update-env
+pm2 stop whereabout-backend
+pm2 delete whereabout-backend
+
+<span class="pre-comment"># Deploy a new version</span>
+cd /home/mobile-app/backend
+git pull
+npm install
+npm run build
+pm2 restart whereabout-backend --update-env</pre>
+        </div>
+        <p class="note">npm shortcuts: <code class="inline">npm run pm2:start</code>, <code class="inline">npm run pm2:restart</code>, <code class="inline">npm run pm2:logs</code>, <code class="inline">npm run pm2:stop</code>.</p>
+      </section>
+
+      <footer>
+        WhereAbout backend · <a href="/">API documentation</a> · <a href="/health">/health</a>
+      </footer>
+    </div>
+
+    <script>
+      document.querySelectorAll('.block').forEach((block) => {
+        const pre = block.querySelector('pre');
+        const btn = document.createElement('button');
+        btn.className = 'copy';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', async () => {
+          const text = pre.innerText;
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+          }
+          btn.textContent = 'Copied';
+          btn.classList.add('done');
+          setTimeout(() => {
+            btn.textContent = 'Copy';
+            btn.classList.remove('done');
+          }, 1500);
+        });
+        block.appendChild(btn);
+      });
+    </script>
+  </body>
+</html>

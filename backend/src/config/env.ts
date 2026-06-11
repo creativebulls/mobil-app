@@ -1,7 +1,19 @@
 import dotenv from 'dotenv';
+import path from 'path';
 import { z } from 'zod';
 
-dotenv.config();
+// Load environment-specific config first so it takes precedence, then fall back
+// to a shared `.env` for any values common to all environments.
+//   - development -> .env.development
+//   - production  -> .env.production
+//   - test        -> .env.test
+// Variables already set in the real process environment are never overwritten.
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const cwd = process.cwd();
+
+dotenv.config({ path: path.join(cwd, `.env.${nodeEnv}`) });
+dotenv.config({ path: path.join(cwd, '.env.local') });
+dotenv.config({ path: path.join(cwd, '.env') });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -39,3 +51,12 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isDevelopment = env.NODE_ENV === 'development';
+
+// Absolute root for uploaded media, shared by the static file server and the
+// Multer storage engines. Supports an absolute UPLOAD_DIR (e.g. a persistent
+// disk mount in production) and falls back to a path relative to the process
+// working directory. Resolving it once here keeps the served path and the
+// written path in sync regardless of where the process is started from.
+export const uploadsRoot = path.isAbsolute(env.UPLOAD_DIR)
+  ? env.UPLOAD_DIR
+  : path.join(process.cwd(), env.UPLOAD_DIR);

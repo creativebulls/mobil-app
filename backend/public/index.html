@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhereAbout API</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #131a2e;
+        --panel-2: #1a2238;
+        --border: #263050;
+        --text: #e6ebf5;
+        --muted: #93a0bd;
+        --accent: #5b8cff;
+        --green: #2ecc71;
+        --amber: #f1c40f;
+        --get: #2ecc71;
+        --post: #5b8cff;
+        --patch: #f1c40f;
+        --delete: #ff5d6c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: radial-gradient(1200px 600px at 80% -10%, #1b2746 0%, var(--bg) 55%);
+        color: var(--text);
+        line-height: 1.5;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 20px 80px; }
+      header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+      .logo {
+        width: 52px; height: 52px; border-radius: 14px;
+        background: linear-gradient(135deg, #5b8cff, #8a5bff);
+        display: grid; place-items: center; font-size: 26px; font-weight: 700;
+        box-shadow: 0 10px 30px rgba(91,140,255,0.35);
+      }
+      h1 { font-size: 28px; margin: 0; }
+      .sub { color: var(--muted); margin: 2px 0 0; font-size: 14px; }
+      .base {
+        margin: 24px 0; padding: 16px 18px; background: var(--panel);
+        border: 1px solid var(--border); border-radius: 14px;
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      }
+      .base code {
+        font-size: 15px; color: var(--text); background: var(--panel-2);
+        padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+      }
+      .pill {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--muted);
+      }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+      .dot.ok { background: var(--green); box-shadow: 0 0 10px var(--green); }
+      .dot.down { background: var(--delete); box-shadow: 0 0 10px var(--delete); }
+      button {
+        cursor: pointer; border: 1px solid var(--border); background: var(--panel-2);
+        color: var(--text); padding: 8px 14px; border-radius: 8px; font-size: 13px;
+      }
+      button:hover { border-color: var(--accent); }
+      section { margin-top: 36px; }
+      h2 { font-size: 18px; margin: 0 0 6px; }
+      .section-note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+      table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+      th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+      tr:last-child td { border-bottom: none; }
+      td.path code { color: var(--text); font-size: 13.5px; }
+      .method { font-weight: 700; font-size: 12px; padding: 3px 9px; border-radius: 6px; display: inline-block; min-width: 56px; text-align: center; }
+      .GET { color: var(--get); background: rgba(46,204,113,0.12); }
+      .POST { color: var(--post); background: rgba(91,140,255,0.12); }
+      .PATCH { color: var(--patch); background: rgba(241,196,15,0.12); }
+      .DELETE { color: var(--delete); background: rgba(255,93,108,0.12); }
+      .badge { font-size: 11px; color: var(--amber); border: 1px solid rgba(241,196,15,0.4); padding: 1px 7px; border-radius: 999px; margin-left: 8px; white-space: nowrap; }
+      footer { margin-top: 50px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); padding-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="logo">W</div>
+        <div>
+          <h1>WhereAbout API</h1>
+          <p class="sub">Node.js REST API + Socket.IO service for the WhereAbout mobile app</p>
+        </div>
+      </header>
+
+      <div class="base">
+        <span class="pill"><span class="dot" id="statusDot"></span> <span id="statusText">checking…</span></span>
+        <span style="color: var(--muted); font-size: 13px;">Base URL</span>
+        <code id="baseUrl">—</code>
+        <button id="healthBtn">Run health check</button>
+        <span id="healthResult" style="font-size: 13px; color: var(--muted);"></span>
+      </div>
+
+      <section>
+        <h2>Service</h2>
+        <p class="section-note">Public endpoints — no authentication required.</p>
+        <table>
+          <thead><tr><th style="width:90px;">Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody id="tbl-service"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Auth &amp; registration</h2>
+        <p class="section-note">Sign-up, email verification, login, and profile completion flow.</p>
+        <table>
+          <thead><tr><th style="width:90px;">Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody id="tbl-auth"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Feed, posts &amp; comments</h2>
+        <p class="section-note">Requires a verified-email access token: <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+        <table>
+          <thead><tr><th style="width:90px;">Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody id="tbl-posts"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Notifications &amp; push</h2>
+        <p class="section-note">Realtime notifications and Expo push token management.</p>
+        <table>
+          <thead><tr><th style="width:90px;">Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody id="tbl-notif"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Places</h2>
+        <p class="section-note">Swappable provider (OpenTripMap / sample / Google).</p>
+        <table>
+          <thead><tr><th style="width:90px;">Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody id="tbl-places"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Realtime (Socket.IO)</h2>
+        <p class="section-note">
+          Connect at <code id="socketUrl">—</code> with <code>{ auth: { token } }</code>.
+          Server events: <code>connection:ready</code>, <code>auth:email-verified</code>,
+          <code>post:created</code>, <code>post:updated</code>, <code>comment:created</code>,
+          <code>notification:new</code>, <code>notification:read</code>.
+        </p>
+      </section>
+
+      <footer>
+        WhereAbout backend · served from <code id="footBase">—</code> ·
+        <a href="/health">/health</a> ·
+        <a href="/deploy.html">Deployment runbook</a>
+      </footer>
+    </div>
+
+    <script>
+      const base = window.location.origin;
+      document.getElementById('baseUrl').textContent = base;
+      document.getElementById('footBase').textContent = base;
+      document.getElementById('socketUrl').textContent = base + '/socket.io';
+
+      const endpoints = {
+        'tbl-service': [
+          ['GET', '/health', 'Service health check'],
+          ['GET', '/uploads/:file', 'Static uploaded media (profile photos, post images)'],
+        ],
+        'tbl-auth': [
+          ['POST', '/api/v1/auth/register', 'Sign up'],
+          ['POST', '/api/v1/auth/verify-email', 'Verify email (API)'],
+          ['GET', '/api/v1/auth/verify-email/:token/confirm', 'Verify email (browser link)'],
+          ['POST', '/api/v1/auth/resume-verified-session', 'Resume session after verify'],
+          ['GET', '/api/v1/auth/verification-status?email=', 'Verification status'],
+          ['POST', '/api/v1/auth/resend-verification', 'Resend verification email'],
+          ['POST', '/api/v1/auth/login', 'Login'],
+          ['POST', '/api/v1/auth/refresh', 'Refresh token'],
+          ['POST', '/api/v1/auth/logout', 'Logout'],
+          ['POST', '/api/v1/auth/forgot-password', 'Forgot password'],
+          ['POST', '/api/v1/auth/verify-reset-code', 'Verify reset code'],
+          ['POST', '/api/v1/auth/reset-password', 'Reset password'],
+          ['POST', '/api/v1/auth/resend-reset-code', 'Resend reset code'],
+          ['GET', '/api/v1/auth/me', 'Current user', 'auth'],
+          ['PATCH', '/api/v1/auth/profile/names', 'Save names', 'auth'],
+          ['POST', '/api/v1/auth/profile/photo', 'Upload profile photo', 'auth'],
+          ['POST', '/api/v1/auth/profile/parental-consent', 'Parental consent', 'auth'],
+          ['POST', '/api/v1/auth/profile/complete-registration', 'Complete registration', 'auth'],
+        ],
+        'tbl-posts': [
+          ['GET', '/api/v1/posts', 'Feed (paginated: ?limit=&before=)', 'auth'],
+          ['POST', '/api/v1/posts', 'Create post (multipart: image, text, placeName)', 'auth'],
+          ['GET', '/api/v1/posts/:id', 'Get single post', 'auth'],
+          ['DELETE', '/api/v1/posts/:id', 'Delete own post', 'auth'],
+          ['POST', '/api/v1/posts/:id/like', 'Toggle like', 'auth'],
+          ['GET', '/api/v1/posts/:id/comments', 'List comments', 'auth'],
+          ['POST', '/api/v1/posts/:id/comments', 'Add comment', 'auth'],
+        ],
+        'tbl-notif': [
+          ['GET', '/api/v1/notifications', 'List notifications', 'auth'],
+          ['GET', '/api/v1/notifications/unread-count', 'Unread count', 'auth'],
+          ['POST', '/api/v1/notifications/read', 'Mark read ({ ids? })', 'auth'],
+          ['POST', '/api/v1/notifications/push-token', 'Register Expo push token', 'auth'],
+          ['DELETE', '/api/v1/notifications/push-token', 'Remove Expo push token', 'auth'],
+        ],
+        'tbl-places': [
+          ['GET', '/api/v1/places', 'List nearby / top-rated places', 'auth'],
+          ['GET', '/api/v1/places/search', 'Search places', 'auth'],
+          ['GET', '/api/v1/places/:id', 'Place details', 'auth'],
+          ['GET', '/api/v1/places/:id/engagement', 'Place engagement (likes/visits)', 'auth'],
+          ['POST', '/api/v1/places/:id/like', 'Toggle place like', 'auth'],
+          ['POST', '/api/v1/places/:id/visit', 'Record a visit', 'auth'],
+          ['GET', '/api/v1/places/:id/comments', 'List place comments', 'auth'],
+          ['POST', '/api/v1/places/:id/comments', 'Add place comment', 'auth'],
+          ['GET', '/api/v1/places/:id/posts', 'Posts at this place', 'auth'],
+        ],
+      };
+
+      function render() {
+        for (const [tbodyId, rows] of Object.entries(endpoints)) {
+          const tbody = document.getElementById(tbodyId);
+          tbody.innerHTML = rows
+            .map(([method, path, desc, auth]) => `
+              <tr>
+                <td><span class="method ${method}">${method}</span></td>
+                <td class="path"><code>${path}</code>${auth ? '<span class="badge">auth</span>' : ''}</td>
+                <td>${desc}</td>
+              </tr>`)
+            .join('');
+        }
+      }
+      render();
+
+      async function checkHealth() {
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        const result = document.getElementById('healthResult');
+        text.textContent = 'checking…';
+        dot.className = 'dot';
+        result.textContent = '';
+        try {
+          const started = performance.now();
+          const res = await fetch('/health', { cache: 'no-store' });
+          const ms = Math.round(performance.now() - started);
+          const json = await res.json();
+          if (res.ok && json?.data?.status === 'ok') {
+            dot.className = 'dot ok';
+            text.textContent = 'online';
+            result.textContent = `200 · ${json.data.service} · ${ms}ms`;
+          } else {
+            throw new Error('unexpected response');
+          }
+        } catch (err) {
+          dot.className = 'dot down';
+          text.textContent = 'unreachable';
+          result.textContent = String(err);
+        }
+      }
+
+      document.getElementById('healthBtn').addEventListener('click', checkHealth);
+      checkHealth();
+    </script>
+  </body>
+</html>

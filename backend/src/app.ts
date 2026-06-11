@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import path from 'path';
 
-import { env } from './config/env';
+import { env, uploadsRoot } from './config/env';
 import { authRouter } from './modules/auth/auth.routes';
 import { notificationRouter } from './modules/notifications/notification.routes';
 import { placesRouter } from './modules/places/places.routes';
@@ -13,6 +13,11 @@ import { errorHandler, notFoundHandler } from './shared/middleware/error.middlew
 
 export function createApp() {
   const app = express();
+
+  // Serve the static API documentation page at the root. Mounted before helmet
+  // so the HTML (which uses inline styles/scripts) is not blocked by the
+  // default Content-Security-Policy that helmet applies to the API responses.
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   app.use(helmet());
   app.use(
@@ -26,7 +31,7 @@ export function createApp() {
 
   app.use(
     '/uploads',
-    express.static(path.join(process.cwd(), env.UPLOAD_DIR), {
+    express.static(uploadsRoot, {
       maxAge: env.NODE_ENV === 'production' ? '7d' : 0,
     }),
   );

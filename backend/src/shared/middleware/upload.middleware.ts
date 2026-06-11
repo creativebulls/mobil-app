@@ -2,10 +2,10 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 
-import { env } from '../../config/env';
+import { uploadsRoot } from '../../config/env';
 
-const uploadDir = path.join(process.cwd(), env.UPLOAD_DIR, 'profile-photos');
-const postImageDir = path.join(process.cwd(), env.UPLOAD_DIR, 'posts');
+const uploadDir = path.join(uploadsRoot, 'profile-photos');
+const postImageDir = path.join(uploadsRoot, 'posts');
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
