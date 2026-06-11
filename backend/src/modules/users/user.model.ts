@@ -1,0 +1,114 @@
+import { Schema, model, type Document, type Types } from 'mongoose';
+
+export type RegistrationStatus = 'pending_email' | 'pending_profile' | 'completed';
+
+export interface IUser {
+  email: string;
+  passwordHash: string;
+  profilePhotoUrl?: string;
+  emailVerified: boolean;
+  emailVerificationToken?: string;
+  emailVerificationExpires?: Date;
+  givenName?: string;
+  surname?: string;
+  firstName?: string;
+  lastName?: string;
+  birthdate?: Date;
+  gender?: string;
+  registrationCompleted: boolean;
+  registrationStatus: RegistrationStatus;
+  termsConsentAt?: Date;
+  parentalConsent: boolean;
+  parentalConsentAt?: Date;
+  refreshTokens: Array<{ tokenId: string; expiresAt: Date }>;
+  expoPushTokens: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type UserDocument = IUser & Document<Types.ObjectId>;
+
+const refreshTokenSchema = new Schema(
+  {
+    tokenId: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+const userSchema = new Schema<UserDocument>(
+  {
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    profilePhotoUrl: { type: String },
+    emailVerified: { type: Boolean, default: false },
+    emailVerificationToken: { type: String },
+    emailVerificationExpires: { type: Date },
+    givenName: { type: String, trim: true },
+    surname: { type: String, trim: true },
+    firstName: { type: String, trim: true },
+    lastName: { type: String, trim: true },
+    birthdate: { type: Date },
+    gender: { type: String, trim: true },
+    registrationCompleted: { type: Boolean, default: false },
+    registrationStatus: {
+      type: String,
+      enum: ['pending_email', 'pending_profile', 'completed'],
+      default: 'pending_email',
+    },
+    termsConsentAt: { type: Date },
+    parentalConsent: { type: Boolean, default: false },
+    parentalConsentAt: { type: Date },
+    refreshTokens: { type: [refreshTokenSchema], default: [] },
+    expoPushTokens: { type: [String], default: [] },
+  },
+  { timestamps: true },
+);
+
+export const User = model<UserDocument>('User', userSchema);
+
+export function getUserDisplayName(user: Pick<IUser, 'givenName' | 'surname' | 'firstName' | 'lastName' | 'email'>): string {
+  if (user.givenName && user.surname) {
+    return `${user.givenName} ${user.surname}`;
+  }
+
+  if (user.firstName && user.lastName) {
+    return `${user.firstName} ${user.lastName}`;
+  }
+
+  return user.email.split('@')[0];
+}
+
+export type AuthorSummary = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+};
+
+export function serializeAuthor(user: UserDocument): AuthorSummary {
+  return {
+    id: user._id.toString(),
+    name: getUserDisplayName(user),
+    avatarUri: user.profilePhotoUrl ?? null,
+  };
+}
+
+export function serializeUser(user: UserDocument) {
+  return {
+    id: user._id.toString(),
+    email: user.email,
+    profilePhotoUrl: user.profilePhotoUrl ?? null,
+    emailVerified: user.emailVerified,
+    givenName: user.givenName ?? null,
+    surname: user.surname ?? null,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    birthdate: user.birthdate?.toISOString() ?? null,
+    gender: user.gender ?? null,
+    registrationCompleted: user.registrationCompleted,
+    registrationStatus: user.registrationStatus,
+    parentalConsent: user.parentalConsent,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
