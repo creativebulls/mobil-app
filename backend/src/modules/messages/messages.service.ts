@@ -214,6 +214,7 @@ export async function sendMessage(senderId: string, conversationId: string | nul
       title: senderName,
       body: trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed,
       data: { type: 'message', conversationId: conversation._id.toString() },
+      channelId: 'messages',
     });
   }
 
@@ -273,6 +274,7 @@ export async function sharePlaceWithContacts(
         title: senderName,
         body: trimmedNote ? `${trimmedNote} · ${placePreview(place.name)}` : `shared ${placePreview(place.name)}`,
         data: { type: 'message', conversationId: conversation._id.toString() },
+        channelId: 'messages',
       });
     }
 

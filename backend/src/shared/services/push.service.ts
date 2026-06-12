@@ -32,6 +32,7 @@ type PushPayload = {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  channelId?: string;
 };
 
 async function removeInvalidTokens(tokens: string[]): Promise<void> {
@@ -71,6 +72,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     title: payload.title,
     body: payload.body,
     data: payload.data ?? {},
+    priority: 'high',
+    channelId: payload.channelId ?? 'default',
   }));
 
   const chunks = expo.chunkPushNotifications(messages);

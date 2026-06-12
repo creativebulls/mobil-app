@@ -13,6 +13,7 @@ export interface INotification {
   actor: Types.ObjectId;
   type: NotificationType;
   post?: Types.ObjectId;
+  comment?: Types.ObjectId;
   friendRequest?: Types.ObjectId;
   message: string;
   preview?: string;
@@ -33,6 +34,7 @@ const notificationSchema = new Schema<NotificationDocument>(
       required: true,
     },
     post: { type: Schema.Types.ObjectId, ref: 'Post' },
+    comment: { type: Schema.Types.ObjectId, ref: 'Comment' },
     friendRequest: { type: Schema.Types.ObjectId, ref: 'FriendRequest' },
     message: { type: String, required: true },
     preview: { type: String },

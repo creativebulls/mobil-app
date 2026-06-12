@@ -29,26 +29,62 @@ type PopulatedActor = {
   profilePhotoUrl?: string;
 };
 
+type PopulatedFriendRequest = {
+  _id: { toString(): string };
+  status?: 'pending' | 'accepted' | 'rejected';
+};
+
 function serializeNotification(notification: NotificationDocument) {
   const actor = notification.actor as unknown as PopulatedActor | null;
+  const friendRequest = notification.friendRequest as unknown as
+    | PopulatedFriendRequest
+    | { toString(): string }
+    | null;
+
+  const friendRequestStatus =
+    friendRequest && typeof friendRequest === 'object' && 'status' in friendRequest
+      ? friendRequest.status ?? null
+      : null;
+  const friendRequestId = friendRequest
+    ? (typeof friendRequest === 'object' && '_id' in friendRequest
+        ? friendRequest._id.toString()
+        : friendRequest.toString())
+    : null;
+
+  const actorName =
+    actor && actor._id
+      ? actor.givenName && actor.surname
+        ? `${actor.givenName} ${actor.surname}`
+        : actor.firstName && actor.lastName
+          ? `${actor.firstName} ${actor.lastName}`
+          : actor.email.split('@')[0]
+      : 'Someone';
+
+  // For resolved friend requests, show an updated description instead of the
+  // original "sent you a friend request" with action buttons.
+  let message = notification.message;
+  if (notification.type === 'friend_request') {
+    if (friendRequestStatus === 'accepted') {
+      message = `You and ${actorName} are now friends`;
+    } else if (friendRequestStatus === 'rejected') {
+      message = `You declined ${actorName}'s friend request`;
+    }
+  }
 
   return {
     id: notification._id.toString(),
     type: notification.type,
-    message: notification.message,
+    message,
     preview: notification.preview ?? null,
     read: notification.read,
     postId: notification.post ? notification.post.toString() : null,
-    friendRequestId: notification.friendRequest ? notification.friendRequest.toString() : null,
+    commentId: notification.comment ? notification.comment.toString() : null,
+    friendRequestId,
+    friendRequestStatus,
     actor: actor && actor._id
       ? {
           id: actor._id.toString(),
-          name:
-            actor.givenName && actor.surname
-              ? `${actor.givenName} ${actor.surname}`
-              : actor.firstName && actor.lastName
-                ? `${actor.firstName} ${actor.lastName}`
-                : actor.email.split('@')[0],
+          name: actorName,
           avatarUri: actor.profilePhotoUrl ?? null,
         }
       : null,
@@ -62,6 +98,7 @@ export async function createNotification(input: {
   actorId: string;
   type: NotificationType;
   postId?: string;
+  commentId?: string;
   friendRequestId?: string;
   preview?: string;
 }): Promise<void> {
@@ -91,12 +128,16 @@ export async function createNotification(input: {
     actor: input.actorId,
     type: input.type,
     post: input.postId,
+    comment: input.commentId,
     friendRequest: input.friendRequestId,
     message,
     preview: input.preview,
   });
 
   await notification.populate('actor', 'givenName surname firstName lastName email profilePhotoUrl');
+  if (input.friendRequestId) {
+    await notification.populate('friendRequest', 'status');
+  }
 
   const serialized = serializeNotification(notification);
 
@@ -117,6 +158,7 @@ export async function createNotification(input: {
       data: {
         type: input.type,
         postId: input.postId ?? null,
+        commentId: input.commentId ?? null,
         friendRequestId: input.friendRequestId ?? null,
         notificationId: serialized.id,
       },
@@ -134,7 +176,8 @@ export async function listNotifications(userId: string, limit = 30, before?: str
   const notifications = await Notification.find(query)
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate('actor', 'givenName surname firstName lastName email profilePhotoUrl');
+    .populate('actor', 'givenName surname firstName lastName email profilePhotoUrl')
+    .populate('friendRequest', 'status');
 
   const unreadCount = await Notification.countDocuments({ recipient: userId, read: false });
 

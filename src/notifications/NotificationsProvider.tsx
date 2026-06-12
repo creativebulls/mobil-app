@@ -15,7 +15,7 @@ import { fetchUnreadCount } from '../api/notificationsApi';
 import type { AppNotification } from '../api/types';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getAccessToken } from '../storage/authSession';
-import { registerForPushNotifications } from './pushNotifications';
+import { ensureNotificationChannels, registerForPushNotifications } from './pushNotifications';
 
 type NotificationsContextValue = {
   unreadCount: number;
@@ -56,6 +56,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [refreshUnreadCount]);
 
   useEffect(() => {
+    void ensureNotificationChannels();
     void syncPushNotifications();
   }, [syncPushNotifications]);
 
@@ -84,7 +85,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as
-        | { postId?: string; friendRequestId?: string; type?: string; conversationId?: string }
+        | {
+            postId?: string;
+            commentId?: string;
+            friendRequestId?: string;
+            type?: string;
+            conversationId?: string;
+          }
         | undefined;
 
       if (data?.type === 'message' && data.conversationId) {
@@ -93,7 +100,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
 
       if (data?.postId) {
-        router.push({ pathname: '/comments', params: { postId: data.postId } });
+        router.push({
+          pathname: '/comments',
+          params: {
+            postId: data.postId,
+            ...(data.commentId ? { highlightCommentId: data.commentId } : {}),
+          },
+        });
         return;
       }
 

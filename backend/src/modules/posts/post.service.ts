@@ -393,6 +393,7 @@ export async function addComment(
       actorId: currentUserId,
       type: 'reply',
       postId,
+      commentId: comment._id.toString(),
       preview,
     });
   } else {
@@ -401,6 +402,7 @@ export async function addComment(
       actorId: currentUserId,
       type: 'comment',
       postId,
+      commentId: comment._id.toString(),
       preview,
     });
   }
@@ -435,6 +437,7 @@ export async function toggleCommentLike(currentUserId: string, commentId: string
       actorId: currentUserId,
       type: 'comment_like',
       postId: comment.post.toString(),
+      commentId: comment._id.toString(),
       preview: comment.text.length > 80 ? `${comment.text.slice(0, 80)}…` : comment.text,
     });
   }

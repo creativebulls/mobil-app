@@ -98,14 +98,38 @@ export default function NotificationsScreen() {
 
   function handlePress(notification: AppNotification) {
     if (notification.type === 'friend_request') {
+      // Pending requests are actioned via the buttons; resolved ones open the profile.
+      const resolved =
+        notification.friendRequestStatus === 'accepted' ||
+        notification.friendRequestStatus === 'rejected';
+      if (resolved && notification.actor?.id) {
+        openUserProfile(router, notification.actor.id, currentUserId);
+      }
       return;
     }
+
+    if (notification.type === 'friend_request_accepted') {
+      if (notification.actor?.id) {
+        openUserProfile(router, notification.actor.id, currentUserId);
+      }
+      return;
+    }
+
+    // Post-related notifications (like / comment / reply / comment_like) deep-link
+    // straight to the post, highlighting the relevant comment when available.
+    if (notification.postId) {
+      router.push({
+        pathname: '/comments',
+        params: {
+          postId: notification.postId,
+          ...(notification.commentId ? { highlightCommentId: notification.commentId } : {}),
+        },
+      });
+      return;
+    }
+
     if (notification.actor?.id) {
       openUserProfile(router, notification.actor.id, currentUserId);
-      return;
-    }
-    if (notification.postId) {
-      router.push({ pathname: '/comments', params: { postId: notification.postId } });
     }
   }
 
@@ -122,7 +146,18 @@ export default function NotificationsScreen() {
     setActingOnId(notification.id);
     try {
       await acceptFriendRequest(notification.friendRequestId);
-      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+      const name = notification.actor?.name ?? 'them';
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? {
+                ...item,
+                friendRequestStatus: 'accepted',
+                message: `You and ${name} are now friends`,
+              }
+            : item,
+        ),
+      );
     } finally {
       setActingOnId(null);
     }
@@ -135,7 +170,18 @@ export default function NotificationsScreen() {
     setActingOnId(notification.id);
     try {
       await rejectFriendRequest(notification.friendRequestId);
-      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+      const name = notification.actor?.name ?? 'them';
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? {
+                ...item,
+                friendRequestStatus: 'rejected',
+                message: `You declined ${name}'s friend request`,
+              }
+            : item,
+        ),
+      );
     } finally {
       setActingOnId(null);
     }
@@ -178,7 +224,9 @@ export default function NotificationsScreen() {
                 style={({ pressed }) => [
                   styles.row,
                   !item.read && styles.rowUnread,
-                  pressed && item.type !== 'friend_request' && styles.rowPressed,
+                  pressed &&
+                    !(item.type === 'friend_request' && item.friendRequestStatus === 'pending') &&
+                    styles.rowPressed,
                 ]}
               >
                 <View style={styles.avatarWrap}>
@@ -199,7 +247,10 @@ export default function NotificationsScreen() {
                       “{item.preview}”
                     </Text>
                   ) : null}
-                  {item.type === 'friend_request' && item.friendRequestId ? (
+                  {item.type === 'friend_request' &&
+                  item.friendRequestId &&
+                  item.friendRequestStatus !== 'accepted' &&
+                  item.friendRequestStatus !== 'rejected' ? (
                     <View style={styles.friendActions}>
                       <Pressable
                         onPress={() => void handleAcceptFriend(item)}

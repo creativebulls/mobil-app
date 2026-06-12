@@ -36,7 +36,10 @@ type ReplyTarget = { parentId: string; name: string };
 
 export default function PostDetailScreen() {
   const router = useRouter();
-  const { postId } = useLocalSearchParams<{ postId: string }>();
+  const { postId, highlightCommentId } = useLocalSearchParams<{
+    postId: string;
+    highlightCommentId?: string;
+  }>();
 
   const [post, setPost] = useState<Post | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -48,8 +51,11 @@ export default function PostDetailScreen() {
   const [draft, setDraft] = useState('');
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const inputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList<PostComment>>(null);
+  const didHighlightRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!postId) {
@@ -75,6 +81,23 @@ export default function PostDetailScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (didHighlightRef.current || !highlightCommentId || isLoading) {
+      return;
+    }
+    const index = comments.findIndex((comment) => comment.id === highlightCommentId);
+    if (index < 0) {
+      return;
+    }
+    didHighlightRef.current = true;
+    setHighlightId(highlightCommentId);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true });
+    });
+    const timeout = setTimeout(() => setHighlightId(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [comments, highlightCommentId, isLoading]);
 
   function patchComment(commentId: string, patch: Partial<PostComment>) {
     setComments((current) =>
@@ -241,10 +264,16 @@ export default function PostDetailScreen() {
             <ActivityIndicator color={colors.brand} style={styles.loader} />
           ) : (
             <FlatList
+              ref={listRef}
               data={comments}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.list}
               keyboardShouldPersistTaps="handled"
+              onScrollToIndexFailed={({ index }) => {
+                setTimeout(() => {
+                  listRef.current?.scrollToIndex({ index, viewPosition: 0.4, animated: true });
+                }, 300);
+              }}
               ListHeaderComponent={
                 <View>
                   {post ? (
@@ -274,7 +303,7 @@ export default function PostDetailScreen() {
                 </View>
               }
               renderItem={({ item }) => (
-                <View style={styles.commentBlock}>
+                <View style={[styles.commentBlock, highlightId === item.id && styles.commentHighlight]}>
                   <CommentItem
                     comment={item}
                     onLike={handleLikeComment}
@@ -387,6 +416,10 @@ const styles = StyleSheet.create({
   commentBlock: {
     paddingHorizontal: 20,
     paddingVertical: 10,
+  },
+  commentHighlight: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 12,
   },
   repliesToggle: {
     flexDirection: 'row',

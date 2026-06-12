@@ -136,7 +136,9 @@ export type AppNotification = {
   preview: string | null;
   read: boolean;
   postId: string | null;
+  commentId: string | null;
   friendRequestId: string | null;
+  friendRequestStatus: 'pending' | 'accepted' | 'rejected' | null;
   actor: AuthorSummary | null;
   createdAt: string;
   timeAgo: string;

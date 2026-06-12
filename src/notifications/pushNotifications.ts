@@ -24,11 +24,26 @@ async function ensureAndroidChannel(): Promise<void> {
   }
 
   await Notifications.setNotificationChannelAsync('default', {
-    name: 'Default',
+    name: 'Notifications',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F36464',
+    sound: 'default',
+    enableVibrate: true,
   });
+
+  await Notifications.setNotificationChannelAsync('messages', {
+    name: 'Messages',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#F36464',
+    sound: 'default',
+    enableVibrate: true,
+  });
+}
+
+export async function ensureNotificationChannels(): Promise<void> {
+  await ensureAndroidChannel();
 }
 
 export async function registerForPushNotifications(): Promise<string | null> {

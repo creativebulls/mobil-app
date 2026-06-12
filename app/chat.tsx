@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,7 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   fetchMessages,
@@ -35,6 +36,8 @@ import { colors } from '../src/theme/colors';
 export default function ChatScreen() {
   const router = useRouter();
   const dialog = useDialog();
+  const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const params = useLocalSearchParams<{
     conversationId?: string;
     userId?: string;
@@ -100,6 +103,17 @@ export default function ChatScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -213,7 +227,7 @@ export default function ChatScreen() {
 
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
           {isLoading ? (
@@ -284,7 +298,12 @@ export default function ChatScreen() {
 
           {otherTyping ? <Text style={styles.typing}>{headerName} is typing…</Text> : null}
 
-          <View style={styles.inputBar}>
+          <View
+            style={[
+              styles.inputBar,
+              { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) },
+            ]}
+          >
             <TextInput
               style={styles.input}
               placeholder="Message…"
