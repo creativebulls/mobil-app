@@ -173,7 +173,14 @@ export default function ProfileScreen() {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.topHeader}>
-          <View style={styles.headerSide} />
+          <Pressable
+            onPress={() => router.push('/qr-connect')}
+            style={[styles.headerSide, styles.headerSideLeft]}
+            hitSlop={8}
+            accessibilityLabel="Connect by QR code"
+          >
+            <Ionicons name="qr-code-outline" size={24} color={colors.text} />
+          </Pressable>
           <Text style={styles.headerUsername} numberOfLines={1}>
             {username}
           </Text>
@@ -311,6 +318,9 @@ const styles = StyleSheet.create({
   headerSide: {
     width: 40,
     alignItems: 'flex-end',
+  },
+  headerSideLeft: {
+    alignItems: 'flex-start',
   },
   headerUsername: {
     flex: 1,
