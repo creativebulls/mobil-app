@@ -1,12 +1,19 @@
 import { Schema, model, type Document, type Types } from 'mongoose';
 
-export type NotificationType = 'like' | 'comment' | 'reply' | 'comment_like';
+export type NotificationType =
+  | 'like'
+  | 'comment'
+  | 'reply'
+  | 'comment_like'
+  | 'friend_request'
+  | 'friend_request_accepted';
 
 export interface INotification {
   recipient: Types.ObjectId;
   actor: Types.ObjectId;
   type: NotificationType;
   post?: Types.ObjectId;
+  friendRequest?: Types.ObjectId;
   message: string;
   preview?: string;
   read: boolean;
@@ -20,8 +27,13 @@ const notificationSchema = new Schema<NotificationDocument>(
   {
     recipient: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     actor: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { type: String, enum: ['like', 'comment', 'reply', 'comment_like'], required: true },
+    type: {
+      type: String,
+      enum: ['like', 'comment', 'reply', 'comment_like', 'friend_request', 'friend_request_accepted'],
+      required: true,
+    },
     post: { type: Schema.Types.ObjectId, ref: 'Post' },
+    friendRequest: { type: Schema.Types.ObjectId, ref: 'FriendRequest' },
     message: { type: String, required: true },
     preview: { type: String },
     read: { type: Boolean, default: false },

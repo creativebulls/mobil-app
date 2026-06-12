@@ -2,8 +2,10 @@ import { Types } from 'mongoose';
 
 import { AppError } from '../../shared/errors/AppError';
 import { formatRelativeTime } from '../../shared/utils/time';
-import { emitToUser, getSocketServer } from '../../socket/index';
+import { emitToUser } from '../../socket/index';
 import { User } from '../users/user.model';
+import { getFriendUserIds } from '../friends/friends.service';
+import { isBlockedBetween } from '../relations/relations.service';
 import { createNotification } from '../notifications/notification.service';
 import { Comment, type CommentDocument } from './comment.model';
 import { Post, type PostDocument } from './post.model';
@@ -35,7 +37,7 @@ function serializeUserSummary(user: PopulatedUser) {
   };
 }
 
-function serializePost(post: PostDocument, currentUserId: string) {
+export function serializePost(post: PostDocument, currentUserId: string) {
   const author = post.author as unknown as PopulatedUser;
   const likes = post.likes.map((id) => id.toString());
   const imageUris =
@@ -86,6 +88,30 @@ function serializeComment(comment: CommentDocument, currentUserId: string) {
 
 const AUTHOR_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl';
 
+/**
+ * Posts are visible only to their author and that author's friends. Because
+ * blocking a user removes the friendship, blocked contacts are automatically
+ * excluded from this audience.
+ */
+async function getVisibleAuthorIds(viewerId: string): Promise<string[]> {
+  const friendIds = await getFriendUserIds(viewerId);
+  return [viewerId, ...friendIds];
+}
+
+/** Throws unless the viewer is the author or one of the author's friends (and not blocked). */
+async function assertCanSeePost(viewerId: string, authorId: string): Promise<void> {
+  if (viewerId === authorId) {
+    return;
+  }
+  if (await isBlockedBetween(viewerId, authorId)) {
+    throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
+  }
+  const friendIds = await getFriendUserIds(viewerId);
+  if (!friendIds.has(authorId)) {
+    throw new AppError(403, 'This post is only visible to the author and their friends', 'POST_NOT_VISIBLE');
+  }
+}
+
 export async function createPost(input: {
   authorId: string;
   text?: string;
@@ -125,25 +151,27 @@ export async function createPost(input: {
     commentsCount: 0,
   });
 
+  await User.updateOne({ _id: input.authorId }, { $inc: { points: 10 } });
+
   await post.populate('author', AUTHOR_FIELDS);
 
   const serialized = serializePost(post, input.authorId);
 
-  const io = (() => {
-    try {
-      return getSocketServer();
-    } catch {
-      return null;
-    }
-  })();
-
-  io?.emit('post:created', serialized);
+  // Broadcast the new post to the author and each of their friends, so it
+  // appears live in their feeds — and nowhere else.
+  const friendIds = await getFriendUserIds(input.authorId);
+  emitToUser(input.authorId, 'post:created', serialized);
+  for (const friendId of friendIds) {
+    emitToUser(friendId, 'post:created', serialized);
+  }
 
   return serialized;
 }
 
 export async function getFeed(currentUserId: string, limit = 20, before?: string) {
-  const query: Record<string, unknown> = {};
+  const query: Record<string, unknown> = {
+    author: { $in: await getVisibleAuthorIds(currentUserId) },
+  };
 
   if (before) {
     query.createdAt = { $lt: new Date(before) };
@@ -180,6 +208,7 @@ export async function listPostsByPlace(
 ) {
   const query: Record<string, unknown> = {
     'place.name': placeNameQuery(placeName),
+    author: { $in: await getVisibleAuthorIds(currentUserId) },
   };
 
   if (before) {
@@ -207,6 +236,9 @@ export async function getPost(currentUserId: string, postId: string) {
     throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
   }
 
+  const authorId = (post.author as { _id: Types.ObjectId })._id.toString();
+  await assertCanSeePost(currentUserId, authorId);
+
   return serializePost(post, currentUserId);
 }
 
@@ -216,6 +248,8 @@ export async function toggleLike(currentUserId: string, postId: string) {
   if (!post) {
     throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
   }
+
+  await assertCanSeePost(currentUserId, post.author.toString());
 
   const userObjectId = new Types.ObjectId(currentUserId);
   const alreadyLiked = post.likes.some((id) => id.toString() === currentUserId);
@@ -227,6 +261,9 @@ export async function toggleLike(currentUserId: string, postId: string) {
   }
 
   await post.save();
+
+  await User.updateOne({ _id: post.author._id }, { $inc: { points: 10 } });
+
   await post.populate('author', AUTHOR_FIELDS);
 
   const serialized = serializePost(post, currentUserId);
@@ -240,6 +277,7 @@ export async function toggleLike(currentUserId: string, postId: string) {
       type: 'like',
       postId: post._id.toString(),
     });
+    await User.updateOne({ _id: post.author._id }, { $inc: { points: 2 } });
   }
 
   return serialized;
@@ -309,6 +347,8 @@ export async function addComment(
   if (!post) {
     throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
   }
+
+  await assertCanSeePost(currentUserId, post.author.toString());
 
   let parentComment = null;
 

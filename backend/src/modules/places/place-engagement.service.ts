@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 
 import { AppError } from '../../shared/errors/AppError';
 import { formatRelativeTime } from '../../shared/utils/time';
+import { User } from '../users/user.model';
 import { PlaceComment, PlaceLike, PlaceVisit, type PlaceCommentDocument } from './place-engagement.model';
 
 const AUTHOR_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl';
@@ -76,6 +77,7 @@ export async function togglePlaceLike(placeId: string, userId: string) {
     await existing.deleteOne();
   } else {
     await PlaceLike.create({ placeId, user: userId });
+    await User.updateOne({ _id: userId }, { $inc: { points: 3 } });
   }
 
   const likeCount = await PlaceLike.countDocuments({ placeId });

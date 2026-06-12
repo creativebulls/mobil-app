@@ -70,6 +70,18 @@ export function initializeSocket(httpServer: HttpServer): Server {
       message: 'Connected to WhereAbout realtime service',
     });
 
+    // Relay lightweight typing indicators directly to the other participant.
+    socket.on('message:typing', (payload: { toUserId?: string; conversationId?: string; typing?: boolean }) => {
+      if (!payload?.toUserId) {
+        return;
+      }
+      io?.to(`user:${payload.toUserId}`).emit('message:typing', {
+        conversationId: payload.conversationId ?? null,
+        userId,
+        typing: Boolean(payload.typing),
+      });
+    });
+
     socket.on('disconnect', () => {
       if (pendingSessionRooms.get(userId) === socket.id) {
         pendingSessionRooms.delete(userId);

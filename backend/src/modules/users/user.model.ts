@@ -22,9 +22,28 @@ export interface IUser {
   parentalConsentAt?: Date;
   refreshTokens: Array<{ tokenId: string; expiresAt: Date }>;
   expoPushTokens: string[];
+  statusText?: string;
+  points: number;
+  isPrivate: boolean;
+  pushPreferences: PushPreferences;
+  connectCode?: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface PushPreferences {
+  likes: boolean;
+  comments: boolean;
+  friendRequests: boolean;
+  messages: boolean;
+}
+
+export const DEFAULT_PUSH_PREFERENCES: PushPreferences = {
+  likes: true,
+  comments: true,
+  friendRequests: true,
+  messages: true,
+};
 
 export type UserDocument = IUser & Document<Types.ObjectId>;
 
@@ -61,6 +80,16 @@ const userSchema = new Schema<UserDocument>(
     parentalConsentAt: { type: Date },
     refreshTokens: { type: [refreshTokenSchema], default: [] },
     expoPushTokens: { type: [String], default: [] },
+    statusText: { type: String, trim: true, maxlength: 150 },
+    points: { type: Number, default: 0, min: 0 },
+    isPrivate: { type: Boolean, default: false },
+    pushPreferences: {
+      likes: { type: Boolean, default: true },
+      comments: { type: Boolean, default: true },
+      friendRequests: { type: Boolean, default: true },
+      messages: { type: Boolean, default: true },
+    },
+    connectCode: { type: String, unique: true, sparse: true },
   },
   { timestamps: true },
 );
@@ -108,6 +137,10 @@ export function serializeUser(user: UserDocument) {
     registrationCompleted: user.registrationCompleted,
     registrationStatus: user.registrationStatus,
     parentalConsent: user.parentalConsent,
+    statusText: user.statusText ?? null,
+    points: user.points ?? 0,
+    isPrivate: user.isPrivate ?? false,
+    pushPreferences: { ...DEFAULT_PUSH_PREFERENCES, ...(user.pushPreferences ?? {}) },
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

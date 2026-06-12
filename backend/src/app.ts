@@ -7,8 +7,12 @@ import path from 'path';
 import { env, uploadsRoot } from './config/env';
 import { adminRouter } from './modules/admin/admin.routes';
 import { authRouter } from './modules/auth/auth.routes';
+import { friendsRouter } from './modules/friends/friends.routes';
+import { messagesRouter } from './modules/messages/messages.routes';
 import { notificationRouter } from './modules/notifications/notification.routes';
 import { placesRouter } from './modules/places/places.routes';
+import { profileRouter } from './modules/profile/profile.routes';
+import { relationsRouter } from './modules/relations/relations.routes';
 import { commentRouter, postRouter } from './modules/posts/post.routes';
 import { errorHandler, notFoundHandler } from './shared/middleware/error.middleware';
 
@@ -57,6 +61,10 @@ export function createApp() {
   app.use('/api/v1/posts', postRouter);
   app.use('/api/v1/comments', commentRouter);
   app.use('/api/v1/notifications', notificationRouter);
+  app.use('/api/v1/friends', friendsRouter);
+  app.use('/api/v1/messages', messagesRouter);
+  app.use('/api/v1/relations', relationsRouter);
+  app.use('/api/v1/profile', profileRouter);
   app.use('/api/v1/places', placesRouter);
 
   app.use(notFoundHandler);

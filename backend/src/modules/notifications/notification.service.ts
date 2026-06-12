@@ -2,12 +2,22 @@ import { AppError } from '../../shared/errors/AppError';
 import { sendPushToUser } from '../../shared/services/push.service';
 import { formatRelativeTime } from '../../shared/utils/time';
 import { emitToUser } from '../../socket/index';
-import { serializeAuthor, User } from '../users/user.model';
+import { DEFAULT_PUSH_PREFERENCES, serializeAuthor, User, type PushPreferences } from '../users/user.model';
 import {
   Notification,
   type NotificationDocument,
   type NotificationType,
 } from './notification.model';
+
+/** Maps each notification type to the user-facing push preference that controls it. */
+const PUSH_CATEGORY_BY_TYPE: Record<NotificationType, keyof PushPreferences> = {
+  like: 'likes',
+  comment: 'comments',
+  reply: 'comments',
+  comment_like: 'comments',
+  friend_request: 'friendRequests',
+  friend_request_accepted: 'friendRequests',
+};
 
 type PopulatedActor = {
   _id: { toString(): string };
@@ -29,6 +39,7 @@ function serializeNotification(notification: NotificationDocument) {
     preview: notification.preview ?? null,
     read: notification.read,
     postId: notification.post ? notification.post.toString() : null,
+    friendRequestId: notification.friendRequest ? notification.friendRequest.toString() : null,
     actor: actor && actor._id
       ? {
           id: actor._id.toString(),
@@ -51,6 +62,7 @@ export async function createNotification(input: {
   actorId: string;
   type: NotificationType;
   postId?: string;
+  friendRequestId?: string;
   preview?: string;
 }): Promise<void> {
   if (input.recipientId === input.actorId) {
@@ -69,6 +81,8 @@ export async function createNotification(input: {
     comment: `${actorSummary.name} commented on your post`,
     reply: `${actorSummary.name} replied to your comment`,
     comment_like: `${actorSummary.name} liked your comment`,
+    friend_request: `${actorSummary.name} sent you a friend request`,
+    friend_request_accepted: `${actorSummary.name} accepted your friend request`,
   };
   const message = messageByType[input.type];
 
@@ -77,6 +91,7 @@ export async function createNotification(input: {
     actor: input.actorId,
     type: input.type,
     post: input.postId,
+    friendRequest: input.friendRequestId,
     message,
     preview: input.preview,
   });
@@ -85,13 +100,28 @@ export async function createNotification(input: {
 
   const serialized = serializeNotification(notification);
 
+  // The in-app notification is always delivered. Push is delivered only if the
+  // recipient has push enabled for this category.
   emitToUser(input.recipientId, 'notification:new', serialized);
 
-  await sendPushToUser(input.recipientId, {
-    title: 'WhereAbout',
-    body: input.preview ? `${message}: ${input.preview}` : message,
-    data: { type: input.type, postId: input.postId ?? null, notificationId: serialized.id },
-  });
+  const recipient = await User.findById(input.recipientId).select('pushPreferences');
+  const preferences: PushPreferences = {
+    ...DEFAULT_PUSH_PREFERENCES,
+    ...(recipient?.pushPreferences ?? {}),
+  };
+
+  if (preferences[PUSH_CATEGORY_BY_TYPE[input.type]]) {
+    await sendPushToUser(input.recipientId, {
+      title: 'WhereAbout',
+      body: input.preview ? `${message}: ${input.preview}` : message,
+      data: {
+        type: input.type,
+        postId: input.postId ?? null,
+        friendRequestId: input.friendRequestId ?? null,
+        notificationId: serialized.id,
+      },
+    });
+  }
 }
 
 export async function listNotifications(userId: string, limit = 30, before?: string) {
