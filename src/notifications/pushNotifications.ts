@@ -1,9 +1,13 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { registerPushToken } from '../api/notificationsApi';
+import { registerPushToken, removePushToken } from '../api/notificationsApi';
+import { getAccessToken } from '../storage/authSession';
+
+const PUSH_TOKEN_KEY = '@whereabout/expo_push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,6 +33,11 @@ async function ensureAndroidChannel(): Promise<void> {
 
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
+    return null;
+  }
+
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
     return null;
   }
 
@@ -58,8 +67,25 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const token = tokenResponse.data;
 
     await registerPushToken(token);
+    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
     return token;
   } catch {
     return null;
   }
+}
+
+export async function unregisterPushNotifications(): Promise<void> {
+  const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+
+  if (!token) {
+    return;
+  }
+
+  try {
+    await removePushToken(token);
+  } catch {
+    // best-effort; session may already be cleared
+  }
+
+  await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
 }

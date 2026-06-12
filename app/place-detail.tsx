@@ -10,7 +10,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -36,7 +35,9 @@ import {
 import { CommentComposer } from '../src/components/CommentComposer';
 import { Avatar } from '../src/components/Avatar';
 import { FeedPostCard } from '../src/components/FeedPostCard';
+import { SharePlaceModal } from '../src/components/SharePlaceModal';
 import { getStoredUser } from '../src/storage/authSession';
+import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 const HERO_HEIGHT = 280;
@@ -76,6 +77,7 @@ export default function PlaceDetailScreen() {
   const [postsLoaded, setPostsLoaded] = useState(false);
   const [postsLoading, setPostsLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -168,18 +170,8 @@ export default function PlaceDetailScreen() {
     }
   }
 
-  async function handleShare() {
-    const mapsUrl = detail
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${detail.lat},${detail.lon}`)}`
-      : undefined;
-
-    try {
-      await Share.share({
-        message: mapsUrl ? `Check out ${name} on WhereAbout!\n${mapsUrl}` : `Check out ${name} on WhereAbout!`,
-      });
-    } catch {
-      // user cancelled
-    }
+  function handleShare() {
+    setShareVisible(true);
   }
 
   function openCreatePost() {
@@ -431,6 +423,7 @@ export default function PlaceDetailScreen() {
                       onCommentPress={(p) =>
                         router.push({ pathname: '/comments', params: { postId: p.id } })
                       }
+                      onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
                     />
                   ))}
                 </View>
@@ -458,6 +451,12 @@ export default function PlaceDetailScreen() {
           </Pressable>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      <SharePlaceModal
+        visible={shareVisible}
+        place={{ placeId, name, imageUrl: imageUrl ?? null }}
+        onClose={() => setShareVisible(false)}
+      />
     </View>
   );
 }

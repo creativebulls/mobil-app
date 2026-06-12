@@ -14,11 +14,41 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchNotifications, markNotificationsRead } from '../src/api/notificationsApi';
-import type { AppNotification } from '../src/api/types';
+import { acceptFriendRequest, rejectFriendRequest } from '../src/api/profileApi';
+import type { AppNotification, NotificationType } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { useNotifications } from '../src/notifications/NotificationsProvider';
+import { openUserProfile } from '../src/utils/openUserProfile';
+import { getStoredUser } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
+
+function notificationIcon(type: NotificationType): keyof typeof Ionicons.glyphMap {
+  switch (type) {
+    case 'like':
+    case 'comment_like':
+      return 'heart';
+    case 'comment':
+    case 'reply':
+      return 'chatbubble';
+    case 'friend_request':
+      return 'person-add';
+    case 'friend_request_accepted':
+      return 'people';
+    default:
+      return 'notifications';
+  }
+}
+
+function notificationBadgeColor(type: NotificationType): string {
+  if (type === 'friend_request' || type === 'friend_request_accepted') {
+    return colors.primary;
+  }
+  if (type === 'like' || type === 'comment_like') {
+    return colors.brand;
+  }
+  return colors.primary;
+}
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -26,9 +56,13 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [actingOnId, setActingOnId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
+      const me = await getStoredUser();
+      setCurrentUserId(me?.id ?? null);
       const result = await fetchNotifications();
       setNotifications(result.notifications);
 
@@ -63,8 +97,47 @@ export default function NotificationsScreen() {
   }
 
   function handlePress(notification: AppNotification) {
+    if (notification.type === 'friend_request') {
+      return;
+    }
+    if (notification.actor?.id) {
+      openUserProfile(router, notification.actor.id, currentUserId);
+      return;
+    }
     if (notification.postId) {
       router.push({ pathname: '/comments', params: { postId: notification.postId } });
+    }
+  }
+
+  function handleActorPress(notification: AppNotification) {
+    if (notification.actor?.id) {
+      openUserProfile(router, notification.actor.id, currentUserId);
+    }
+  }
+
+  async function handleAcceptFriend(notification: AppNotification) {
+    if (!notification.friendRequestId) {
+      return;
+    }
+    setActingOnId(notification.id);
+    try {
+      await acceptFriendRequest(notification.friendRequestId);
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    } finally {
+      setActingOnId(null);
+    }
+  }
+
+  async function handleRejectFriend(notification: AppNotification) {
+    if (!notification.friendRequestId) {
+      return;
+    }
+    setActingOnId(notification.id);
+    try {
+      await rejectFriendRequest(notification.friendRequestId);
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    } finally {
+      setActingOnId(null);
     }
   }
 
@@ -95,7 +168,7 @@ export default function NotificationsScreen() {
                 <Ionicons name="notifications-off-outline" size={40} color={colors.labelGray} />
                 <Text style={styles.emptyTitle}>No notifications yet</Text>
                 <Text style={styles.emptySubtitle}>
-                  Likes and comments on your posts will show up here.
+                  Likes, comments, and friend requests will show up here.
                 </Text>
               </View>
             }
@@ -105,29 +178,17 @@ export default function NotificationsScreen() {
                 style={({ pressed }) => [
                   styles.row,
                   !item.read && styles.rowUnread,
-                  pressed && styles.rowPressed,
+                  pressed && item.type !== 'friend_request' && styles.rowPressed,
                 ]}
               >
                 <View style={styles.avatarWrap}>
-                  <Avatar uri={item.actor?.avatarUri} name={item.actor?.name} size={46} />
+                  <Pressable onPress={() => handleActorPress(item)}>
+                    <Avatar uri={item.actor?.avatarUri} name={item.actor?.name} size={46} />
+                  </Pressable>
                   <View
-                    style={[
-                      styles.typeBadge,
-                      {
-                        backgroundColor:
-                          item.type === 'like' || item.type === 'comment_like'
-                            ? colors.brand
-                            : colors.primary,
-                      },
-                    ]}
+                    style={[styles.typeBadge, { backgroundColor: notificationBadgeColor(item.type) }]}
                   >
-                    <Ionicons
-                      name={
-                        item.type === 'like' || item.type === 'comment_like' ? 'heart' : 'chatbubble'
-                      }
-                      size={11}
-                      color={colors.white}
-                    />
+                    <Ionicons name={notificationIcon(item.type)} size={11} color={colors.white} />
                   </View>
                 </View>
 
@@ -137,6 +198,26 @@ export default function NotificationsScreen() {
                     <Text style={styles.preview} numberOfLines={2}>
                       “{item.preview}”
                     </Text>
+                  ) : null}
+                  {item.type === 'friend_request' && item.friendRequestId ? (
+                    <View style={styles.friendActions}>
+                      <Pressable
+                        onPress={() => void handleAcceptFriend(item)}
+                        disabled={actingOnId === item.id}
+                        style={({ pressed }) => [styles.acceptBtn, pressed && styles.rowPressed]}
+                      >
+                        <Text style={styles.acceptBtnText}>
+                          {actingOnId === item.id ? '…' : 'Accept'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => void handleRejectFriend(item)}
+                        disabled={actingOnId === item.id}
+                        style={({ pressed }) => [styles.declineBtn, pressed && styles.rowPressed]}
+                      >
+                        <Text style={styles.declineBtnText}>Decline</Text>
+                      </Pressable>
+                    </View>
                   ) : null}
                   <Text style={styles.time}>{item.timeAgo}</Text>
                 </View>
@@ -242,10 +323,39 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
   },
+  friendActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  acceptBtn: {
+    backgroundColor: colors.brand,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  acceptBtnText: {
+    color: colors.white,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  declineBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  declineBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
   time: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.labelGray,
+    marginTop: 4,
   },
   unreadDot: {
     width: 10,

@@ -31,6 +31,8 @@ export type UserProfile = {
   registrationCompleted: boolean;
   registrationStatus: 'pending_email' | 'pending_profile' | 'completed';
   parentalConsent: boolean;
+  statusText: string | null;
+  points: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -119,7 +121,13 @@ export type AddCommentResponse = {
   commentsCount: number;
 };
 
-export type NotificationType = 'like' | 'comment' | 'reply' | 'comment_like';
+export type NotificationType =
+  | 'like'
+  | 'comment'
+  | 'reply'
+  | 'comment_like'
+  | 'friend_request'
+  | 'friend_request_accepted';
 
 export type AppNotification = {
   id: string;
@@ -128,9 +136,110 @@ export type AppNotification = {
   preview: string | null;
   read: boolean;
   postId: string | null;
+  friendRequestId: string | null;
   actor: AuthorSummary | null;
   createdAt: string;
   timeAgo: string;
+};
+
+export type UserSearchResult = AuthorSummary & {
+  statusText: string | null;
+  isFriend: boolean;
+  friendRequestStatus: 'sent' | 'received' | null;
+};
+
+export type UserRelationship = {
+  isSelf: boolean;
+  isFriend: boolean;
+  friendRequestStatus: 'sent' | 'received' | null;
+  friendRequestId: string | null;
+  blockedByMe?: boolean;
+  blockedMe?: boolean;
+  restrictedByMe?: boolean;
+  isPrivate?: boolean;
+  isLocked?: boolean;
+};
+
+export type PushPreferences = {
+  likes: boolean;
+  comments: boolean;
+  friendRequests: boolean;
+  messages: boolean;
+};
+
+export type UserSettings = {
+  isPrivate: boolean;
+  pushPreferences: PushPreferences;
+};
+
+export type ChatUser = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+};
+
+export type SharedPlace = {
+  placeId: string;
+  name: string;
+  imageUrl: string | null;
+};
+
+export type ChatMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  recipientId: string;
+  text: string;
+  sharedPlace: SharedPlace | null;
+  read: boolean;
+  createdAt: string;
+  timeAgo: string;
+};
+
+export type ConversationSummary = {
+  id: string;
+  user: ChatUser | null;
+  lastMessage: string | null;
+  lastMessageAt: string | null;
+  lastMessageMine: boolean;
+  timeAgo: string | null;
+  unreadCount: number;
+};
+
+export type ConversationsResponse = {
+  conversations: ConversationSummary[];
+};
+
+export type MessagesResponse = {
+  messages: ChatMessage[];
+  nextCursor: string | null;
+  user: ChatUser | null;
+};
+
+export type SendMessageResponse = {
+  message: ChatMessage;
+  conversationId: string;
+};
+
+export type OpenConversationResponse = {
+  id: string;
+  user: ChatUser;
+};
+
+export type PublicUserProfile = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  statusText: string | null;
+  points: number;
+  friendsCount: number;
+  postsCount: number;
+};
+
+export type UserProfileResponse = {
+  user: PublicUserProfile;
+  relationship: UserRelationship;
+  posts: Post[];
 };
 
 export type NotificationsResponse = {

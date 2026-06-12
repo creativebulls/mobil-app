@@ -37,10 +37,16 @@ export default function RootLayout() {
             <Stack.Screen name="reset-password-new" />
             <Stack.Screen name="home" />
             <Stack.Screen name="messages" />
+            <Stack.Screen name="chat" />
             <Stack.Screen name="profile" />
             <Stack.Screen name="create-post" options={{ presentation: 'modal' }} />
             <Stack.Screen name="comments" options={{ presentation: 'modal' }} />
             <Stack.Screen name="notifications" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="manage-relations" />
+            <Stack.Screen name="add-friends" />
+            <Stack.Screen name="qr-connect" />
+            <Stack.Screen name="user/[userId]" />
             <Stack.Screen name="places" />
             <Stack.Screen name="place-detail" />
           </Stack>

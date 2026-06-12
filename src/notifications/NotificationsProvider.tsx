@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 
 import { fetchUnreadCount } from '../api/notificationsApi';
 import type { AppNotification } from '../api/types';
@@ -20,6 +21,7 @@ type NotificationsContextValue = {
   unreadCount: number;
   setUnreadCount: (count: number) => void;
   refreshUnreadCount: () => Promise<void>;
+  syncPushNotifications: () => Promise<void>;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
@@ -31,6 +33,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const token = await getAccessToken();
 
     if (!token) {
+      setUnreadCount(0);
       return;
     }
 
@@ -42,15 +45,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    void (async () => {
-      const token = await getAccessToken();
-      if (token) {
-        await registerForPushNotifications();
-        await refreshUnreadCount();
-      }
-    })();
+  const syncPushNotifications = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) {
+      return;
+    }
+
+    await registerForPushNotifications();
+    await refreshUnreadCount();
   }, [refreshUnreadCount]);
+
+  useEffect(() => {
+    void syncPushNotifications();
+  }, [syncPushNotifications]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void syncPushNotifications();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [syncPushNotifications]);
 
   useRealtimeEvent<AppNotification>('notification:new', () => {
     setUnreadCount((count) => count + 1);
@@ -61,17 +78,42 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { postId?: string } | undefined;
-      router.push({ pathname: '/notifications', params: data?.postId ? { postId: data.postId } : {} });
+    const receivedListener = Notifications.addNotificationReceivedListener(() => {
+      setUnreadCount((count) => count + 1);
     });
 
-    return () => responseListener.remove();
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as
+        | { postId?: string; friendRequestId?: string; type?: string; conversationId?: string }
+        | undefined;
+
+      if (data?.type === 'message' && data.conversationId) {
+        router.push({ pathname: '/chat', params: { conversationId: data.conversationId } });
+        return;
+      }
+
+      if (data?.postId) {
+        router.push({ pathname: '/comments', params: { postId: data.postId } });
+        return;
+      }
+
+      if (data?.type === 'friend_request' || data?.type === 'friend_request_accepted') {
+        router.push('/notifications');
+        return;
+      }
+
+      router.push('/notifications');
+    });
+
+    return () => {
+      receivedListener.remove();
+      responseListener.remove();
+    };
   }, []);
 
   const value = useMemo(
-    () => ({ unreadCount, setUnreadCount, refreshUnreadCount }),
-    [unreadCount, refreshUnreadCount],
+    () => ({ unreadCount, setUnreadCount, refreshUnreadCount, syncPushNotifications }),
+    [unreadCount, refreshUnreadCount, syncPushNotifications],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;

@@ -10,6 +10,7 @@ export type MainTabKey = 'home' | 'messages' | 'profile';
 type BottomTabBarProps = {
   activeTab: MainTabKey;
   profileImageUri?: string | null;
+  messagesBadge?: number;
 };
 
 const TAB_ROUTES: Record<MainTabKey, '/home' | '/messages' | '/profile'> = {
@@ -18,7 +19,7 @@ const TAB_ROUTES: Record<MainTabKey, '/home' | '/messages' | '/profile'> = {
   profile: '/profile',
 };
 
-export function BottomTabBar({ activeTab, profileImageUri }: BottomTabBarProps) {
+export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: BottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -54,11 +55,18 @@ export function BottomTabBar({ activeTab, profileImageUri }: BottomTabBarProps) 
         accessibilityLabel="Messages"
         accessibilityState={{ selected: activeTab === 'messages' }}
       >
-        <Ionicons
-          name={activeTab === 'messages' ? 'chatbubble' : 'chatbubble-outline'}
-          size={24}
-          color={activeTab === 'messages' ? colors.brand : colors.labelGray}
-        />
+        <View>
+          <Ionicons
+            name={activeTab === 'messages' ? 'chatbubble' : 'chatbubble-outline'}
+            size={24}
+            color={activeTab === 'messages' ? colors.brand : colors.labelGray}
+          />
+          {messagesBadge > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{messagesBadge > 99 ? '99+' : messagesBadge}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={[styles.label, activeTab === 'messages' && styles.labelActive]}>Messages</Text>
       </Pressable>
 
@@ -130,5 +138,24 @@ const styles = StyleSheet.create({
   profileImage: {
     width: '100%',
     height: '100%',
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  badgeText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

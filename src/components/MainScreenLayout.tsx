@@ -2,6 +2,8 @@ import { useFocusEffect } from 'expo-router';
 import { ReactNode, useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { fetchUnreadMessageCount } from '../api/messagesApi';
+import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getStoredUser } from '../storage/authSession';
 import { BottomTabBar, type MainTabKey } from './BottomTabBar';
 import { colors } from '../theme/colors';
@@ -13,22 +15,44 @@ type MainScreenLayoutProps = {
 
 export function MainScreenLayout({ activeTab, children }: MainScreenLayoutProps) {
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const loadProfileImage = useCallback(async () => {
     const user = await getStoredUser();
     setProfileImageUri(user?.profilePhotoUrl ?? null);
   }, []);
 
+  const loadUnread = useCallback(async () => {
+    try {
+      const result = await fetchUnreadMessageCount();
+      setUnreadMessages(result.unreadCount);
+    } catch {
+      // Non-critical; leave the badge as-is.
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void loadProfileImage();
-    }, [loadProfileImage]),
+      void loadUnread();
+    }, [loadProfileImage, loadUnread]),
   );
+
+  useRealtimeEvent('message:new', () => {
+    void loadUnread();
+  });
+  useRealtimeEvent('message:read', () => {
+    void loadUnread();
+  });
 
   return (
     <View style={styles.root}>
       <View style={styles.content}>{children}</View>
-      <BottomTabBar activeTab={activeTab} profileImageUri={profileImageUri} />
+      <BottomTabBar
+        activeTab={activeTab}
+        profileImageUri={profileImageUri}
+        messagesBadge={unreadMessages}
+      />
     </View>
   );
 }

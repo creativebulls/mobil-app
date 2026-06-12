@@ -14,6 +14,7 @@ import { AuthSuccessIcon } from '../src/components/AuthSuccessIcon';
 import { BrandButton } from '../src/components/BrandButton';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { useAuthSocket } from '../src/hooks/useAuthSocket';
+import { registerForPushNotifications } from '../src/notifications/pushNotifications';
 import { getPendingSessionToken, saveSession } from '../src/storage/authSession';
 import { getSignUpEmail } from '../src/storage/signUpDraft';
 import { authStyles } from '../src/theme/authStyles';
@@ -55,6 +56,8 @@ export default function CheckEmailScreen() {
           const session = await resumeVerifiedSession(pendingSessionToken);
           await saveSession(session.tokens, session.user);
         }
+
+        void registerForPushNotifications();
 
         router.replace('/your-name');
       } catch (continueError) {

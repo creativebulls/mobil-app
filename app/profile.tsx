@@ -1,60 +1,162 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
 
-import { logoutAccount } from '../src/api/authApi';
-import { FeedHeader } from '../src/components/FeedHeader';
+import {
+  fetchFavoritePlaces,
+  fetchFriends,
+  fetchMyPosts,
+  fetchProfileStats,
+  updateProfileStatus,
+  type FavoritePlace,
+  type FriendSummary,
+  type ProfileStats,
+} from '../src/api/profileApi';
+import { updateProfilePhoto } from '../src/api/authApi';
+import { getErrorMessage, type Post } from '../src/api/types';
+import { Avatar } from '../src/components/Avatar';
+import { BrandButton } from '../src/components/BrandButton';
+import { FeedPostCard } from '../src/components/FeedPostCard';
+import { FriendsHorizontalList } from '../src/components/FriendsHorizontalList';
 import { MainScreenLayout } from '../src/components/MainScreenLayout';
+import { ProfileFavoritePlaces } from '../src/components/ProfileFavoritePlaces';
+import { ProfileStatusEditor } from '../src/components/ProfileStatusEditor';
 import { useDialog } from '../src/components/dialog/DialogProvider';
-import { clearSession, getRefreshToken, getStoredUser } from '../src/storage/authSession';
-import { disconnectRealtimeSocket } from '../src/realtime/socket';
+import { getStoredUser, updateStoredUser } from '../src/storage/authSession';
 import type { UserProfile } from '../src/api/types';
+import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const dialog = useDialog();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [favoritePlaces, setFavoritePlaces] = useState<FavoritePlace[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusEditorVisible, setStatusEditorVisible] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const [storedUser, statsResult, friendsResult, placesResult, postsResult] = await Promise.all([
+        getStoredUser(),
+        fetchProfileStats(),
+        fetchFriends(),
+        fetchFavoritePlaces(),
+        fetchMyPosts(),
+      ]);
+
+      setUser(storedUser);
+      setStats(statsResult);
+      setFriends(friendsResult.friends);
+      setFavoritePlaces(placesResult.places);
+      setPosts(postsResult.posts);
+
+      if (storedUser) {
+        await updateStoredUser({
+          ...storedUser,
+          statusText: statsResult.statusText,
+          points: statsResult.points,
+        });
+      }
+    } catch {
+      // keep cached data
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void getStoredUser().then(setUser);
-    }, []),
+      void loadProfile();
+    }, [loadProfile]),
   );
 
-  async function performLogout() {
-    setIsLoggingOut(true);
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    await loadProfile();
+    setIsRefreshing(false);
+  }
 
-    try {
-      const refreshToken = await getRefreshToken();
-      try {
-        await logoutAccount(refreshToken);
-      } catch {
-        // best-effort server revoke; continue clearing locally regardless
-      }
-      await clearSession();
-      disconnectRealtimeSocket();
-      router.replace('/sign-in');
-    } finally {
-      setIsLoggingOut(false);
+  async function handleSaveStatus(statusText: string) {
+    const result = await updateProfileStatus(statusText);
+    setStats((current) => (current ? { ...current, statusText: result.statusText } : current));
+    if (user) {
+      await updateStoredUser({ ...user, statusText: result.statusText });
+      setUser({ ...user, statusText: result.statusText });
     }
   }
 
-  async function handleLogout() {
-    const confirmed = await dialog.confirm({
-      title: 'Log out',
-      message: 'Are you sure you want to log out?',
-      confirmText: 'Log out',
-      destructive: true,
+  async function handleChangeProfilePhoto() {
+    if (isUploadingPhoto) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      await dialog.alert({
+        title: 'Permission required',
+        message: 'Please allow photo library access to change your profile picture.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9,
     });
 
-    if (confirmed) {
-      void performLogout();
+    const pickedUri = result.canceled ? null : result.assets[0]?.uri;
+    if (!pickedUri) {
+      return;
     }
+
+    setIsUploadingPhoto(true);
+    try {
+      const updated = await updateProfilePhoto(pickedUri);
+      setUser(updated);
+      await updateStoredUser(updated);
+    } catch (uploadError) {
+      await dialog.alert({
+        title: 'Upload failed',
+        message: getErrorMessage(uploadError, 'Could not update your profile picture. Try again.'),
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
+
+  function handleExchangePoints() {
+    void dialog.alert({
+      title: 'Exchange points',
+      message: 'Points exchange is coming soon. Keep engaging to earn more!',
+    });
+  }
+
+  function handlePlacePress(place: FavoritePlace) {
+    router.push({
+      pathname: '/place-detail',
+      params: { id: place.id, name: place.name, imageUrl: place.imageUrl },
+    });
   }
 
   const displayName =
@@ -62,37 +164,131 @@ export default function ProfileScreen() {
       ? `${user.givenName} ${user.surname}`
       : user?.firstName && user?.lastName
         ? `${user.firstName} ${user.lastName}`
-        : user?.email ?? 'Your profile';
+        : user?.email?.split('@')[0] ?? 'Profile';
+
+  const username = user?.email?.split('@')[0] ?? displayName;
 
   return (
     <MainScreenLayout activeTab="profile">
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <FeedHeader title="Profile" />
-
-        <View style={styles.content}>
-          {user?.profilePhotoUrl ? (
-            <Image source={{ uri: user.profilePhotoUrl }} style={styles.avatar} resizeMode="cover" />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-
-          <Text style={styles.name}>{displayName}</Text>
-          {user?.email ? <Text style={styles.email}>{user.email}</Text> : null}
-
+        <View style={styles.topHeader}>
+          <View style={styles.headerSide} />
+          <Text style={styles.headerUsername} numberOfLines={1}>
+            {username}
+          </Text>
           <Pressable
-            onPress={handleLogout}
-            disabled={isLoggingOut}
-            style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Log out"
+            onPress={() => router.push('/settings')}
+            style={styles.headerSide}
+            hitSlop={8}
+            accessibilityLabel="Settings"
           >
-            <Ionicons name="log-out-outline" size={20} color={colors.brand} />
-            <Text style={styles.logoutText}>{isLoggingOut ? 'Logging out…' : 'Log out'}</Text>
+            <Ionicons name="settings-outline" size={24} color={colors.text} />
           </Pressable>
         </View>
+
+        {isLoading ? (
+          <ActivityIndicator color={colors.brand} style={styles.loader} />
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.brand} />
+            }
+          >
+            <View style={styles.profileBlock}>
+              <Pressable
+                onPress={handleChangeProfilePhoto}
+                disabled={isUploadingPhoto}
+                style={({ pressed }) => [styles.avatarWrap, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Change profile picture"
+              >
+                <Avatar uri={user?.profilePhotoUrl} name={displayName} size={96} />
+                <View style={styles.cameraBadge}>
+                  <Ionicons name="camera" size={16} color={colors.white} />
+                </View>
+                {isUploadingPhoto ? (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator color={colors.white} />
+                  </View>
+                ) : null}
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/settings')}
+                style={({ pressed }) => [styles.editProfileLink, pressed && styles.pressed]}
+                hitSlop={8}
+              >
+                <Text style={styles.editProfileText}>Edit profile</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={() => setStatusEditorVisible(true)}
+              style={({ pressed }) => [styles.statusRow, pressed && styles.pressed]}
+            >
+              <Text style={styles.statusText} numberOfLines={3}>
+                {stats?.statusText?.trim() ? stats.statusText : 'Tap to set your status 😊'}
+              </Text>
+            </Pressable>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, styles.pointsValue]}>{stats?.points ?? 0}</Text>
+                <Text style={styles.statLabel}>Points</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats?.friendsCount ?? 0}</Text>
+                <Text style={styles.statLabel}>Friends</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{stats?.postsCount ?? 0}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </View>
+            </View>
+
+            <BrandButton
+              label="Exchange points"
+              onPress={handleExchangePoints}
+              style={styles.exchangeButton}
+            />
+
+            <FriendsHorizontalList
+              friends={friends}
+              onAddPress={() => router.push('/add-friends')}
+              onFriendPress={(friend) => openUserProfile(router, friend.id, user?.id)}
+            />
+
+            <ProfileFavoritePlaces places={favoritePlaces} onPlacePress={handlePlacePress} />
+
+            <View style={styles.postsSection}>
+              <Text style={styles.postsTitle}>My Posts</Text>
+              {posts.length === 0 ? (
+                <Text style={styles.emptyPosts}>You haven&apos;t posted yet.</Text>
+              ) : (
+                posts.map((post) => (
+                  <FeedPostCard
+                    key={post.id}
+                    post={post}
+                    currentUserId={user?.id}
+                    onCommentPress={(item) =>
+                      router.push({ pathname: '/comments', params: { postId: item.id } })
+                    }
+                  />
+                ))
+              )}
+            </View>
+          </ScrollView>
+        )}
+
+        <ProfileStatusEditor
+          visible={statusEditorVisible}
+          initialStatus={stats?.statusText ?? ''}
+          onClose={() => setStatusEditorVisible(false)}
+          onSave={handleSaveStatus}
+        />
       </SafeAreaView>
     </MainScreenLayout>
   );
@@ -103,60 +299,138 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
   },
-  content: {
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  headerSide: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
+  headerUsername: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 10,
-  },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.inputGray,
-  },
-  avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.inputGray,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    fontSize: 36,
+    textAlign: 'center',
+    fontSize: 17,
     fontWeight: '800',
+    color: colors.text,
+  },
+  loader: {
+    marginTop: 40,
+  },
+  scrollContent: {
+    paddingBottom: 32,
+  },
+  profileBlock: {
+    alignItems: 'center',
+    paddingTop: 24,
+    gap: 14,
+  },
+  avatarWrap: {
+    width: 96,
+    height: 96,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 48,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editProfileLink: {
+    paddingVertical: 4,
+  },
+  editProfileText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.brand,
   },
-  name: {
+  statusRow: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginHorizontal: 20,
+    paddingVertical: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
     fontSize: 22,
     fontWeight: '800',
     color: colors.text,
-    textAlign: 'center',
   },
-  email: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 28,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.brand,
-  },
-  logoutButtonPressed: {
-    opacity: 0.7,
-  },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '800',
+  pointsValue: {
     color: colors.brand,
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  statDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 36,
+    backgroundColor: colors.border,
+  },
+  exchangeButton: {
+    marginHorizontal: 20,
+    marginTop: 16,
+  },
+  postsSection: {
+    marginTop: 28,
+    paddingHorizontal: 0,
+  },
+  postsTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  emptyPosts: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });

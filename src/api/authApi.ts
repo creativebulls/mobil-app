@@ -160,3 +160,17 @@ export async function resendPasswordResetCode(email: string): Promise<{ message:
 export async function fetchCurrentUser(): Promise<UserProfile> {
   return apiRequest<UserProfile>('/auth/me');
 }
+
+export async function updateProfilePhoto(photoUri: string): Promise<UserProfile> {
+  const formData = new FormData();
+  formData.append('profilePhoto', {
+    uri: photoUri,
+    name: 'profile.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
+
+  return apiRequest<UserProfile>('/auth/profile/photo', {
+    method: 'POST',
+    formData,
+  });
+}

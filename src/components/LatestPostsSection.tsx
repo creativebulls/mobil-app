@@ -8,6 +8,7 @@ import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getStoredUser } from '../storage/authSession';
 import { getHiddenPostIds, hidePost } from '../storage/hiddenPosts';
 import { FeedPostCard } from './FeedPostCard';
+import { openUserProfile } from '../utils/openUserProfile';
 import { SectionHeader } from './SectionHeader';
 import { colors } from '../theme/colors';
 
@@ -97,6 +98,7 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
               onDeleted={handleDeleted}
               onHidden={handleHidden}
               onCommentPress={handleCommentPress}
+              onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
             />
           ))}
         </View>

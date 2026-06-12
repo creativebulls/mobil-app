@@ -8,6 +8,7 @@ import { resumeVerifiedSession, verifyEmailToken } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AuthSuccessIcon } from '../src/components/AuthSuccessIcon';
 import { BrandButton } from '../src/components/BrandButton';
+import { registerForPushNotifications } from '../src/notifications/pushNotifications';
 import { getPendingSessionToken, saveSession } from '../src/storage/authSession';
 import { authStyles } from '../src/theme/authStyles';
 import { colors } from '../src/theme/colors';
@@ -27,6 +28,7 @@ export default function EmailVerifiedScreen() {
         try {
           const result = await verifyEmailToken(token);
           await saveSession(result.tokens, result.user);
+          void registerForPushNotifications();
           router.replace('/your-name');
           return;
         } catch {
@@ -42,6 +44,7 @@ export default function EmailVerifiedScreen() {
 
       const session = await resumeVerifiedSession(pendingSessionToken);
       await saveSession(session.tokens, session.user);
+      void registerForPushNotifications();
       router.replace('/your-name');
     } catch (verifyError) {
       setError(getErrorMessage(verifyError, 'Unable to verify email'));

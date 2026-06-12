@@ -10,20 +10,38 @@ type CommentItemProps = {
   isReply?: boolean;
   onLike: (comment: PostComment) => void;
   onReply: (comment: PostComment) => void;
+  onAuthorPress?: (authorId: string) => void;
 };
 
-export function CommentItem({ comment, isReply = false, onLike, onReply }: CommentItemProps) {
+export function CommentItem({
+  comment,
+  isReply = false,
+  onLike,
+  onReply,
+  onAuthorPress,
+}: CommentItemProps) {
   return (
     <View style={[styles.row, isReply && styles.replyRow]}>
-      <Avatar
-        uri={comment.author.avatarUri}
-        name={comment.author.name}
-        size={isReply ? 30 : 38}
-      />
+      <Pressable
+        onPress={() => onAuthorPress?.(comment.author.id)}
+        disabled={!onAuthorPress}
+        style={({ pressed }) => [pressed && onAuthorPress && styles.pressed]}
+      >
+        <Avatar
+          uri={comment.author.avatarUri}
+          name={comment.author.name}
+          size={isReply ? 30 : 38}
+        />
+      </Pressable>
 
       <View style={styles.body}>
         <View style={styles.bubble}>
-          <Text style={styles.author}>{comment.author.name}</Text>
+          <Pressable
+            onPress={() => onAuthorPress?.(comment.author.id)}
+            disabled={!onAuthorPress}
+          >
+            <Text style={styles.author}>{comment.author.name}</Text>
+          </Pressable>
           <Text style={styles.text}>{comment.text}</Text>
         </View>
 

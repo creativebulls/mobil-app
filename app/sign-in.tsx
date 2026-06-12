@@ -19,6 +19,7 @@ import { loginAccount } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
+import { registerForPushNotifications } from '../src/notifications/pushNotifications';
 import { saveSession } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
 
@@ -59,6 +60,7 @@ export default function SignInScreen() {
     try {
       const result = await loginAccount(email.trim(), password);
       await saveSession(result.tokens, result.user);
+      void registerForPushNotifications();
 
       if (result.user.registrationCompleted) {
         router.replace('/home');

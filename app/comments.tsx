@@ -29,6 +29,7 @@ import { FeedPostCard } from '../src/components/FeedPostCard';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { getStoredUser } from '../src/storage/authSession';
 import { hidePost } from '../src/storage/hiddenPosts';
+import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 type ReplyTarget = { parentId: string; name: string };
@@ -257,6 +258,7 @@ export default function PostDetailScreen() {
                         router.back();
                       }}
                       onCommentPress={() => inputRef.current?.focus()}
+                      onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
                     />
                   ) : null}
                   <Text style={styles.commentsTitle}>
@@ -277,6 +279,7 @@ export default function PostDetailScreen() {
                     comment={item}
                     onLike={handleLikeComment}
                     onReply={handleReplyPress}
+                    onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
                   />
 
                   {item.repliesCount > 0 ? (
@@ -306,6 +309,7 @@ export default function PostDetailScreen() {
                           isReply
                           onLike={handleLikeComment}
                           onReply={handleReplyPress}
+                          onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
                         />
                       ))
                     : null}

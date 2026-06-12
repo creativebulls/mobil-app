@@ -33,6 +33,7 @@ type FeedPostCardProps = {
   onHidden?: (postId: string) => void;
   onCommentPress?: (post: Post) => void;
   onSharePress?: (post: Post) => void;
+  onAuthorPress?: (authorId: string) => void;
 };
 
 const REACTION_META: Record<
@@ -59,6 +60,7 @@ export function FeedPostCard({
   onHidden,
   onCommentPress,
   onSharePress,
+  onAuthorPress,
 }: FeedPostCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [likedByMe, setLikedByMe] = useState(post.likedByMe);
@@ -204,9 +206,21 @@ export function FeedPostCard({
   return (
     <View style={styles.card}>
       <View style={styles.userRow}>
-        <Avatar uri={post.author.avatarUri} name={post.author.name} size={44} />
+        <Pressable
+          onPress={() => onAuthorPress?.(post.author.id)}
+          disabled={!onAuthorPress}
+          style={({ pressed }) => [styles.authorTap, pressed && onAuthorPress && styles.iconPressed]}
+          accessibilityRole={onAuthorPress ? 'button' : undefined}
+          accessibilityLabel={onAuthorPress ? `View ${post.author.name}'s profile` : undefined}
+        >
+          <Avatar uri={post.author.avatarUri} name={post.author.name} size={44} />
+        </Pressable>
 
-        <View style={styles.userText}>
+        <Pressable
+          onPress={() => onAuthorPress?.(post.author.id)}
+          disabled={!onAuthorPress}
+          style={({ pressed }) => [styles.userText, pressed && onAuthorPress && styles.iconPressed]}
+        >
           <Text style={styles.userName} numberOfLines={1} ellipsizeMode="tail">
             {post.author.name}
             {post.reaction ? (
@@ -221,7 +235,7 @@ export function FeedPostCard({
           <Text style={styles.postedAgo} numberOfLines={1} ellipsizeMode="tail">
             {post.timeAgo}
           </Text>
-        </View>
+        </Pressable>
 
         <Pressable
           ref={menuButtonRef}
@@ -374,6 +388,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     gap: 12,
+  },
+  authorTap: {
+    borderRadius: 22,
   },
   userText: {
     flex: 1,
