@@ -47,7 +47,7 @@ Loading order (first match wins, real process env is never overwritten):
 
 ```bash
 cp .env.production.example .env.production   # then fill in real secrets
-# set APP_URL to your server, e.g. http://187.127.180.2:4000
+# set APP_URL to your server, e.g. https://mobilevps.tech
 npm install
 npm run build
 npm run start:prod

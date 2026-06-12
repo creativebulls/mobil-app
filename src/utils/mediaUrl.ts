@@ -2,6 +2,7 @@ import { resolveBackendHost } from '../config/api';
 
 const LOCAL_ORIGIN =
   /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d+)?/i;
+const LEGACY_SERVER = /^https?:\/\/187\.127\.180\.2(:\d+)?/i;
 
 /**
  * Rewrites backend media URLs so they use the same reachable host as API calls.
@@ -21,6 +22,10 @@ export async function resolveMediaUrl(url: string | null | undefined): Promise<s
 
   if (LOCAL_ORIGIN.test(url)) {
     return url.replace(LOCAL_ORIGIN, host);
+  }
+
+  if (LEGACY_SERVER.test(url)) {
+    return url.replace(LEGACY_SERVER, host);
   }
 
   return url;

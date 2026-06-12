@@ -1,41 +1,41 @@
 /**
- * Expo config plugin: trust the WhereAbout server's self-signed TLS certificate
- * on Android so the app can talk to https://187.127.180.2 without a CA-issued
- * cert.
+ * Expo config plugin: allow HTTP (cleartext) to the WhereAbout backend during
+ * testing, and optionally trust a bundled cert for future HTTPS on the prod host.
  *
- * It does three things during `expo prebuild`:
- *   1. Copies the bundled cert into android/.../res/raw/whereabout.crt
- *   2. Writes android/.../res/xml/network_security_config.xml that adds the cert
- *      as a trust anchor (alongside the system CAs) for the server's IP/host.
- *   3. Sets android:networkSecurityConfig on the <application> element.
- *
- * Replace the cert + DOMAINS here when you move to a real domain + CA cert
- * (at which point this plugin can simply be removed).
+ * Regenerated on `expo prebuild`. After editing, run prebuild or update
+ * android/app/src/main/res/xml/network_security_config.xml and rebuild the app.
  */
 const { withAndroidManifest, withDangerousMod, AndroidConfig } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
-// Source cert bundled in the repo (PEM). Referenced as @raw/whereabout.
 const CERT_SOURCE = path.join('assets', 'certs', 'whereabout.crt');
 const RAW_CERT_NAME = 'whereabout';
+const PRODUCTION_HOST = 'mobilevps.tech';
 
-// Hosts the self-signed cert should be trusted for.
-const DOMAINS = ['187.127.180.2'];
-
-function buildNetworkSecurityConfig() {
-  const domainTags = DOMAINS.map(
-    (d) => `        <domain includeSubdomains="false">${d}</domain>`,
-  ).join('\n');
+function buildNetworkSecurityConfig(hasCert) {
+  const certAnchor = hasCert
+    ? `            <certificates src="@raw/${RAW_CERT_NAME}" />\n`
+    : '';
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <domain-config>
-${domainTags}
+    <!-- Dev: allow HTTP to localhost / LAN while developing -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
-            <certificates src="@raw/${RAW_CERT_NAME}" />
             <certificates src="system" />
         </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">${PRODUCTION_HOST}</domain>
+        <trust-anchors>
+${certAnchor}            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>
 </network-security-config>
 `;
@@ -46,26 +46,22 @@ function withCertFiles(config) {
     'android',
     async (cfg) => {
       const projectRoot = cfg.modRequest.projectRoot;
-      const resDir = path.join(
-        cfg.modRequest.platformProjectRoot,
-        'app',
-        'src',
-        'main',
-        'res',
-      );
+      const resDir = path.join(cfg.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res');
 
-      const rawDir = path.join(resDir, 'raw');
-      fs.mkdirSync(rawDir, { recursive: true });
-      fs.copyFileSync(
-        path.join(projectRoot, CERT_SOURCE),
-        path.join(rawDir, `${RAW_CERT_NAME}.crt`),
-      );
+      const certPath = path.join(projectRoot, CERT_SOURCE);
+      const hasCert = fs.existsSync(certPath);
+
+      if (hasCert) {
+        const rawDir = path.join(resDir, 'raw');
+        fs.mkdirSync(rawDir, { recursive: true });
+        fs.copyFileSync(certPath, path.join(rawDir, `${RAW_CERT_NAME}.crt`));
+      }
 
       const xmlDir = path.join(resDir, 'xml');
       fs.mkdirSync(xmlDir, { recursive: true });
       fs.writeFileSync(
         path.join(xmlDir, 'network_security_config.xml'),
-        buildNetworkSecurityConfig(),
+        buildNetworkSecurityConfig(hasCert),
       );
 
       return cfg;
@@ -77,6 +73,7 @@ function withManifestReference(config) {
   return withAndroidManifest(config, (cfg) => {
     const application = AndroidConfig.Manifest.getMainApplicationOrThrow(cfg.modResults);
     application.$['android:networkSecurityConfig'] = '@xml/network_security_config';
+    application.$['android:usesCleartextTraffic'] = 'true';
     return cfg;
   });
 }

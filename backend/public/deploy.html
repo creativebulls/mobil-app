@@ -99,7 +99,7 @@
       <p class="meta">
         Target: <code>Ubuntu 24.04 (noble)</code> · App dir: <code>/home/mobile-app/backend</code> ·
         Runtime: <code>Node 20</code> + <code>MongoDB 8.0</code> + <code>PM2</code> + <code>Nginx</code> ·
-        Public URL: <code>http://187.127.180.2</code> (port 80) → app on <code>127.0.0.1:4000</code>
+        Public URL: <code>https://mobilevps.tech</code> (443) → app on <code>127.0.0.1:4000</code>
       </p>
 
       <section id="prereq">
@@ -168,7 +168,7 @@ openssl rand -hex 32   # -> JWT_ACCESS_SECRET
 openssl rand -hex 32   # -> JWT_REFRESH_SECRET</pre>
         </div>
         <div class="callout">
-          Set <code class="inline">APP_URL=http://187.127.180.2:4000</code>,
+          Set <code class="inline">APP_URL=https://mobilevps.tech</code>,
           <code class="inline">MONGODB_URI=mongodb://127.0.0.1:27017/whereabout</code>, and tighten
           <code class="inline">CORS_ORIGIN</code> to your real client origins.
         </div>
@@ -224,7 +224,7 @@ systemctl reload nginx</pre>
         </div>
         <div class="callout">
           App config: <code class="inline">app.set('trust proxy', 1)</code> and
-          <code class="inline">APP_URL=http://187.127.180.2</code> (no port) so generated links
+          <code class="inline">APP_URL=https://mobilevps.tech</code> (no port) so generated links
           (emails, profile photos) are absolute and port-less.
         </div>
       </section>
@@ -233,15 +233,15 @@ systemctl reload nginx</pre>
         <h2><span class="step">Step 7</span> Verify</h2>
         <div class="block">
           <pre><span class="pre-comment"># Public URLs — no port</span>
-curl http://187.127.180.2/health
+curl https://mobilevps.tech/health
 <span class="pre-comment"># {"success":true,"data":{"status":"ok","service":"whereabout-backend"}}</span>
 
 <span class="pre-comment"># Socket.IO handshake</span>
-curl "http://187.127.180.2/socket.io/?EIO=4&transport=polling"
+curl "https://mobilevps.tech/socket.io/?EIO=4&transport=polling"
 
 <span class="pre-comment"># API base &amp; docs in a browser</span>
-<span class="pre-comment"># http://187.127.180.2/api/v1/...</span>
-<span class="pre-comment"># http://187.127.180.2/</span></pre>
+<span class="pre-comment"># https://mobilevps.tech/api/v1/...</span>
+<span class="pre-comment"># https://mobilevps.tech/</span></pre>
         </div>
         <div class="callout warn">
           Reachable externally only if the firewall / security group allows inbound
