@@ -96,7 +96,7 @@ async function parseResponse<T>(response: HttpResponse): Promise<T> {
   return payload.data;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
 
   if (!refreshToken) {
