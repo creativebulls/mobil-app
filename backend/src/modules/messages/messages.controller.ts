@@ -1,10 +1,13 @@
 import { Response } from 'express';
 
 import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { messageMediaUpload } from '../../shared/middleware/upload.middleware';
+import { AppError } from '../../shared/errors/AppError';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
   conversationIdParamSchema,
   messagesQuerySchema,
+  sendMediaMessageSchema,
   sendMessageSchema,
   sharePlaceSchema,
   userIdParamSchema,
@@ -48,6 +51,31 @@ export const sendMessage = asyncHandler(async (req: AuthenticatedRequest, res: R
     body.conversationId ?? null,
     body.recipientId ?? null,
     body.text,
+  );
+  sendSuccess(res, result, 201);
+});
+
+export const sendMediaMessageMiddleware = messageMediaUpload.single('file');
+
+export const sendMediaMessage = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    throw new AppError(422, 'A media file is required', 'MEDIA_REQUIRED');
+  }
+
+  const body = sendMediaMessageSchema.parse(req.body);
+
+  const result = await messagesService.sendMediaMessage(
+    req.auth!.userId,
+    body.conversationId ?? null,
+    body.recipientId ?? null,
+    {
+      filename: file.filename,
+      mediaType: body.mediaType,
+      width: body.width,
+      height: body.height,
+    },
+    body.text ?? '',
   );
   sendSuccess(res, result, 201);
 });

@@ -135,12 +135,12 @@ export function SharePlaceModal({ visible, place, onClose }: SharePlaceModalProp
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <SafeAreaView style={styles.sheet} edges={['bottom']}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.flex}
-          >
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.backdrop}>
+          <SafeAreaView style={styles.sheet} edges={['bottom']}>
             <View style={styles.handle} />
             <View style={styles.header}>
               <Text style={styles.title} numberOfLines={1}>
@@ -234,9 +234,9 @@ export function SharePlaceModal({ visible, place, onClose }: SharePlaceModalProp
                 )}
               </Pressable>
             </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
+          </SafeAreaView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

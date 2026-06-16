@@ -186,6 +186,13 @@ export type SharedPlace = {
   imageUrl: string | null;
 };
 
+export type MessageMedia = {
+  url: string;
+  mediaType: 'image' | 'video';
+  width: number | null;
+  height: number | null;
+};
+
 export type ChatMessage = {
   id: string;
   conversationId: string;
@@ -193,6 +200,7 @@ export type ChatMessage = {
   recipientId: string;
   text: string;
   sharedPlace: SharedPlace | null;
+  media: MessageMedia | null;
   read: boolean;
   createdAt: string;
   timeAgo: string;

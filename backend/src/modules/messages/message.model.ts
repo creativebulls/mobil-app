@@ -6,12 +6,22 @@ export interface ISharedPlace {
   imageUrl?: string;
 }
 
+export type MessageMediaType = 'image' | 'video';
+
+export interface IMessageMedia {
+  url: string;
+  mediaType: MessageMediaType;
+  width?: number;
+  height?: number;
+}
+
 export interface IMessage {
   conversation: Types.ObjectId;
   sender: Types.ObjectId;
   recipient: Types.ObjectId;
   text: string;
   sharedPlace?: ISharedPlace;
+  media?: IMessageMedia;
   read: boolean;
   readAt?: Date;
   createdAt: Date;
@@ -29,6 +39,16 @@ const sharedPlaceSchema = new Schema<ISharedPlace>(
   { _id: false },
 );
 
+const mediaSchema = new Schema<IMessageMedia>(
+  {
+    url: { type: String, required: true },
+    mediaType: { type: String, enum: ['image', 'video'], required: true },
+    width: { type: Number },
+    height: { type: Number },
+  },
+  { _id: false },
+);
+
 const messageSchema = new Schema<MessageDocument>(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
@@ -37,6 +57,7 @@ const messageSchema = new Schema<MessageDocument>(
     // Text is optional when a place is attached, but a message must carry one or the other.
     text: { type: String, default: '', trim: true, maxlength: 2000 },
     sharedPlace: { type: sharedPlaceSchema, default: undefined },
+    media: { type: mediaSchema, default: undefined },
     read: { type: Boolean, default: false },
     readAt: { type: Date },
   },

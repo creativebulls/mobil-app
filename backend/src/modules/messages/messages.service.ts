@@ -7,7 +7,7 @@ import { emitToUser } from '../../socket/index';
 import { DEFAULT_PUSH_PREFERENCES, getUserDisplayName, User } from '../users/user.model';
 import { assertNotBlocked, isBlockedBetween, isRestricted } from '../relations/relations.service';
 import { Conversation, type ConversationDocument } from './conversation.model';
-import { Message, type MessageDocument } from './message.model';
+import { Message, type MessageDocument, type MessageMediaType } from './message.model';
 
 const PARTICIPANT_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl';
 
@@ -43,6 +43,14 @@ function serializeMessage(message: MessageDocument) {
           imageUrl: message.sharedPlace.imageUrl ?? null,
         }
       : null,
+    media: message.media
+      ? {
+          url: message.media.url,
+          mediaType: message.media.mediaType,
+          width: message.media.width ?? null,
+          height: message.media.height ?? null,
+        }
+      : null,
     read: message.read,
     createdAt: message.createdAt.toISOString(),
     timeAgo: formatRelativeTime(message.createdAt),
@@ -51,6 +59,14 @@ function serializeMessage(message: MessageDocument) {
 
 function placePreview(name: string): string {
   return `📍 ${name}`;
+}
+
+function resolveMessageMediaUrl(filename: string): string {
+  return `/uploads/messages/${filename}`;
+}
+
+function mediaPreview(type: MessageMediaType): string {
+  return type === 'video' ? '🎥 Video' : '📷 Photo';
 }
 
 async function isMessagePushEnabled(userId: string): Promise<boolean> {
@@ -213,6 +229,71 @@ export async function sendMessage(senderId: string, conversationId: string | nul
     await sendPushToUser(toUserId, {
       title: senderName,
       body: trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed,
+      data: { type: 'message', conversationId: conversation._id.toString() },
+      channelId: 'messages',
+    });
+  }
+
+  return { message: serialized, conversationId: conversation._id.toString() };
+}
+
+export async function sendMediaMessage(
+  senderId: string,
+  conversationId: string | null,
+  recipientId: string | null,
+  media: { filename: string; mediaType: MessageMediaType; width?: number; height?: number },
+  text: string,
+) {
+  const trimmed = text.trim();
+
+  let conversation: ConversationDocument | null = null;
+
+  if (conversationId) {
+    conversation = await Conversation.findById(conversationId);
+    if (!conversation || !conversation.participants.some((id) => id.toString() === senderId)) {
+      throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
+    }
+  } else if (recipientId) {
+    conversation = await findOrCreateConversation(senderId, recipientId);
+  } else {
+    throw new AppError(422, 'A conversation or recipient is required', 'INVALID_MESSAGE');
+  }
+
+  const toUserId = otherParticipantId(conversation, senderId);
+
+  await assertNotBlocked(senderId, toUserId);
+
+  const message = await Message.create({
+    conversation: conversation._id,
+    sender: senderId,
+    recipient: toUserId,
+    text: trimmed,
+    media: {
+      url: resolveMessageMediaUrl(media.filename),
+      mediaType: media.mediaType,
+      width: media.width,
+      height: media.height,
+    },
+  });
+
+  const preview = trimmed ? `${mediaPreview(media.mediaType)} ${trimmed}` : mediaPreview(media.mediaType);
+  conversation.lastMessage = preview;
+  conversation.lastMessageAt = message.createdAt;
+  conversation.lastMessageSender = new Types.ObjectId(senderId);
+  await conversation.save();
+
+  const serialized = serializeMessage(message);
+
+  emitToUser(toUserId, 'message:new', serialized);
+  emitToUser(senderId, 'message:new', serialized);
+
+  const restricted = await isRestricted(toUserId, senderId);
+  if (!restricted && (await isMessagePushEnabled(toUserId))) {
+    const sender = await User.findById(senderId);
+    const senderName = sender ? getUserDisplayName(sender) : 'Someone';
+    await sendPushToUser(toUserId, {
+      title: senderName,
+      body: preview,
       data: { type: 'message', conversationId: conversation._id.toString() },
       channelId: 'messages',
     });

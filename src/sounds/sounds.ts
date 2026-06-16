@@ -1,10 +1,12 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 // Static requires so Metro bundles the audio assets into the app.
-const ringtoneSource = require('../../assets/sounds/callingring.mp3');
+const ringbackSource = require('../../assets/sounds/callingring.mp3');
+const incomingRingSource = require('../../assets/sounds/incomingring.mp3');
 const messageSource = require('../../assets/sounds/msgrecived.mp3');
 
-let ringtonePlayer: AudioPlayer | null = null;
+let ringbackPlayer: AudioPlayer | null = null;
+let incomingPlayer: AudioPlayer | null = null;
 let messagePlayer: AudioPlayer | null = null;
 let audioModeReady = false;
 
@@ -21,25 +23,43 @@ async function ensureAudioMode(): Promise<void> {
   }
 }
 
-/** Starts the looping call ring (used for both outgoing ringback and incoming ring). */
-export function playRingtone(): void {
+/** Outgoing ringback tone the caller hears while the other side rings. */
+export function playRingback(): void {
   void ensureAudioMode();
   try {
-    if (!ringtonePlayer) {
-      ringtonePlayer = createAudioPlayer(ringtoneSource);
-      ringtonePlayer.loop = true;
+    if (!ringbackPlayer) {
+      ringbackPlayer = createAudioPlayer(ringbackSource);
+      ringbackPlayer.loop = true;
     }
-    void ringtonePlayer.seekTo(0).catch(() => undefined);
-    ringtonePlayer.play();
+    void ringbackPlayer.seekTo(0).catch(() => undefined);
+    ringbackPlayer.play();
   } catch {
     // ignore playback errors
   }
 }
 
-export function stopRingtone(): void {
+/** Incoming ring the recipient hears when a call arrives. */
+export function playIncomingRing(): void {
+  void ensureAudioMode();
   try {
-    ringtonePlayer?.pause();
-    void ringtonePlayer?.seekTo(0).catch(() => undefined);
+    if (!incomingPlayer) {
+      incomingPlayer = createAudioPlayer(incomingRingSource);
+      incomingPlayer.loop = true;
+    }
+    void incomingPlayer.seekTo(0).catch(() => undefined);
+    incomingPlayer.play();
+  } catch {
+    // ignore playback errors
+  }
+}
+
+/** Stops both ring tones. */
+export function stopRings(): void {
+  try {
+    ringbackPlayer?.pause();
+    void ringbackPlayer?.seekTo(0).catch(() => undefined);
+    incomingPlayer?.pause();
+    void incomingPlayer?.seekTo(0).catch(() => undefined);
   } catch {
     // ignore
   }

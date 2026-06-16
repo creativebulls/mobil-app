@@ -109,7 +109,7 @@ export default function VerificationCodeScreen() {
     <AuthScreenLayout fallbackHref="/sign-in">
       <KeyboardAvoidingView
         style={authStyles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
           contentContainerStyle={authStyles.content}

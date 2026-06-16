@@ -20,7 +20,7 @@ import {
 
 import { fetchIceServers, type IceServer } from '../api/callsApi';
 import { getRealtimeSocket } from '../realtime/socket';
-import { playRingtone, stopRingtone } from '../sounds/sounds';
+import { playIncomingRing, playRingback, stopRings } from '../sounds/sounds';
 import { getStoredUser } from '../storage/authSession';
 import { Avatar } from '../components/Avatar';
 import { colors } from '../theme/colors';
@@ -153,20 +153,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
         },
       );
 
-      (pc as unknown as { addEventListener: (e: string, cb: (event: unknown) => void) => void }).addEventListener(
-        'connectionstatechange',
-        () => {
-          const state = (pc as unknown as { connectionState?: string }).connectionState;
-          if (state === 'connected') {
-            setStatus((current) => (current === 'active' ? current : 'active'));
-          } else if (state === 'failed' || state === 'closed' || state === 'disconnected') {
-            // Disconnected can recover; only tear down on terminal states.
-            if (state !== 'disconnected') {
-              cleanup();
-            }
-          }
-        },
-      );
+      const addPcListener = (pc as unknown as {
+        addEventListener: (e: string, cb: (event: unknown) => void) => void;
+      }).addEventListener;
+
+      const markConnected = () =>
+        setStatus((current) => (current === 'active' ? current : 'active'));
+
+      // react-native-webrtc reliably advances `iceConnectionState`, while
+      // `connectionState` sometimes lags and never reaches "connected" — which
+      // left the call stuck on "Connecting…". Treat either signal as connected.
+      addPcListener.call(pc, 'connectionstatechange', () => {
+        const state = (pc as unknown as { connectionState?: string }).connectionState;
+        if (state === 'connected') {
+          markConnected();
+        } else if (state === 'failed' || state === 'closed') {
+          cleanup();
+        }
+      });
+
+      addPcListener.call(pc, 'iceconnectionstatechange', () => {
+        const state = (pc as unknown as { iceConnectionState?: string }).iceConnectionState;
+        if (state === 'connected' || state === 'completed') {
+          markConnected();
+        } else if (state === 'failed') {
+          cleanup();
+        }
+      });
 
       return pc;
     },
@@ -356,6 +369,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
+        // The answer means the callee accepted — leave the ringing state even
+        // if the separate call:accepted event was missed.
+        setStatus((current) => (current === 'outgoing' ? 'connecting' : current));
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp as never));
         await flushPendingCandidates();
       } catch {
@@ -428,12 +444,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // Ring while the call is being established (outgoing ringback / incoming ring),
   // then stop once it connects or ends.
   useEffect(() => {
-    if (status === 'outgoing' || status === 'incoming') {
-      playRingtone();
+    if (status === 'outgoing') {
+      playRingback();
+    } else if (status === 'incoming') {
+      playIncomingRing();
     } else {
-      stopRingtone();
+      stopRings();
     }
-    return () => stopRingtone();
+    return () => stopRings();
   }, [status]);
 
   const statusLabel = useMemo(() => {

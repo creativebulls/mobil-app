@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,12 +22,14 @@ import {
   fetchMessages,
   markConversationRead,
   openConversationWith,
+  sendMediaMessage,
   sendMessage,
 } from '../src/api/messagesApi';
 import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
 import { useCall } from '../src/calls/CallProvider';
 import { Avatar } from '../src/components/Avatar';
+import { ChatMediaBubble, MediaViewerModal, type OpenableMedia } from '../src/components/ChatMedia';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { getRealtimeSocket } from '../src/realtime/socket';
@@ -59,6 +62,7 @@ export default function ChatScreen() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [viewerMedia, setViewerMedia] = useState<OpenableMedia | null>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const headerName = params.name || 'Chat';
@@ -207,6 +211,73 @@ export default function ChatScreen() {
     }
   }
 
+  async function uploadMedia(media: {
+    uri: string;
+    mediaType: 'image' | 'video';
+    width?: number;
+    height?: number;
+  }) {
+    setIsSending(true);
+    try {
+      const result = await sendMediaMessage({
+        conversationId: conversationId ?? undefined,
+        recipientId: conversationId ? undefined : otherUserId ?? undefined,
+        uri: media.uri,
+        mediaType: media.mediaType,
+        width: media.width,
+        height: media.height,
+      });
+      setConversationId(result.conversationId);
+      setMessages((current) =>
+        current.some((message) => message.id === result.message.id)
+          ? current
+          : [...current, result.message],
+      );
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not send',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function handlePickMedia() {
+    if (isSending) {
+      return;
+    }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      await dialog.alert({
+        title: 'Permission needed',
+        message: 'Allow photo access to share images and videos.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      // Heavy compression so media is quick to upload and download on mobile data.
+      quality: 0.5,
+      videoMaxDuration: 60,
+      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+      allowsMultipleSelection: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    await uploadMedia({
+      uri: asset.uri,
+      mediaType: asset.type === 'video' ? 'video' : 'image',
+      width: asset.width,
+      height: asset.height,
+    });
+  }
+
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
@@ -297,6 +368,9 @@ export default function ChatScreen() {
                           </View>
                         </Pressable>
                       ) : null}
+                      {item.media ? (
+                        <ChatMediaBubble media={item.media} onOpen={setViewerMedia} />
+                      ) : null}
                       {item.text ? (
                         <View
                           style={[
@@ -323,6 +397,16 @@ export default function ChatScreen() {
               { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) },
             ]}
           >
+            <Pressable
+              onPress={handlePickMedia}
+              disabled={isSending}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Attach photo or video"
+              style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="image" size={24} color={colors.brand} />
+            </Pressable>
             <TextInput
               style={styles.input}
               placeholder="Message…"
@@ -345,6 +429,7 @@ export default function ChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
     </View>
   );
 }
@@ -505,6 +590,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputGray,
     fontSize: 15,
     color: colors.text,
+  },
+  attachButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButton: {
     width: 42,

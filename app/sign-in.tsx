@@ -110,7 +110,7 @@ export default function SignInScreen() {
 
         <KeyboardAvoidingView
           style={styles.content}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.form}>
             <AnimatedFormInput

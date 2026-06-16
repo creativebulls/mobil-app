@@ -10,6 +10,11 @@ messagesRouter.get('/', messagesController.listConversations);
 messagesRouter.get('/unread-count', messagesController.unreadCount);
 messagesRouter.post('/with/:userId', messagesController.openConversation);
 messagesRouter.post('/share-place', messagesController.sharePlace);
+messagesRouter.post(
+  '/media',
+  messagesController.sendMediaMessageMiddleware,
+  messagesController.sendMediaMessage,
+);
 messagesRouter.post('/', messagesController.sendMessage);
 messagesRouter.get('/:conversationId', messagesController.listMessages);
 messagesRouter.post('/:conversationId/read', messagesController.markRead);

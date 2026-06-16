@@ -43,6 +43,48 @@ export async function sendMessage(input: {
   });
 }
 
+export async function sendMediaMessage(input: {
+  conversationId?: string;
+  recipientId?: string;
+  text?: string;
+  uri: string;
+  mediaType: 'image' | 'video';
+  width?: number;
+  height?: number;
+}): Promise<SendMessageResponse> {
+  const formData = new FormData();
+  const extension = input.mediaType === 'video' ? 'mp4' : 'jpg';
+  const mimeType = input.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+
+  formData.append('file', {
+    uri: input.uri,
+    name: `message-${Date.now()}.${extension}`,
+    type: mimeType,
+  } as unknown as Blob);
+
+  formData.append('mediaType', input.mediaType);
+  if (input.conversationId) {
+    formData.append('conversationId', input.conversationId);
+  }
+  if (input.recipientId) {
+    formData.append('recipientId', input.recipientId);
+  }
+  if (input.text && input.text.trim()) {
+    formData.append('text', input.text.trim());
+  }
+  if (typeof input.width === 'number') {
+    formData.append('width', String(Math.round(input.width)));
+  }
+  if (typeof input.height === 'number') {
+    formData.append('height', String(Math.round(input.height)));
+  }
+
+  return apiRequest<SendMessageResponse>('/messages/media', {
+    method: 'POST',
+    formData,
+  });
+}
+
 export async function sharePlaceWithContacts(input: {
   placeId: string;
   name: string;
