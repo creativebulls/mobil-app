@@ -25,6 +25,7 @@ import {
 } from '../src/api/messagesApi';
 import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
+import { useCall } from '../src/calls/CallProvider';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
@@ -36,6 +37,7 @@ import { colors } from '../src/theme/colors';
 export default function ChatScreen() {
   const router = useRouter();
   const dialog = useDialog();
+  const call = useCall();
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const params = useLocalSearchParams<{
@@ -222,7 +224,24 @@ export default function ChatScreen() {
               {headerName}
             </Text>
           </Pressable>
-          <View style={styles.headerSpacer} />
+          <Pressable
+            onPress={() =>
+              otherUserId &&
+              call.startCall({
+                userId: otherUserId,
+                name: headerName,
+                avatarUri: headerAvatar,
+                conversationId,
+              })
+            }
+            disabled={!otherUserId || call.status !== 'idle'}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Voice call"
+            style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="call" size={22} color={colors.brand} />
+          </Pressable>
         </View>
 
         <KeyboardAvoidingView
@@ -362,8 +381,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.text,
   },
-  headerSpacer: {
-    width: 8,
+  callButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loader: {
     marginTop: 40,

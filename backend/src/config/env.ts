@@ -47,6 +47,12 @@ const envSchema = z.object({
   //   - FIREBASE_SERVICE_ACCOUNT_JSON: the service-account JSON inline (raw or base64-encoded)
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  // WebRTC voice calling. STUN is free/public; TURN is needed for reliable
+  // connectivity on cellular/mobile networks (run coturn on the VPS).
+  STUN_URLS: z.string().default('stun:stun.l.google.com:19302'),
+  TURN_URLS: z.string().optional(),
+  TURN_USERNAME: z.string().optional(),
+  TURN_CREDENTIAL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

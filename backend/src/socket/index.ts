@@ -82,6 +82,53 @@ export function initializeSocket(httpServer: HttpServer): Server {
       });
     });
 
+    // --- Voice call signaling (WebRTC) ---------------------------------------
+    // The server is a thin relay: it forwards each signaling message to the
+    // target user's room, stamping the authenticated sender id so the recipient
+    // always knows who it came from (clients can't spoof `fromUserId`).
+    const relayToUser = (event: string, payload: { toUserId?: string } & Record<string, unknown>) => {
+      if (!payload?.toUserId) {
+        return;
+      }
+      const { toUserId, ...rest } = payload;
+      io?.to(`user:${toUserId}`).emit(event, { ...rest, fromUserId: userId });
+    };
+
+    // Caller -> callee: incoming call invitation.
+    socket.on('call:invite', (payload: { toUserId?: string; callId?: string; conversationId?: string; caller?: unknown }) => {
+      relayToUser('call:incoming', payload);
+    });
+
+    // Callee -> caller: accepted / rejected / busy.
+    socket.on('call:accept', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:accepted', payload);
+    });
+    socket.on('call:reject', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:rejected', payload);
+    });
+    socket.on('call:busy', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:busy', payload);
+    });
+
+    // Either party: cancel a ringing call or hang up an active one.
+    socket.on('call:cancel', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:cancelled', payload);
+    });
+    socket.on('call:end', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:ended', payload);
+    });
+
+    // WebRTC handshake: SDP offer/answer and ICE candidates.
+    socket.on('webrtc:offer', (payload: { toUserId?: string; callId?: string; sdp?: unknown }) => {
+      relayToUser('webrtc:offer', payload);
+    });
+    socket.on('webrtc:answer', (payload: { toUserId?: string; callId?: string; sdp?: unknown }) => {
+      relayToUser('webrtc:answer', payload);
+    });
+    socket.on('webrtc:ice-candidate', (payload: { toUserId?: string; callId?: string; candidate?: unknown }) => {
+      relayToUser('webrtc:ice-candidate', payload);
+    });
+
     socket.on('disconnect', () => {
       if (pendingSessionRooms.get(userId) === socket.id) {
         pendingSessionRooms.delete(userId);

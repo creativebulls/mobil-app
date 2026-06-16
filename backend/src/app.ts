@@ -7,6 +7,7 @@ import path from 'path';
 import { env, uploadsRoot } from './config/env';
 import { adminRouter } from './modules/admin/admin.routes';
 import { authRouter } from './modules/auth/auth.routes';
+import { callsRouter } from './modules/calls/calls.routes';
 import { friendsRouter } from './modules/friends/friends.routes';
 import { messagesRouter } from './modules/messages/messages.routes';
 import { notificationRouter } from './modules/notifications/notification.routes';
@@ -66,6 +67,7 @@ export function createApp() {
   app.use('/api/v1/relations', relationsRouter);
   app.use('/api/v1/profile', profileRouter);
   app.use('/api/v1/places', placesRouter);
+  app.use('/api/v1/calls', callsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

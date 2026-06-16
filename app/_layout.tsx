@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 
+import { CallProvider } from '../src/calls/CallProvider';
 import { DialogProvider } from '../src/components/dialog/DialogProvider';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
 import { resolveBackendHost } from '../src/config/api';
@@ -23,7 +24,8 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <DialogProvider>
           <NotificationsProvider>
-            <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
+            <CallProvider>
+              <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="welcome" options={{ gestureEnabled: false }} />
               <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
@@ -51,7 +53,8 @@ export default function RootLayout() {
               <Stack.Screen name="user/[userId]" />
               <Stack.Screen name="places" />
               <Stack.Screen name="place-detail" />
-            </Stack>
+              </Stack>
+            </CallProvider>
           </NotificationsProvider>
         </DialogProvider>
       </SafeAreaProvider>

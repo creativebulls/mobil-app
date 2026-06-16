@@ -12,9 +12,10 @@ import {
 import { AppState } from 'react-native';
 
 import { fetchUnreadCount } from '../api/notificationsApi';
-import type { AppNotification } from '../api/types';
+import type { AppNotification, ChatMessage } from '../api/types';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
-import { getAccessToken } from '../storage/authSession';
+import { playMessageChime } from '../sounds/sounds';
+import { getAccessToken, getStoredUser } from '../storage/authSession';
 import { ensureNotificationChannels, registerForPushNotifications } from './pushNotifications';
 
 type NotificationsContextValue = {
@@ -28,6 +29,11 @@ const NotificationsContext = createContext<NotificationsContextValue | undefined
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getStoredUser().then((user) => setCurrentUserId(user?.id ?? null));
+  }, []);
 
   const refreshUnreadCount = useCallback(async () => {
     const token = await getAccessToken();
@@ -76,6 +82,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   useRealtimeEvent<{ unreadCount: number }>('notification:read', (payload) => {
     setUnreadCount(payload.unreadCount);
+  });
+
+  // Play the chime for messages from other people (message:new is also echoed
+  // to the sender, so skip our own outgoing messages).
+  useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
+    if (incoming.senderId && incoming.senderId !== currentUserId) {
+      playMessageChime();
+    }
   });
 
   useEffect(() => {

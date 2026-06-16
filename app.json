@@ -98,7 +98,8 @@
         {
           "cameraPermission": "Allow WhereAbout to use the camera to scan a friend's connect code."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "router": {},
