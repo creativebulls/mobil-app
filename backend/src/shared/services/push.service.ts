@@ -1,32 +1,8 @@
-import type { Expo as ExpoInstance, ExpoPushMessage } from 'expo-server-sdk';
+import type { MulticastMessage } from 'firebase-admin/messaging';
 
 import { isDevelopment } from '../../config/env';
 import { User } from '../../modules/users/user.model';
-
-// `expo-server-sdk` is published as an ES module, but this service is compiled
-// to CommonJS. A static `import` (or a TS-compiled dynamic `import()`, which is
-// down-levelled to `require()`) throws ERR_REQUIRE_ESM at runtime. Using the
-// Function constructor preserves a genuine dynamic `import()` that Node can
-// resolve for ESM packages from CommonJS code.
-const importEsm = new Function('specifier', 'return import(specifier)') as <T>(
-  specifier: string,
-) => Promise<T>;
-
-type ExpoModule = typeof import('expo-server-sdk');
-
-let expoModulePromise: Promise<ExpoModule> | null = null;
-let expoInstance: ExpoInstance | null = null;
-
-async function getExpo(): Promise<{ Expo: ExpoModule['Expo']; expo: ExpoInstance }> {
-  if (!expoModulePromise) {
-    expoModulePromise = importEsm<ExpoModule>('expo-server-sdk');
-  }
-  const mod = await expoModulePromise;
-  if (!expoInstance) {
-    expoInstance = new mod.Expo();
-  }
-  return { Expo: mod.Expo, expo: expoInstance };
-}
+import { getFirebaseMessaging } from './firebase';
 
 type PushPayload = {
   title: string;
@@ -34,6 +10,13 @@ type PushPayload = {
   data?: Record<string, unknown>;
   channelId?: string;
 };
+
+// FCM error codes that mean a token is permanently invalid and should be purged.
+const INVALID_TOKEN_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-argument',
+]);
 
 async function removeInvalidTokens(tokens: string[]): Promise<void> {
   if (tokens.length === 0) {
@@ -46,6 +29,25 @@ async function removeInvalidTokens(tokens: string[]): Promise<void> {
   );
 }
 
+// FCM data payloads only accept string values, so coerce everything and drop
+// null/undefined entries the client would otherwise receive as the string "null".
+function toStringData(data?: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  if (!data) {
+    return result;
+  }
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+    result[key] = typeof value === 'string' ? value : String(value);
+  }
+
+  return result;
+}
+
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
   const user = await User.findById(userId).select('expoPushTokens');
 
@@ -53,38 +55,50 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     return;
   }
 
-  const { Expo, expo } = await getExpo();
+  const messaging = await getFirebaseMessaging();
 
-  const validTokens = user.expoPushTokens.filter((token) => Expo.isExpoPushToken(token));
-  const invalidTokens = user.expoPushTokens.filter((token) => !Expo.isExpoPushToken(token));
-
-  if (invalidTokens.length > 0) {
-    await removeInvalidTokens(invalidTokens);
-  }
-
-  if (validTokens.length === 0) {
+  if (!messaging) {
     return;
   }
 
-  const messages: ExpoPushMessage[] = validTokens.map((token) => ({
-    to: token,
-    sound: 'default',
-    title: payload.title,
-    body: payload.body,
-    data: payload.data ?? {},
-    priority: 'high',
-    channelId: payload.channelId ?? 'default',
-  }));
+  const tokens = user.expoPushTokens;
+  const channelId = payload.channelId ?? 'default';
 
-  const chunks = expo.chunkPushNotifications(messages);
+  const message: MulticastMessage = {
+    tokens,
+    notification: {
+      title: payload.title,
+      body: payload.body,
+    },
+    data: toStringData(payload.data),
+    android: {
+      priority: 'high',
+      notification: {
+        channelId,
+        sound: 'default',
+        defaultVibrateTimings: true,
+      },
+    },
+  };
 
-  for (const chunk of chunks) {
-    try {
-      await expo.sendPushNotificationsAsync(chunk);
-    } catch (error) {
-      if (isDevelopment) {
-        console.warn('[push] Failed to send chunk', error);
+  try {
+    const response = await messaging.sendEachForMulticast(message);
+
+    if (response.failureCount > 0) {
+      const invalidTokens: string[] = [];
+      response.responses.forEach((result, index) => {
+        if (!result.success && result.error && INVALID_TOKEN_CODES.has(result.error.code)) {
+          invalidTokens.push(tokens[index]!);
+        }
+      });
+
+      if (invalidTokens.length > 0) {
+        await removeInvalidTokens(invalidTokens);
       }
+    }
+  } catch (error) {
+    if (isDevelopment) {
+      console.warn('[push] Failed to send FCM message', error);
     }
   }
 }

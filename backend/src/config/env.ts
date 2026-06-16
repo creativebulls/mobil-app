@@ -42,6 +42,11 @@ const envSchema = z.object({
   PLACES_USER_AGENT: z.string().default('WhereAboutApp/1.0 (support@whereabout.app)'),
   ADMIN_EMAIL: z.string().email().default('admin@whereabout.app'),
   ADMIN_PASSWORD: z.string().min(8).default('admin-change-me'),
+  // Firebase Cloud Messaging (push). Provide ONE of the following:
+  //   - FIREBASE_SERVICE_ACCOUNT_PATH: absolute path to the service-account JSON on the server
+  //   - FIREBASE_SERVICE_ACCOUNT_JSON: the service-account JSON inline (raw or base64-encoded)
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

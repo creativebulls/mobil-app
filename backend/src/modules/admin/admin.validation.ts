@@ -14,3 +14,11 @@ export const adminUsersQuerySchema = z.object({
 export const adminResetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
+
+export const pushConfigSchema = z.object({
+  serviceAccount: z.string().min(1, 'Service account JSON is required'),
+});
+
+export const pushTestSchema = z.object({
+  email: z.string().email(),
+});

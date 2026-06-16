@@ -13,3 +13,8 @@ adminRouter.get('/users', adminController.listUsers);
 adminRouter.post('/users/:id/verify', adminController.forceVerifyUser);
 adminRouter.post('/users/:id/reset-password', adminController.resetUserPassword);
 adminRouter.delete('/users/:id', adminController.deleteUser);
+
+adminRouter.get('/push-config', adminController.getPushConfig);
+adminRouter.put('/push-config', adminController.setPushConfig);
+adminRouter.delete('/push-config', adminController.clearPushConfig);
+adminRouter.post('/push-config/test', adminController.sendTestPush);

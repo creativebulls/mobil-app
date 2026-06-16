@@ -7,6 +7,8 @@ import {
   adminLoginSchema,
   adminResetPasswordSchema,
   adminUsersQuerySchema,
+  pushConfigSchema,
+  pushTestSchema,
 } from './admin.validation';
 
 export const login = asyncHandler(async (req, res: Response) => {
@@ -34,5 +36,27 @@ export const resetUserPassword = asyncHandler(async (req: AdminRequest, res: Res
 
 export const deleteUser = asyncHandler(async (req: AdminRequest, res: Response) => {
   const result = await adminService.deleteUser(String(req.params.id));
+  sendSuccess(res, result);
+});
+
+export const getPushConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getPushConfig();
+  sendSuccess(res, result);
+});
+
+export const setPushConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = pushConfigSchema.parse(req.body);
+  const result = await adminService.setPushConfig(body.serviceAccount);
+  sendSuccess(res, result);
+});
+
+export const clearPushConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.clearPushConfig();
+  sendSuccess(res, result);
+});
+
+export const sendTestPush = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = pushTestSchema.parse(req.body);
+  const result = await adminService.sendTestPush(body.email);
   sendSuccess(res, result);
 });

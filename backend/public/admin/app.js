@@ -183,6 +183,93 @@ async function loadUsers() {
   }
 }
 
+function renderPushStatus(config) {
+  const badge = $('push-status-badge');
+  const detail = $('push-status-detail');
+
+  if (config.configured) {
+    badge.className = 'badge badge-success';
+    badge.textContent = 'Configured';
+    const parts = [];
+    if (config.projectId) parts.push(`project: ${config.projectId}`);
+    if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
+    detail.textContent = parts.join(' · ');
+  } else {
+    badge.className = 'badge badge-warning';
+    badge.textContent = 'Not configured';
+    detail.textContent = 'Push notifications are disabled until a credential is saved.';
+  }
+}
+
+async function loadPushConfig() {
+  try {
+    const config = await api('/push-config');
+    renderPushStatus(config);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function savePushConfig() {
+  const errorEl = $('push-config-error');
+  errorEl.textContent = '';
+  const serviceAccount = $('push-service-account').value.trim();
+
+  if (!serviceAccount) {
+    errorEl.textContent = 'Paste your service account JSON first.';
+    return;
+  }
+
+  $('push-save-btn').disabled = true;
+  try {
+    const config = await api('/push-config', {
+      method: 'PUT',
+      body: JSON.stringify({ serviceAccount }),
+    });
+    renderPushStatus({ ...config, updatedAt: new Date().toISOString() });
+    $('push-service-account').value = '';
+    toast('Firebase credential saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('push-save-btn').disabled = false;
+  }
+}
+
+async function clearPushConfig() {
+  $('push-clear-btn').disabled = true;
+  try {
+    const config = await api('/push-config', { method: 'DELETE' });
+    renderPushStatus(config);
+    toast('Firebase credential removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('push-clear-btn').disabled = false;
+  }
+}
+
+async function sendTestPush() {
+  const email = $('push-test-email').value.trim();
+  if (!email) {
+    toast('Enter a user email to test', 'error');
+    return;
+  }
+
+  $('push-test-btn').disabled = true;
+  try {
+    const result = await api('/push-config/test', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    toast(`Test sent to ${result.deviceCount} device(s)`);
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('push-test-btn').disabled = false;
+  }
+}
+
 function openModal(id) {
   $(id).classList.remove('hidden');
 }
@@ -207,6 +294,7 @@ async function handleLogin(event) {
     setToken(data.token);
     showDashboard();
     await loadUsers();
+    await loadPushConfig();
   } catch (error) {
     errorEl.textContent = error.message;
   } finally {
@@ -244,6 +332,10 @@ async function deleteUser(userId) {
 function bindEvents() {
   $('login-form').addEventListener('submit', handleLogin);
   $('logout-btn').addEventListener('click', logout);
+
+  $('push-save-btn').addEventListener('click', () => void savePushConfig());
+  $('push-clear-btn').addEventListener('click', () => void clearPushConfig());
+  $('push-test-btn').addEventListener('click', () => void sendTestPush());
 
   $('search-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -336,6 +428,7 @@ async function init() {
     showDashboard();
     try {
       await loadUsers();
+      await loadPushConfig();
     } catch {
       logout();
     }

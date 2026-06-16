@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -7,7 +6,7 @@ import { Platform } from 'react-native';
 import { registerPushToken, removePushToken } from '../api/notificationsApi';
 import { getAccessToken } from '../storage/authSession';
 
-const PUSH_TOKEN_KEY = '@whereabout/expo_push_token';
+const PUSH_TOKEN_KEY = '@whereabout/fcm_push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -71,15 +70,14 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    const projectId =
-      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    // Native FCM device token (Android). Sent straight to our own backend,
+    // which delivers via Firebase Cloud Messaging — no Expo push service.
+    const tokenResponse = await Notifications.getDevicePushTokenAsync();
+    const token = tokenResponse.data;
 
-    if (!projectId) {
+    if (typeof token !== 'string' || token.length === 0) {
       return null;
     }
-
-    const tokenResponse = await Notifications.getExpoPushTokenAsync({ projectId });
-    const token = tokenResponse.data;
 
     await registerPushToken(token);
     await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);

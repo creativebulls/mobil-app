@@ -69,6 +69,49 @@
 
         <div class="card">
           <div class="card-header">
+            <h2 class="card-title">Push notifications (Firebase)</h2>
+            <p class="card-description">
+              Paste your Firebase service account JSON to enable push delivery. It is stored
+              securely on the server and used to send notifications via FCM.
+            </p>
+          </div>
+          <div class="card-content">
+            <div class="push-status">
+              <span id="push-status-badge" class="badge badge-muted">Loading…</span>
+              <span id="push-status-detail" class="user-email"></span>
+            </div>
+            <div class="field" style="margin-top: 0.75rem">
+              <label class="label" for="push-service-account">Service account JSON</label>
+              <textarea
+                id="push-service-account"
+                class="input"
+                rows="8"
+                placeholder='{ "type": "service_account", "project_id": "…", "client_email": "…", "private_key": "…" }'
+                style="font-family: monospace; resize: vertical"
+              ></textarea>
+              <p id="push-config-error" class="error-text"></p>
+            </div>
+            <div class="actions" style="margin-bottom: 1rem">
+              <button id="push-save-btn" type="button" class="btn btn-primary btn-sm">Save credential</button>
+              <button id="push-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove credential</button>
+            </div>
+            <div class="field">
+              <label class="label" for="push-test-email">Send a test notification</label>
+              <div class="toolbar">
+                <input
+                  id="push-test-email"
+                  class="input"
+                  type="email"
+                  placeholder="user@example.com"
+                />
+                <button id="push-test-btn" type="button" class="btn btn-secondary btn-sm">Send test</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
             <h2 class="card-title">Users</h2>
             <p class="card-description">Search, verify, reset passwords, or delete accounts.</p>
           </div>
