@@ -22,6 +22,7 @@ export const colors = {
   inputFocus: '#F36464',
   brand: '#F36464',
   buttonActive: '#F36464',
+  danger: '#E5484D',
 };
 
 type GradientConfig = {

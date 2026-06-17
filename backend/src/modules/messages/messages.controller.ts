@@ -8,6 +8,7 @@ import {
   conversationIdParamSchema,
   createGroupSchema,
   messagesQuerySchema,
+  renameGroupSchema,
   sendMediaMessageSchema,
   sendMessageSchema,
   sharePlaceInConversationSchema,
@@ -86,6 +87,31 @@ export const createGroup = asyncHandler(async (req: AuthenticatedRequest, res: R
   const body = createGroupSchema.parse(req.body);
   const result = await messagesService.createGroup(req.auth!.userId, body.name, body.memberIds);
   sendSuccess(res, result, 201);
+});
+
+export const getGroupDetails = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = conversationIdParamSchema.parse(req.params);
+  const result = await messagesService.getGroupDetails(req.auth!.userId, params.conversationId);
+  sendSuccess(res, result);
+});
+
+export const renameGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = conversationIdParamSchema.parse(req.params);
+  const body = renameGroupSchema.parse(req.body);
+  const result = await messagesService.renameGroup(req.auth!.userId, params.conversationId, body.name);
+  sendSuccess(res, result);
+});
+
+export const deleteGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = conversationIdParamSchema.parse(req.params);
+  const result = await messagesService.deleteGroup(req.auth!.userId, params.conversationId);
+  sendSuccess(res, result);
+});
+
+export const leaveGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = conversationIdParamSchema.parse(req.params);
+  const result = await messagesService.leaveGroup(req.auth!.userId, params.conversationId);
+  sendSuccess(res, result);
 });
 
 export const uploadGroupPhotoMiddleware = groupPhotoUpload.single('groupPhoto');

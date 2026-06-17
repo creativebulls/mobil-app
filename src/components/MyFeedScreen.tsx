@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFriends, type FriendSummary } from '../api/profileApi';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -21,10 +21,13 @@ import { MeetPeopleSection } from './MeetPeopleSection';
 import { RecommendedPlacesByFriendsSection } from './RecommendedPlacesByFriendsSection';
 import { SearchResults } from './SearchResults';
 
-// Logo/actions row height — scrolls away naturally; only the search bar stays pinned.
+// Logo/actions row height.
 const FEED_HEADER_HEIGHT = 56;
 // Search bar region height (input + its bottom padding).
 const SEARCH_REGION_HEIGHT = 60;
+// Full collapsible header (logo row + search). The whole thing slides up out of
+// view on scroll down and slides back in on scroll up.
+const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
 
 export function MyFeedScreen() {
   const router = useRouter();
@@ -36,12 +39,28 @@ export function MyFeedScreen() {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const debouncedQuery = useDebouncedValue(query, 300);
 
-  const scrollRef = useRef<Animated.ScrollView>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
-  const stickyDividerOpacity = useMemo(
+  // diffClamp tracks scroll direction: scrolling down pushes the value toward
+  // TOP_BAR_HEIGHT (header slides up/out), scrolling up pulls it back to 0
+  // (header slides back in). This gives the show-on-scroll-up animation.
+  const clampedScroll = useMemo(
+    () => Animated.diffClamp(scrollY, 0, TOP_BAR_HEIGHT),
+    [scrollY],
+  );
+  const headerTranslateY = useMemo(
+    () =>
+      clampedScroll.interpolate({
+        inputRange: [0, TOP_BAR_HEIGHT],
+        outputRange: [0, -TOP_BAR_HEIGHT],
+        extrapolate: 'clamp',
+      }),
+    [clampedScroll],
+  );
+  const dividerOpacity = useMemo(
     () =>
       scrollY.interpolate({
-        inputRange: [FEED_HEADER_HEIGHT - 12, FEED_HEADER_HEIGHT],
+        inputRange: [0, 12],
         outputRange: [0, 1],
         extrapolate: 'clamp',
       }),
@@ -151,7 +170,6 @@ export function MyFeedScreen() {
           useNativeDriver: true,
         })}
       >
-        <FeedHeader />
         <MeetFriendsSection
           friends={meetFriends}
           onViewAllPress={() => router.push('/friends')}
@@ -176,17 +194,23 @@ export function MyFeedScreen() {
         <MeetPeopleSection />
       </Animated.ScrollView>
 
-      <View style={styles.stickySearch} pointerEvents="box-none">
+      <View style={styles.topBarClip} pointerEvents="box-none">
         <Animated.View
-          pointerEvents="none"
-          style={[styles.stickyDivider, { opacity: stickyDividerOpacity }]}
-        />
-        <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
-          <View style={styles.searchTriggerInner}>
-            <Ionicons name="search-outline" size={20} color={colors.labelGray} />
-            <Text style={styles.searchTriggerText}>Search friends, places, posts…</Text>
-          </View>
-        </Pressable>
+          style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
+          pointerEvents="box-none"
+        >
+          <FeedHeader />
+          <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
+            <View style={styles.searchTriggerInner}>
+              <Ionicons name="search-outline" size={20} color={colors.labelGray} />
+              <Text style={styles.searchTriggerText}>Search friends, places, posts…</Text>
+            </View>
+          </Pressable>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.topBarDivider, { opacity: dividerOpacity }]}
+          />
+        </Animated.View>
       </View>
     </View>
   );
@@ -198,20 +222,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   content: {
-    paddingTop: SEARCH_REGION_HEIGHT + 8,
+    paddingTop: TOP_BAR_HEIGHT + 8,
     paddingBottom: 32,
     gap: 28,
   },
-  stickySearch: {
+  // Clipping window pinned to the safe-area top edge. The header slides within
+  // it and is clipped before it can reach the system status bar.
+  topBarClip: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: colors.white,
+    height: TOP_BAR_HEIGHT,
+    overflow: 'hidden',
     zIndex: 10,
     elevation: 4,
   },
-  stickyDivider: {
+  topBar: {
+    backgroundColor: colors.white,
+  },
+  topBarDivider: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },

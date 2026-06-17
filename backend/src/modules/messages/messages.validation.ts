@@ -41,6 +41,10 @@ export const createGroupSchema = z.object({
   memberIds: z.array(z.string().min(1)).min(1, 'Select at least one member').max(50),
 });
 
+export const renameGroupSchema = z.object({
+  name: z.string().trim().min(1, 'Group name is required').max(80),
+});
+
 export const sharePlaceInConversationSchema = z.object({
   conversationId: z.string().min(1).optional(),
   recipientId: z.string().min(1).optional(),

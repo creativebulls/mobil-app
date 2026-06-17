@@ -23,7 +23,6 @@ import {
   sendMediaMessage,
   sendMessage,
   sharePlaceInConversation,
-  updateGroupPhoto,
 } from '../src/api/messagesApi';
 import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
@@ -91,15 +90,12 @@ export default function ChatScreen() {
   const [viewerMedia, setViewerMedia] = useState<OpenableMedia | null>(null);
   const [groupName, setGroupName] = useState<string | null>(isGroup ? params.name || 'Group' : null);
   const [groupAvatar, setGroupAvatar] = useState<string | null>(params.avatarUri || null);
-  const [groupOwnerId, setGroupOwnerId] = useState<string | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
-  const [isUpdatingGroupPhoto, setIsUpdatingGroupPhoto] = useState(false);
   const [placePickerVisible, setPlacePickerVisible] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const headerName = (isGroup ? groupName : params.name) || (isGroup ? 'Group' : 'Chat');
   const headerAvatar = isGroup ? groupAvatar : params.avatarUri || null;
-  const canEditGroupPhoto = isGroup && groupOwnerId != null && groupOwnerId === currentUserId;
 
   const load = useCallback(async () => {
     try {
@@ -126,7 +122,6 @@ export default function ChatScreen() {
       if (result.conversation?.isGroup) {
         setGroupName(result.conversation.name);
         setGroupAvatar(result.conversation.avatarUri);
-        setGroupOwnerId(result.conversation.ownerId);
         setMemberCount(result.conversation.memberCount);
       } else if (result.user) {
         setOtherUserId(result.user.id);
@@ -221,44 +216,11 @@ export default function ChatScreen() {
     });
   });
 
-  async function handleGroupPhotoPress() {
-    if (!canEditGroupPhoto || !conversationId || isUpdatingGroupPhoto) {
-      return;
+  useRealtimeEvent<{ conversationId: string }>('conversation:removed', (payload) => {
+    if (conversationId && payload.conversationId === conversationId) {
+      router.replace('/messages');
     }
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      await dialog.alert({
-        title: 'Permission required',
-        message: 'Please allow photo library access to change the group picture.',
-      });
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-
-    if (result.canceled || !result.assets[0]?.uri) {
-      return;
-    }
-
-    setIsUpdatingGroupPhoto(true);
-    try {
-      const uploaded = await updateGroupPhoto(conversationId, result.assets[0].uri);
-      setGroupAvatar(uploaded.avatarUri);
-    } catch (error) {
-      await dialog.alert({
-        title: 'Could not update photo',
-        message: getErrorMessage(error, 'Try again later'),
-      });
-    } finally {
-      setIsUpdatingGroupPhoto(false);
-    }
-  }
+  });
 
   function emitTyping(typing: boolean) {
     if (!otherUserId) {
@@ -474,8 +436,8 @@ export default function ChatScreen() {
             disabled={!isGroup && !otherUserId}
             onPress={() => {
               if (isGroup) {
-                if (canEditGroupPhoto) {
-                  void handleGroupPhotoPress();
+                if (conversationId) {
+                  router.push({ pathname: '/group-info', params: { conversationId } });
                 }
                 return;
               }
@@ -528,7 +490,21 @@ export default function ChatScreen() {
             >
               <Ionicons name="call" size={22} color={colors.brand} />
             </Pressable>
-          ) : null}
+          ) : (
+            <Pressable
+              onPress={() =>
+                conversationId &&
+                router.push({ pathname: '/group-info', params: { conversationId } })
+              }
+              disabled={!conversationId}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Group info"
+              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="information-circle-outline" size={24} color={colors.brand} />
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.flex}>

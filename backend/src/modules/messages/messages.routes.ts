@@ -9,6 +9,10 @@ messagesRouter.use(...messagesController.messagesGuards);
 messagesRouter.get('/', messagesController.listConversations);
 messagesRouter.get('/unread-count', messagesController.unreadCount);
 messagesRouter.post('/group', messagesController.createGroup);
+messagesRouter.get('/group/:conversationId', messagesController.getGroupDetails);
+messagesRouter.patch('/group/:conversationId', messagesController.renameGroup);
+messagesRouter.delete('/group/:conversationId', messagesController.deleteGroup);
+messagesRouter.post('/group/:conversationId/leave', messagesController.leaveGroup);
 messagesRouter.post(
   '/group/:conversationId/photo',
   messagesController.uploadGroupPhotoMiddleware,

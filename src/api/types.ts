@@ -253,6 +253,25 @@ export type CreateGroupResponse = {
   avatarUri: string | null;
 };
 
+export type GroupMember = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  isOwner: boolean;
+  isOnline: boolean;
+};
+
+export type GroupDetails = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  ownerId: string | null;
+  isOwner: boolean;
+  memberCount: number;
+  createdAt: string;
+  members: GroupMember[];
+};
+
 export type SendMessageResponse = {
   message: ChatMessage;
   conversationId: string;

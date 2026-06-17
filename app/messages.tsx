@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -29,7 +30,7 @@ function messagePreview(message: ChatMessage): string {
     return message.sharedPlace.name;
   }
   if (message.media) {
-    return message.media.type === 'video' ? 'Video' : 'Photo';
+    return message.media.mediaType === 'video' ? 'Video' : 'Photo';
   }
   return '';
 }
@@ -39,7 +40,20 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
   const currentUserIdRef = useRef<string | null>(null);
+
+  const filteredConversations = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return conversations;
+    }
+    return conversations.filter((item) => {
+      const name = (item.isGroup ? item.name : item.user?.name ?? '').toLowerCase();
+      const lastMessage = (item.lastMessage ?? '').toLowerCase();
+      return name.includes(q) || lastMessage.includes(q);
+    });
+  }, [conversations, search]);
 
   const load = useCallback(async () => {
     try {
@@ -94,6 +108,10 @@ export default function MessagesScreen() {
     void load();
   });
 
+  useRealtimeEvent<{ conversationId: string }>('conversation:removed', (payload) => {
+    setConversations((current) => current.filter((item) => item.id !== payload.conversationId));
+  });
+
   useRealtimeEvent<{ conversationId: string }>('message:read', (payload) => {
     setConversations((current) =>
       current.map((item) =>
@@ -126,6 +144,24 @@ export default function MessagesScreen() {
       <View style={styles.container}>
         <FeedHeader title="Messages" onAddPress={() => router.push('/new-group')} />
 
+        <View style={styles.searchBox}>
+          <Ionicons name="search-outline" size={18} color={colors.labelGray} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search messages"
+            placeholderTextColor={colors.labelGray}
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {search.length > 0 ? (
+            <Pressable onPress={() => setSearch('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.labelGray} />
+            </Pressable>
+          ) : null}
+        </View>
+
         {isLoading ? (
           <ActivityIndicator color={colors.brand} style={styles.loader} />
         ) : conversations.length === 0 ? (
@@ -134,11 +170,19 @@ export default function MessagesScreen() {
             <Text style={styles.title}>No messages yet</Text>
             <Text style={styles.subtitle}>Visit a friend&apos;s profile to start a conversation.</Text>
           </View>
+        ) : filteredConversations.length === 0 ? (
+          <View style={styles.content}>
+            <Ionicons name="search-outline" size={44} color={colors.labelGray} />
+            <Text style={styles.title}>No results</Text>
+            <Text style={styles.subtitle}>No chats match &quot;{search.trim()}&quot;.</Text>
+          </View>
         ) : (
           <FlatList
-            data={conversations}
+            data={filteredConversations}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             refreshControl={
               <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.brand} />
             }
@@ -196,6 +240,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.white,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.inputGray,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
   },
   loader: {
     marginTop: 40,

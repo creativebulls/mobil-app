@@ -366,6 +366,136 @@ export async function createGroup(ownerId: string, name: string, memberIds: stri
   };
 }
 
+async function loadGroupForMember(userId: string, conversationId: string): Promise<ConversationDocument> {
+  const conversation = await Conversation.findById(conversationId);
+
+  if (!conversation || !conversation.isGroup) {
+    throw new AppError(404, 'Group not found', 'GROUP_NOT_FOUND');
+  }
+
+  if (!conversation.participants.some((id) => id.toString() === userId)) {
+    throw new AppError(404, 'Group not found', 'GROUP_NOT_FOUND');
+  }
+
+  return conversation;
+}
+
+function assertGroupOwner(conversation: ConversationDocument, userId: string) {
+  if (conversation.owner?.toString() !== userId) {
+    throw new AppError(403, 'Only the group owner can do this', 'GROUP_FORBIDDEN');
+  }
+}
+
+export async function getGroupDetails(userId: string, conversationId: string) {
+  const conversation = await loadGroupForMember(userId, conversationId);
+
+  const memberDocs = await User.find({ _id: { $in: conversation.participants } }).select(
+    PARTICIPANT_FIELDS,
+  );
+  const ownerId = conversation.owner?.toString() ?? null;
+
+  const members = memberDocs.map((doc) => {
+    const populated = doc as unknown as PopulatedUser;
+    const id = populated._id.toString();
+    return {
+      id,
+      name: getUserDisplayName(populated),
+      avatarUri: populated.profilePhotoUrl ?? null,
+      isOwner: id === ownerId,
+      isOnline: isUserOnline(id),
+    };
+  });
+
+  members.sort((a, b) => {
+    if (a.isOwner !== b.isOwner) {
+      return a.isOwner ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    id: conversation._id.toString(),
+    name: conversation.name ?? 'Group chat',
+    avatarUri: conversation.avatarUrl ?? null,
+    ownerId,
+    isOwner: ownerId === userId,
+    memberCount: members.length,
+    createdAt: conversation.createdAt.toISOString(),
+    members,
+  };
+}
+
+export async function renameGroup(userId: string, conversationId: string, name: string) {
+  const conversation = await loadGroupForMember(userId, conversationId);
+  assertGroupOwner(conversation, userId);
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new AppError(422, 'Group name is required', 'GROUP_NAME_REQUIRED');
+  }
+
+  conversation.name = trimmed;
+  await conversation.save();
+
+  for (const participantId of conversation.participants.map((id) => id.toString())) {
+    emitToUser(participantId, 'conversation:updated', {
+      conversationId: conversation._id.toString(),
+    });
+  }
+
+  return { conversationId: conversation._id.toString(), name: trimmed };
+}
+
+export async function deleteGroup(userId: string, conversationId: string) {
+  const conversation = await loadGroupForMember(userId, conversationId);
+  assertGroupOwner(conversation, userId);
+
+  const participantIds = conversation.participants.map((id) => id.toString());
+
+  await Message.deleteMany({ conversation: conversation._id });
+  await conversation.deleteOne();
+
+  for (const participantId of participantIds) {
+    emitToUser(participantId, 'conversation:removed', {
+      conversationId: conversationId,
+    });
+  }
+
+  return { conversationId, deleted: true };
+}
+
+export async function leaveGroup(userId: string, conversationId: string) {
+  const conversation = await loadGroupForMember(userId, conversationId);
+
+  const remaining = conversation.participants
+    .map((id) => id.toString())
+    .filter((id) => id !== userId);
+
+  // Last member leaving removes the group entirely.
+  if (remaining.length === 0) {
+    await Message.deleteMany({ conversation: conversation._id });
+    await conversation.deleteOne();
+    emitToUser(userId, 'conversation:removed', { conversationId });
+    return { conversationId, left: true };
+  }
+
+  conversation.participants = remaining.map((id) => new Types.ObjectId(id));
+
+  // If the owner leaves, hand ownership to the next remaining member.
+  if (conversation.owner?.toString() === userId) {
+    conversation.owner = new Types.ObjectId(remaining[0]);
+  }
+
+  await conversation.save();
+
+  emitToUser(userId, 'conversation:removed', { conversationId });
+  for (const participantId of remaining) {
+    emitToUser(participantId, 'conversation:updated', { conversationId });
+  }
+
+  return { conversationId, left: true };
+}
+
 export async function updateGroupPhoto(userId: string, conversationId: string, filename: string) {
   const conversation = await Conversation.findById(conversationId);
 

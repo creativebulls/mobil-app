@@ -2,6 +2,7 @@ import { apiRequest } from './client';
 import type {
   ConversationsResponse,
   CreateGroupResponse,
+  GroupDetails,
   MessagesResponse,
   OpenConversationResponse,
   SendMessageResponse,
@@ -113,6 +114,38 @@ export async function createGroup(input: {
     method: 'POST',
     body: input,
   });
+}
+
+export async function fetchGroupDetails(conversationId: string): Promise<GroupDetails> {
+  return apiRequest<GroupDetails>(`/messages/group/${conversationId}`);
+}
+
+export async function renameGroup(
+  conversationId: string,
+  name: string,
+): Promise<{ conversationId: string; name: string }> {
+  return apiRequest<{ conversationId: string; name: string }>(
+    `/messages/group/${conversationId}`,
+    { method: 'PATCH', body: { name } },
+  );
+}
+
+export async function deleteGroup(
+  conversationId: string,
+): Promise<{ conversationId: string; deleted: boolean }> {
+  return apiRequest<{ conversationId: string; deleted: boolean }>(
+    `/messages/group/${conversationId}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function leaveGroup(
+  conversationId: string,
+): Promise<{ conversationId: string; left: boolean }> {
+  return apiRequest<{ conversationId: string; left: boolean }>(
+    `/messages/group/${conversationId}/leave`,
+    { method: 'POST' },
+  );
 }
 
 export async function updateGroupPhoto(

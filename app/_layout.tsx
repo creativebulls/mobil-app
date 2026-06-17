@@ -88,6 +88,7 @@ export default function RootLayout() {
               <Stack.Screen name="messages" />
               <Stack.Screen name="new-group" />
               <Stack.Screen name="chat" />
+              <Stack.Screen name="group-info" />
               <Stack.Screen name="profile" />
               <Stack.Screen name="create-post" options={{ presentation: 'modal' }} />
               <Stack.Screen name="comments" options={{ presentation: 'modal' }} />
