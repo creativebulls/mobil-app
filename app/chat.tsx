@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -46,6 +47,19 @@ import { colors } from '../src/theme/colors';
 
 const TICK_READ = '#34B7F1';
 const INPUT_BAR_HEIGHT = 58;
+
+const REPORT_OTHER = 'Something else';
+const REPORT_REASONS = [
+  'Spam',
+  'Nudity or sexual activity',
+  'Hate speech or symbols',
+  'Bullying or harassment',
+  'Violence or dangerous organizations',
+  'False information',
+  'Scam or fraud',
+  'Sale of illegal or regulated goods',
+  REPORT_OTHER,
+];
 
 function formatClock(iso: string): string {
   const date = new Date(iso);
@@ -98,6 +112,7 @@ export default function ChatScreen() {
   const [placePickerVisible, setPlacePickerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportText, setReportText] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -285,15 +300,24 @@ export default function ChatScreen() {
     if (!otherUserId) {
       return;
     }
-    const reason = reportText.trim();
-    if (!reason) {
-      await dialog.alert({ title: 'Add details', message: 'Please describe the issue.' });
+    if (!reportReason) {
+      await dialog.alert({ title: 'Select a reason', message: 'Please choose why you are reporting.' });
       return;
+    }
+    let reason = reportReason;
+    if (reportReason === REPORT_OTHER) {
+      const custom = reportText.trim();
+      if (!custom) {
+        await dialog.alert({ title: 'Add details', message: 'Please describe the issue.' });
+        return;
+      }
+      reason = custom;
     }
     setIsSubmittingReport(true);
     try {
       await reportUser({ reportedUserId: otherUserId, conversationId, reason });
       setReportVisible(false);
+      setReportReason(null);
       setReportText('');
       await dialog.alert({
         title: 'Report submitted',
@@ -718,6 +742,7 @@ export default function ChatScreen() {
               style={styles.menuItem}
               onPress={() => {
                 setMenuVisible(false);
+                setReportReason(null);
                 setReportText('');
                 setReportVisible(true);
               }}
@@ -739,18 +764,40 @@ export default function ChatScreen() {
           <View style={styles.reportCard}>
             <Text style={styles.reportTitle}>Report {headerName}</Text>
             <Text style={styles.reportSubtitle}>
-              Tell us what&apos;s wrong. Your report is sent to our moderation team.
+              Why are you reporting this? Your report is sent to our moderation team.
             </Text>
-            <TextInput
-              style={styles.reportInput}
-              placeholder="Describe the issue (abuse, spam, harassment…)"
-              placeholderTextColor={colors.labelGray}
-              value={reportText}
-              onChangeText={setReportText}
-              multiline
-              maxLength={2000}
-              textAlignVertical="top"
-            />
+            <ScrollView style={styles.reportOptions} keyboardShouldPersistTaps="handled">
+              {REPORT_REASONS.map((reason) => {
+                const selected = reportReason === reason;
+                return (
+                  <Pressable
+                    key={reason}
+                    style={styles.reportOption}
+                    onPress={() => setReportReason(reason)}
+                  >
+                    <Text style={styles.reportOptionText}>{reason}</Text>
+                    <Ionicons
+                      name={selected ? 'radio-button-on' : 'radio-button-off'}
+                      size={20}
+                      color={selected ? colors.brand : colors.labelGray}
+                    />
+                  </Pressable>
+                );
+              })}
+              {reportReason === REPORT_OTHER ? (
+                <TextInput
+                  style={styles.reportInput}
+                  placeholder="Describe the issue…"
+                  placeholderTextColor={colors.labelGray}
+                  value={reportText}
+                  onChangeText={setReportText}
+                  multiline
+                  maxLength={2000}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+              ) : null}
+            </ScrollView>
             <View style={styles.reportActions}>
               <Pressable
                 style={styles.reportCancel}
@@ -995,8 +1042,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.textSecondary,
   },
+  reportOptions: {
+    maxHeight: 320,
+    alignSelf: 'stretch',
+  },
+  reportOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  reportOptionText: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+  },
   reportInput: {
-    minHeight: 110,
+    minHeight: 90,
+    marginTop: 12,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
