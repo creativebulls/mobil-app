@@ -1,6 +1,6 @@
 import { Response } from 'express';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import { z } from 'zod';
 
@@ -11,7 +11,7 @@ import {
 } from './friends.validation';
 import * as friendsService from './friends.service';
 
-export const friendsGuards = [requireAuth, requireVerifiedEmail];
+export const friendsGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];
 
 const connectCodeSchema = z.object({ code: z.string().trim().min(1).max(100) });
 

@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/auth.routes';
 import { callsRouter } from './modules/calls/calls.routes';
 import { friendsRouter } from './modules/friends/friends.routes';
 import { messagesRouter } from './modules/messages/messages.routes';
+import { moderationRouter } from './modules/moderation/moderation.routes';
 import { notificationRouter } from './modules/notifications/notification.routes';
 import { placesRouter } from './modules/places/places.routes';
 import { profileRouter } from './modules/profile/profile.routes';
@@ -59,6 +60,7 @@ export function createApp() {
 
   app.use('/api/v1/auth', authLimiter, authRouter);
   app.use('/api/v1/admin', authLimiter, adminRouter);
+  app.use('/api/v1/moderation', moderationRouter);
   app.use('/api/v1/posts', postRouter);
   app.use('/api/v1/comments', commentRouter);
   app.use('/api/v1/notifications', notificationRouter);

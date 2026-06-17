@@ -11,7 +11,9 @@ import { isWelcomeCompleted } from '../src/storage/welcome';
 
 const SPLASH_MIN_DURATION_MS = 3000;
 
-async function resolveActiveSessionRoute(): Promise<'/home' | '/sign-in'> {
+type SessionRoute = '/home' | '/sign-in' | '/account-suspended';
+
+async function resolveActiveSessionRoute(): Promise<SessionRoute> {
   const [accessToken, refreshToken, storedUser] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
@@ -27,11 +29,18 @@ async function resolveActiveSessionRoute(): Promise<'/home' | '/sign-in'> {
     // Validates the token and transparently refreshes an expired access token.
     const user = await fetchCurrentUser();
     await updateStoredUser(user);
+    if (user.suspended) {
+      return '/account-suspended';
+    }
     return user.registrationStatus === 'completed' ? '/home' : '/sign-in';
   } catch (error) {
     // Token is genuinely invalid / refresh failed → session was cleared.
     if (error instanceof ApiError && error.status === 401) {
       return '/sign-in';
+    }
+
+    if (storedUser.suspended) {
+      return '/account-suspended';
     }
 
     // Offline or transient error → trust the cached session.
@@ -58,7 +67,7 @@ export default function Index() {
         isOnboardingCompleted(),
       ]);
 
-      let destination: '/welcome' | '/onboarding' | '/home' | '/sign-in';
+      let destination: '/welcome' | '/onboarding' | SessionRoute;
 
       if (!welcomeDone) {
         destination = '/welcome';

@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 
-import { onSessionCleared } from '../src/auth/sessionEvents';
+import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
 import { CallProvider } from '../src/calls/CallProvider';
 import { DialogProvider } from '../src/components/dialog/DialogProvider';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
@@ -53,6 +53,16 @@ function SessionGuard() {
     [router],
   );
 
+  useEffect(
+    () =>
+      onAccountSuspended(() => {
+        if (pathnameRef.current !== '/account-suspended') {
+          router.replace('/account-suspended');
+        }
+      }),
+    [router],
+  );
+
   return null;
 }
 
@@ -89,6 +99,7 @@ export default function RootLayout() {
               <Stack.Screen name="new-group" />
               <Stack.Screen name="chat" />
               <Stack.Screen name="group-info" />
+              <Stack.Screen name="account-suspended" />
               <Stack.Screen name="profile" />
               <Stack.Screen name="create-post" options={{ presentation: 'modal' }} />
               <Stack.Screen name="comments" options={{ presentation: 'modal' }} />

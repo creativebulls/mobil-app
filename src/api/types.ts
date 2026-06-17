@@ -33,8 +33,20 @@ export type UserProfile = {
   parentalConsent: boolean;
   statusText: string | null;
   points: number;
+  suspended: boolean;
+  suspensionReason: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AppealStatus = 'pending' | 'approved' | 'rejected';
+
+export type MyAppeal = {
+  id: string;
+  message: string;
+  status: AppealStatus;
+  createdAt: string;
+  reviewedAt: string | null;
 };
 
 export type AuthResponse = {

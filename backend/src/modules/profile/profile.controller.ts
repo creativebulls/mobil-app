@@ -2,7 +2,7 @@ import { Response } from 'express';
 
 import { z } from 'zod';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
   profilePostsQuerySchema,
@@ -11,7 +11,7 @@ import {
 } from '../friends/friends.validation';
 import * as profileService from './profile.service';
 
-export const profileGuards = [requireAuth, requireVerifiedEmail];
+export const profileGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];
 
 const updateSettingsSchema = z
   .object({

@@ -198,6 +198,14 @@ export async function markConversationRead(
   );
 }
 
+export async function deleteConversationHistory(
+  conversationId: string,
+): Promise<{ conversationId: string; cleared: boolean }> {
+  return apiRequest<{ conversationId: string; cleared: boolean }>(`/messages/${conversationId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function blockUser(userId: string): Promise<{ blocked: boolean }> {
   return apiRequest<{ blocked: boolean }>(`/relations/${userId}/block`, { method: 'POST' });
 }

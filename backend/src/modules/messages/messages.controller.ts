@@ -1,6 +1,6 @@
 import { Response } from 'express';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { messageMediaUpload, groupPhotoUpload } from '../../shared/middleware/upload.middleware';
 import { AppError } from '../../shared/errors/AppError';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
@@ -17,7 +17,7 @@ import {
 } from './messages.validation';
 import * as messagesService from './messages.service';
 
-export const messagesGuards = [requireAuth, requireVerifiedEmail];
+export const messagesGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];
 
 export const listConversations = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const result = await messagesService.listConversations(req.auth!.userId);
@@ -158,3 +158,14 @@ export const markRead = asyncHandler(async (req: AuthenticatedRequest, res: Resp
   const result = await messagesService.markConversationRead(req.auth!.userId, params.conversationId);
   sendSuccess(res, result);
 });
+
+export const deleteConversationHistory = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const params = conversationIdParamSchema.parse(req.params);
+    const result = await messagesService.deleteConversationHistory(
+      req.auth!.userId,
+      params.conversationId,
+    );
+    sendSuccess(res, result);
+  },
+);

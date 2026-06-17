@@ -1,13 +1,13 @@
 import { Response } from 'express';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import { z } from 'zod';
 import * as relationsService from './relations.service';
 
 const userIdParamSchema = z.object({ userId: z.string().min(1) });
 
-export const relationsGuards = [requireAuth, requireVerifiedEmail];
+export const relationsGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];
 
 export const blockUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const params = userIdParamSchema.parse(req.params);

@@ -10,6 +10,20 @@ let state = {
   users: [],
   pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
   activeUser: null,
+  reports: {
+    page: 1,
+    limit: 20,
+    status: 'open',
+    items: [],
+    pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
+  },
+  appeals: {
+    page: 1,
+    limit: 20,
+    status: 'pending',
+    items: [],
+    pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
+  },
 };
 
 function getToken() {
@@ -53,6 +67,41 @@ async function api(path, options = {}) {
   return payload.data;
 }
 
+const PAGE_TITLES = {
+  overview: 'Overview',
+  users: 'Users',
+  reports: 'Reports & abuse',
+  appeals: 'Suspension appeals',
+  settings: 'Settings',
+};
+
+function setActiveView(view) {
+  if (!PAGE_TITLES[view]) {
+    return;
+  }
+  document.querySelectorAll('[data-view-section]').forEach((el) => {
+    el.classList.toggle('hidden', el.dataset.viewSection !== view);
+  });
+  document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+  const title = $('page-title');
+  if (title) {
+    title.textContent = PAGE_TITLES[view];
+  }
+  closeSidebar();
+}
+
+function openSidebar() {
+  document.querySelector('.sidebar')?.classList.add('open');
+  $('sidebar-scrim')?.classList.remove('hidden');
+}
+
+function closeSidebar() {
+  document.querySelector('.sidebar')?.classList.remove('open');
+  $('sidebar-scrim')?.classList.add('hidden');
+}
+
 function toast(message, type = 'success') {
   const host = $('toast-host');
   const el = document.createElement('div');
@@ -70,6 +119,7 @@ function showLogin() {
 function showDashboard() {
   $('login-view').classList.add('hidden');
   $('dashboard-view').classList.remove('hidden');
+  setActiveView('overview');
 }
 
 function logout() {
@@ -117,7 +167,9 @@ function renderUsers() {
             <span class="user-email">${escapeHtml(user.email)}</span>
           </div>
         </td>
-        <td>${statusBadge(user)}</td>
+        <td>${statusBadge(user)}${
+          user.suspended ? ' <span class="badge badge-warning">Suspended</span>' : ''
+        }</td>
         <td>${registrationBadge(user.registrationStatus)}</td>
         <td>${formatDate(user.createdAt)}</td>
         <td>
@@ -126,6 +178,15 @@ function renderUsers() {
               user.emailVerified
                 ? ''
                 : `<button class="btn btn-secondary btn-sm" data-action="verify" data-id="${user.id}">Verify</button>`
+            }
+            ${
+              user.suspended
+                ? `<button class="btn btn-secondary btn-sm" data-action="unsuspend" data-id="${user.id}" data-name="${escapeAttr(
+                    user.displayName,
+                  )}">Reinstate</button>`
+                : `<button class="btn btn-secondary btn-sm" data-action="suspend" data-id="${user.id}" data-name="${escapeAttr(
+                    user.displayName,
+                  )}">Suspend</button>`
             }
             <button class="btn btn-secondary btn-sm" data-action="reset" data-id="${user.id}" data-name="${escapeAttr(
               user.displayName,
@@ -270,6 +331,204 @@ async function sendTestPush() {
   }
 }
 
+function reportStatusBadge(status) {
+  const cls =
+    status === 'open' ? 'badge-warning' : status === 'reviewed' ? 'badge-success' : 'badge-muted';
+  return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function appealStatusBadge(status) {
+  const cls =
+    status === 'pending' ? 'badge-warning' : status === 'approved' ? 'badge-success' : 'badge-muted';
+  return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function renderReports() {
+  const tbody = $('reports-body');
+  const { items, pagination } = state.reports;
+
+  if (!items.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="6"><div class="empty-state">No reports found.</div></td></tr>';
+  } else {
+    tbody.innerHTML = items
+      .map((report) => {
+        const reported = report.reportedUser;
+        const reporter = report.reporter;
+        const reportedName = reported ? `${escapeHtml(reported.name)}<br /><span class="user-email">${escapeHtml(reported.email)}</span>` : '—';
+        const reporterName = reporter ? `${escapeHtml(reporter.name)}<br /><span class="user-email">${escapeHtml(reporter.email)}</span>` : '—';
+        const suspendBtn =
+          reported && !reported.suspended
+            ? `<button class="btn btn-destructive btn-sm" data-report-action="suspend" data-id="${reported.id}" data-name="${escapeAttr(reported.name)}">Suspend user</button>`
+            : reported && reported.suspended
+              ? '<span class="badge badge-warning">User suspended</span>'
+              : '';
+        return `
+      <tr>
+        <td><div class="user-cell">${reportedName}</div></td>
+        <td><div class="user-cell">${reporterName}</div></td>
+        <td>${escapeHtml(report.reason)}</td>
+        <td>${reportStatusBadge(report.status)}</td>
+        <td>${formatDate(report.createdAt)}</td>
+        <td>
+          <div class="actions">
+            ${suspendBtn}
+            ${report.status !== 'reviewed' ? `<button class="btn btn-secondary btn-sm" data-report-action="reviewed" data-id="${report.id}">Mark reviewed</button>` : ''}
+            ${report.status !== 'dismissed' ? `<button class="btn btn-secondary btn-sm" data-report-action="dismissed" data-id="${report.id}">Dismiss</button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+      })
+      .join('');
+  }
+
+  $('reports-page-info').textContent = `Page ${pagination.page} of ${pagination.totalPages} · ${pagination.total} reports`;
+  $('reports-prev').disabled = pagination.page <= 1;
+  $('reports-next').disabled = pagination.page >= pagination.totalPages;
+
+  // The "open" filter total is the actionable backlog shown in the sidebar.
+  if (state.reports.status === 'open') {
+    const count = pagination.total;
+    const statEl = $('stat-reports');
+    if (statEl) statEl.textContent = String(count);
+    const navEl = $('reports-nav-count');
+    if (navEl) {
+      navEl.textContent = String(count);
+      navEl.classList.toggle('hidden', count === 0);
+    }
+  }
+}
+
+async function loadReports() {
+  $('reports-load').classList.remove('hidden');
+  try {
+    const params = new URLSearchParams({
+      page: String(state.reports.page),
+      limit: String(state.reports.limit),
+      status: state.reports.status,
+    });
+    const data = await api(`/reports?${params.toString()}`);
+    state.reports.items = data.reports;
+    state.reports.pagination = data.pagination;
+    renderReports();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('reports-load').classList.add('hidden');
+  }
+}
+
+async function updateReportStatus(reportId, status) {
+  try {
+    await api(`/reports/${reportId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+    toast(`Report marked ${status}`);
+    await loadReports();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function renderAppeals() {
+  const tbody = $('appeals-body');
+  const { items, pagination } = state.appeals;
+
+  if (!items.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="5"><div class="empty-state">No appeals found.</div></td></tr>';
+  } else {
+    tbody.innerHTML = items
+      .map((appeal) => {
+        const user = appeal.user;
+        const userName = user ? `${escapeHtml(user.name)}<br /><span class="user-email">${escapeHtml(user.email)}</span>` : '—';
+        const actions =
+          appeal.status === 'pending'
+            ? `<button class="btn btn-secondary btn-sm" data-appeal-action="approve" data-id="${appeal.id}">Approve &amp; reinstate</button>
+               <button class="btn btn-destructive btn-sm" data-appeal-action="reject" data-id="${appeal.id}">Reject</button>`
+            : '';
+        return `
+      <tr>
+        <td><div class="user-cell">${userName}</div></td>
+        <td>${escapeHtml(appeal.message)}</td>
+        <td>${appealStatusBadge(appeal.status)}</td>
+        <td>${formatDate(appeal.createdAt)}</td>
+        <td><div class="actions">${actions}</div></td>
+      </tr>`;
+      })
+      .join('');
+  }
+
+  $('appeals-page-info').textContent = `Page ${pagination.page} of ${pagination.totalPages} · ${pagination.total} appeals`;
+  $('appeals-prev').disabled = pagination.page <= 1;
+  $('appeals-next').disabled = pagination.page >= pagination.totalPages;
+
+  if (state.appeals.status === 'pending') {
+    const count = pagination.total;
+    const statEl = $('stat-appeals');
+    if (statEl) statEl.textContent = String(count);
+    const navEl = $('appeals-nav-count');
+    if (navEl) {
+      navEl.textContent = String(count);
+      navEl.classList.toggle('hidden', count === 0);
+    }
+  }
+}
+
+async function loadAppeals() {
+  $('appeals-load').classList.remove('hidden');
+  try {
+    const params = new URLSearchParams({
+      page: String(state.appeals.page),
+      limit: String(state.appeals.limit),
+      status: state.appeals.status,
+    });
+    const data = await api(`/appeals?${params.toString()}`);
+    state.appeals.items = data.appeals;
+    state.appeals.pagination = data.pagination;
+    renderAppeals();
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('appeals-load').classList.add('hidden');
+  }
+}
+
+async function reviewAppeal(appealId, decision) {
+  try {
+    await api(`/appeals/${appealId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    });
+    toast(decision === 'approve' ? 'Appeal approved, user reinstated' : 'Appeal rejected');
+    await Promise.all([loadAppeals(), loadUsers()]);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function suspendUser(userId, reason) {
+  await api(`/users/${userId}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  toast('User suspended');
+  closeModal('suspend-modal');
+  $('suspend-reason').value = '';
+  await Promise.all([loadUsers(), loadReports()]);
+}
+
+async function unsuspendUser(userId) {
+  try {
+    await api(`/users/${userId}/unsuspend`, { method: 'POST', body: '{}' });
+    toast('User reinstated');
+    await loadUsers();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 function openModal(id) {
   $(id).classList.remove('hidden');
 }
@@ -295,6 +554,8 @@ async function handleLogin(event) {
     showDashboard();
     await loadUsers();
     await loadPushConfig();
+    await loadReports();
+    await loadAppeals();
   } catch (error) {
     errorEl.textContent = error.message;
   } finally {
@@ -333,6 +594,13 @@ function bindEvents() {
   $('login-form').addEventListener('submit', handleLogin);
   $('logout-btn').addEventListener('click', logout);
 
+  document.querySelectorAll('[data-view]').forEach((el) => {
+    el.addEventListener('click', () => setActiveView(el.dataset.view));
+  });
+
+  $('sidebar-toggle')?.addEventListener('click', openSidebar);
+  $('sidebar-scrim')?.addEventListener('click', closeSidebar);
+
   $('push-save-btn').addEventListener('click', () => void savePushConfig());
   $('push-clear-btn').addEventListener('click', () => void clearPushConfig());
   $('push-test-btn').addEventListener('click', () => void sendTestPush());
@@ -370,6 +638,19 @@ function bindEvents() {
       return;
     }
 
+    if (action === 'suspend') {
+      $('suspend-user-name').textContent = name;
+      $('suspend-reason').value = '';
+      $('suspend-error').textContent = '';
+      openModal('suspend-modal');
+      return;
+    }
+
+    if (action === 'unsuspend') {
+      void unsuspendUser(id);
+      return;
+    }
+
     if (action === 'reset') {
       $('reset-user-name').textContent = name;
       $('reset-password').value = '';
@@ -381,6 +662,84 @@ function bindEvents() {
     if (action === 'delete') {
       $('delete-user-name').textContent = name;
       openModal('delete-modal');
+    }
+  });
+
+  $('reports-filter').addEventListener('change', () => {
+    state.reports.status = $('reports-filter').value;
+    state.reports.page = 1;
+    void loadReports();
+  });
+
+  $('reports-prev').addEventListener('click', () => {
+    if (state.reports.page > 1) {
+      state.reports.page -= 1;
+      void loadReports();
+    }
+  });
+
+  $('reports-next').addEventListener('click', () => {
+    if (state.reports.page < state.reports.pagination.totalPages) {
+      state.reports.page += 1;
+      void loadReports();
+    }
+  });
+
+  $('reports-body').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-report-action]');
+    if (!button) return;
+    const { reportAction, id, name } = button.dataset;
+
+    if (reportAction === 'suspend') {
+      state.activeUser = { id, name };
+      $('suspend-user-name').textContent = name;
+      $('suspend-reason').value = '';
+      $('suspend-error').textContent = '';
+      openModal('suspend-modal');
+      return;
+    }
+
+    void updateReportStatus(id, reportAction);
+  });
+
+  $('appeals-filter').addEventListener('change', () => {
+    state.appeals.status = $('appeals-filter').value;
+    state.appeals.page = 1;
+    void loadAppeals();
+  });
+
+  $('appeals-prev').addEventListener('click', () => {
+    if (state.appeals.page > 1) {
+      state.appeals.page -= 1;
+      void loadAppeals();
+    }
+  });
+
+  $('appeals-next').addEventListener('click', () => {
+    if (state.appeals.page < state.appeals.pagination.totalPages) {
+      state.appeals.page += 1;
+      void loadAppeals();
+    }
+  });
+
+  $('appeals-body').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-appeal-action]');
+    if (!button) return;
+    const { appealAction, id } = button.dataset;
+    void reviewAppeal(id, appealAction);
+  });
+
+  $('suspend-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const reason = $('suspend-reason').value.trim();
+    $('suspend-error').textContent = '';
+    $('suspend-submit').disabled = true;
+    try {
+      await suspendUser(state.activeUser.id, reason);
+    } catch (error) {
+      $('suspend-error').textContent = error.message;
+    } finally {
+      $('suspend-submit').disabled = false;
     }
   });
 
@@ -429,6 +788,8 @@ async function init() {
     try {
       await loadUsers();
       await loadPushConfig();
+      await loadReports();
+      await loadAppeals();
     } catch {
       logout();
     }

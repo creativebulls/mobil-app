@@ -22,3 +22,27 @@ export const pushConfigSchema = z.object({
 export const pushTestSchema = z.object({
   email: z.string().email(),
 });
+
+export const adminReportsQuerySchema = z.object({
+  status: z.enum(['all', 'open', 'reviewed', 'dismissed']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const adminReportStatusSchema = z.object({
+  status: z.enum(['open', 'reviewed', 'dismissed']),
+});
+
+export const adminSuspendSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
+export const adminAppealsQuerySchema = z.object({
+  status: z.enum(['all', 'pending', 'approved', 'rejected']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const adminAppealReviewSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+});

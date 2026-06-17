@@ -12,6 +12,8 @@ import {
 import { Comment } from '../posts/comment.model';
 import { Post } from '../posts/post.model';
 import { User, getUserDisplayName, serializeUser } from '../users/user.model';
+import { Appeal } from '../moderation/appeal.model';
+import { Report } from '../moderation/report.model';
 import { AppError } from '../../shared/errors/AppError';
 import { signAdminToken } from '../../shared/utils/jwt';
 import {
@@ -250,4 +252,186 @@ export async function deleteUser(userId: string) {
     userId,
     message: 'User and related data deleted',
   };
+}
+
+type ReportUserRef = {
+  _id: Types.ObjectId;
+  email: string;
+  givenName?: string;
+  surname?: string;
+  firstName?: string;
+  lastName?: string;
+  suspended?: boolean;
+};
+
+function serializeReportUser(value: unknown): { id: string; name: string; email: string; suspended: boolean } | null {
+  if (!value || typeof value !== 'object' || !('_id' in value)) {
+    return null;
+  }
+  const user = value as ReportUserRef;
+  return {
+    id: user._id.toString(),
+    name: getUserDisplayName(user),
+    email: user.email,
+    suspended: Boolean(user.suspended),
+  };
+}
+
+export async function listReports(input: { status?: string; page: number; limit: number }) {
+  const query: Record<string, unknown> = {};
+  if (input.status && input.status !== 'all') {
+    query.status = input.status;
+  }
+
+  const skip = (input.page - 1) * input.limit;
+
+  const [reports, total] = await Promise.all([
+    Report.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(input.limit)
+      .populate('reporter', 'givenName surname firstName lastName email suspended')
+      .populate('reportedUser', 'givenName surname firstName lastName email suspended'),
+    Report.countDocuments(query),
+  ]);
+
+  return {
+    reports: reports.map((report) => ({
+      id: report._id.toString(),
+      reason: report.reason,
+      status: report.status,
+      conversationId: report.conversation?.toString() ?? null,
+      reporter: serializeReportUser(report.reporter),
+      reportedUser: serializeReportUser(report.reportedUser),
+      createdAt: report.createdAt.toISOString(),
+    })),
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / input.limit)),
+    },
+  };
+}
+
+export async function setReportStatus(reportId: string, status: 'open' | 'reviewed' | 'dismissed') {
+  if (!Types.ObjectId.isValid(reportId)) {
+    throw new AppError(400, 'Invalid report id', 'INVALID_REPORT_ID');
+  }
+
+  const report = await Report.findById(reportId);
+  if (!report) {
+    throw new AppError(404, 'Report not found', 'REPORT_NOT_FOUND');
+  }
+
+  report.status = status;
+  await report.save();
+
+  return { id: report._id.toString(), status: report.status };
+}
+
+export async function suspendUser(userId: string, reason?: string) {
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(400, 'Invalid user id', 'INVALID_USER_ID');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  user.suspended = true;
+  user.suspendedAt = new Date();
+  user.suspensionReason = reason?.trim() || 'Your account has been suspended for violating our policies.';
+  user.refreshTokens = [];
+  await user.save();
+
+  return {
+    user: { ...serializeUser(user), displayName: getUserDisplayName(user) },
+    message: 'User suspended',
+  };
+}
+
+export async function unsuspendUser(userId: string) {
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(400, 'Invalid user id', 'INVALID_USER_ID');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  user.suspended = false;
+  user.suspendedAt = undefined;
+  user.suspensionReason = undefined;
+  await user.save();
+
+  return {
+    user: { ...serializeUser(user), displayName: getUserDisplayName(user) },
+    message: 'User reinstated',
+  };
+}
+
+export async function listAppeals(input: { status?: string; page: number; limit: number }) {
+  const query: Record<string, unknown> = {};
+  if (input.status && input.status !== 'all') {
+    query.status = input.status;
+  }
+
+  const skip = (input.page - 1) * input.limit;
+
+  const [appeals, total] = await Promise.all([
+    Appeal.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(input.limit)
+      .populate('user', 'givenName surname firstName lastName email suspended'),
+    Appeal.countDocuments(query),
+  ]);
+
+  return {
+    appeals: appeals.map((appeal) => ({
+      id: appeal._id.toString(),
+      message: appeal.message,
+      status: appeal.status,
+      user: serializeReportUser(appeal.user),
+      createdAt: appeal.createdAt.toISOString(),
+      reviewedAt: appeal.reviewedAt?.toISOString() ?? null,
+    })),
+    pagination: {
+      page: input.page,
+      limit: input.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / input.limit)),
+    },
+  };
+}
+
+export async function reviewAppeal(appealId: string, decision: 'approve' | 'reject') {
+  if (!Types.ObjectId.isValid(appealId)) {
+    throw new AppError(400, 'Invalid appeal id', 'INVALID_APPEAL_ID');
+  }
+
+  const appeal = await Appeal.findById(appealId);
+  if (!appeal) {
+    throw new AppError(404, 'Appeal not found', 'APPEAL_NOT_FOUND');
+  }
+
+  appeal.status = decision === 'approve' ? 'approved' : 'rejected';
+  appeal.reviewedAt = new Date();
+  await appeal.save();
+
+  // Approving an appeal reinstates the account.
+  if (decision === 'approve') {
+    const user = await User.findById(appeal.user);
+    if (user) {
+      user.suspended = false;
+      user.suspendedAt = undefined;
+      user.suspensionReason = undefined;
+      await user.save();
+    }
+  }
+
+  return { id: appeal._id.toString(), status: appeal.status };
 }

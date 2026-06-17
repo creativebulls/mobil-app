@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,6 +18,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  blockUser,
+  deleteConversationHistory,
   fetchMessages,
   markConversationRead,
   openConversationWith,
@@ -24,6 +27,7 @@ import {
   sendMessage,
   sharePlaceInConversation,
 } from '../src/api/messagesApi';
+import { reportUser } from '../src/api/moderationApi';
 import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
 import { useCall } from '../src/calls/CallProvider';
@@ -92,6 +96,10 @@ export default function ChatScreen() {
   const [groupAvatar, setGroupAvatar] = useState<string | null>(params.avatarUri || null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
   const [placePickerVisible, setPlacePickerVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const headerName = (isGroup ? groupName : params.name) || (isGroup ? 'Group' : 'Chat');
@@ -221,6 +229,85 @@ export default function ChatScreen() {
       router.replace('/messages');
     }
   });
+
+  async function handleDeleteHistory() {
+    setMenuVisible(false);
+    if (!conversationId) {
+      return;
+    }
+    const confirmed = await dialog.confirm({
+      title: 'Delete chat history?',
+      message: 'This removes all messages in this chat for you.',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await deleteConversationHistory(conversationId);
+      router.replace('/messages');
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not delete chat',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    }
+  }
+
+  async function handleBlock() {
+    setMenuVisible(false);
+    if (!otherUserId) {
+      return;
+    }
+    const confirmed = await dialog.confirm({
+      title: 'Block this person?',
+      message: 'They will no longer be able to message you or see your profile.',
+      confirmText: 'Block',
+      destructive: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await blockUser(otherUserId);
+      await dialog.alert({ title: 'Blocked', message: 'You have blocked this person.' });
+      router.replace('/messages');
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not block',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    }
+  }
+
+  async function handleSubmitReport() {
+    if (!otherUserId) {
+      return;
+    }
+    const reason = reportText.trim();
+    if (!reason) {
+      await dialog.alert({ title: 'Add details', message: 'Please describe the issue.' });
+      return;
+    }
+    setIsSubmittingReport(true);
+    try {
+      await reportUser({ reportedUserId: otherUserId, conversationId, reason });
+      setReportVisible(false);
+      setReportText('');
+      await dialog.alert({
+        title: 'Report submitted',
+        message: 'Thanks. Our team will review this report.',
+      });
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not submit report',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  }
 
   function emitTyping(typing: boolean) {
     if (!otherUserId) {
@@ -472,24 +559,35 @@ export default function ChatScreen() {
             </View>
           </Pressable>
           {!isGroup ? (
-            <Pressable
-              onPress={() =>
-                otherUserId &&
-                call.startCall({
-                  userId: otherUserId,
-                  name: headerName,
-                  avatarUri: headerAvatar,
-                  conversationId,
-                })
-              }
-              disabled={!otherUserId || call.status !== 'idle'}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Voice call"
-              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="call" size={22} color={colors.brand} />
-            </Pressable>
+            <>
+              <Pressable
+                onPress={() =>
+                  otherUserId &&
+                  call.startCall({
+                    userId: otherUserId,
+                    name: headerName,
+                    avatarUri: headerAvatar,
+                    conversationId,
+                  })
+                }
+                disabled={!otherUserId || call.status !== 'idle'}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Voice call"
+                style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+              >
+                <Ionicons name="call" size={22} color={colors.brand} />
+              </Pressable>
+              <Pressable
+                onPress={() => setMenuVisible(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="More options"
+                style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+              >
+                <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+              </Pressable>
+            </>
           ) : (
             <Pressable
               onPress={() =>
@@ -599,6 +697,83 @@ export default function ChatScreen() {
         onClose={() => setPlacePickerVisible(false)}
         onSelect={handleSharePlace}
       />
+
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)}>
+          <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <Pressable style={styles.menuItem} onPress={() => void handleDeleteHistory()}>
+              <Ionicons name="trash-outline" size={22} color={colors.text} />
+              <Text style={styles.menuItemText}>Delete chat history</Text>
+            </Pressable>
+            <Pressable style={styles.menuItem} onPress={() => void handleBlock()}>
+              <Ionicons name="ban-outline" size={22} color={colors.text} />
+              <Text style={styles.menuItemText}>Block</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                setReportText('');
+                setReportVisible(true);
+              }}
+            >
+              <Ionicons name="flag-outline" size={22} color={colors.danger} />
+              <Text style={[styles.menuItemText, { color: colors.danger }]}>Report</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={reportVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReportVisible(false)}
+      >
+        <View style={styles.reportBackdrop}>
+          <View style={styles.reportCard}>
+            <Text style={styles.reportTitle}>Report {headerName}</Text>
+            <Text style={styles.reportSubtitle}>
+              Tell us what&apos;s wrong. Your report is sent to our moderation team.
+            </Text>
+            <TextInput
+              style={styles.reportInput}
+              placeholder="Describe the issue (abuse, spam, harassment…)"
+              placeholderTextColor={colors.labelGray}
+              value={reportText}
+              onChangeText={setReportText}
+              multiline
+              maxLength={2000}
+              textAlignVertical="top"
+            />
+            <View style={styles.reportActions}>
+              <Pressable
+                style={styles.reportCancel}
+                onPress={() => setReportVisible(false)}
+                disabled={isSubmittingReport}
+              >
+                <Text style={styles.reportCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.reportSubmit, isSubmittingReport && styles.reportSubmitDisabled]}
+                onPress={() => void handleSubmitReport()}
+                disabled={isSubmittingReport}
+              >
+                {isSubmittingReport ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.reportSubmitText}>Submit report</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -774,6 +949,93 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reportBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  reportCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  reportSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  reportInput: {
+    minHeight: 110,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.inputGray,
+    padding: 12,
+    fontSize: 15,
+    color: colors.text,
+  },
+  reportActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  reportCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  reportCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.labelGray,
+  },
+  reportSubmit: {
+    backgroundColor: colors.brand,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    minWidth: 130,
+    alignItems: 'center',
+  },
+  reportSubmitDisabled: {
+    opacity: 0.6,
+  },
+  reportSubmitText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.white,
   },
   loader: {
     marginTop: 40,

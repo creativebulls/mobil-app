@@ -1,6 +1,6 @@
 import { Response } from 'express';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { MAX_POST_IMAGES, postImageUpload } from '../../shared/middleware/upload.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import * as postService from './post.service';
@@ -100,4 +100,4 @@ export const deletePost = asyncHandler(async (req: AuthenticatedRequest, res: Re
 });
 
 export const createPostMiddleware = postImageUpload.array('images', MAX_POST_IMAGES);
-export const postGuards = [requireAuth, requireVerifiedEmail];
+export const postGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];

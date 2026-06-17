@@ -61,3 +61,24 @@ export async function requireVerifiedEmail(
 
   next();
 }
+
+/**
+ * Blocks suspended accounts from using the app's features. It is intentionally
+ * NOT applied to `/auth/me`, logout, or the appeals routes so a suspended user
+ * can still see their status and submit an appeal.
+ */
+export async function requireNotSuspended(
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (req.user?.suspended) {
+    throw new AppError(
+      403,
+      req.user.suspensionReason || 'Your account has been suspended.',
+      'ACCOUNT_SUSPENDED',
+    );
+  }
+
+  next();
+}

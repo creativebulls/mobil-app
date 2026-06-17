@@ -1,6 +1,6 @@
 import { Response } from 'express';
 
-import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
+import { requireAuth, requireNotSuspended, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import { feedQuerySchema, markReadSchema, pushTokenSchema } from '../posts/post.validation';
 import * as notificationService from './notification.service';
@@ -34,4 +34,4 @@ export const removePushToken = asyncHandler(async (req: AuthenticatedRequest, re
   sendSuccess(res, { removed: true });
 });
 
-export const notificationGuards = [requireAuth, requireVerifiedEmail];
+export const notificationGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];

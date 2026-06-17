@@ -29,3 +29,4 @@ messagesRouter.post(
 messagesRouter.post('/', messagesController.sendMessage);
 messagesRouter.get('/:conversationId', messagesController.listMessages);
 messagesRouter.post('/:conversationId/read', messagesController.markRead);
+messagesRouter.delete('/:conversationId', messagesController.deleteConversationHistory);

@@ -187,6 +187,8 @@ export async function loginUser(email: string, password: string) {
     throw new AppError(403, 'Please verify your email before signing in', 'EMAIL_NOT_VERIFIED');
   }
 
+  // Suspended users are still allowed to sign in so they can view their status
+  // and submit an appeal; all feature routes are gated by `requireNotSuspended`.
   const { accessToken, refreshToken } = await issueTokens(user);
 
   return buildAuthResponse(user, accessToken, refreshToken);

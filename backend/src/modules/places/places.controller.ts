@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { AppError } from '../../shared/errors/AppError';
 import {
   requireAuth,
+  requireNotSuspended,
   requireVerifiedEmail,
   type AuthenticatedRequest,
 } from '../../shared/middleware/auth.middleware';
@@ -102,4 +103,4 @@ export const getPlacePosts = asyncHandler(async (req: AuthenticatedRequest, res:
   sendSuccess(res, result);
 });
 
-export const placesGuards = [requireAuth, requireVerifiedEmail];
+export const placesGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];

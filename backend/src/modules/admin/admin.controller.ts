@@ -4,8 +4,13 @@ import type { AdminRequest } from '../../shared/middleware/admin.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import * as adminService from './admin.service';
 import {
+  adminAppealReviewSchema,
+  adminAppealsQuerySchema,
   adminLoginSchema,
+  adminReportStatusSchema,
+  adminReportsQuerySchema,
   adminResetPasswordSchema,
+  adminSuspendSchema,
   adminUsersQuerySchema,
   pushConfigSchema,
   pushTestSchema,
@@ -58,5 +63,40 @@ export const clearPushConfig = asyncHandler(async (_req: AdminRequest, res: Resp
 export const sendTestPush = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = pushTestSchema.parse(req.body);
   const result = await adminService.sendTestPush(body.email);
+  sendSuccess(res, result);
+});
+
+export const listReports = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const query = adminReportsQuerySchema.parse(req.query);
+  const result = await adminService.listReports(query);
+  sendSuccess(res, result);
+});
+
+export const setReportStatus = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = adminReportStatusSchema.parse(req.body);
+  const result = await adminService.setReportStatus(String(req.params.id), body.status);
+  sendSuccess(res, result);
+});
+
+export const suspendUser = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = adminSuspendSchema.parse(req.body);
+  const result = await adminService.suspendUser(String(req.params.id), body.reason);
+  sendSuccess(res, result);
+});
+
+export const unsuspendUser = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const result = await adminService.unsuspendUser(String(req.params.id));
+  sendSuccess(res, result);
+});
+
+export const listAppeals = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const query = adminAppealsQuerySchema.parse(req.query);
+  const result = await adminService.listAppeals(query);
+  sendSuccess(res, result);
+});
+
+export const reviewAppeal = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = adminAppealReviewSchema.parse(req.body);
+  const result = await adminService.reviewAppeal(String(req.params.id), body.decision);
   sendSuccess(res, result);
 });

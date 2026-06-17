@@ -24,3 +24,26 @@ export function emitSessionCleared(): void {
     }
   });
 }
+
+/**
+ * Emitted when any API call is rejected because the account is suspended, so a
+ * top-level guard can route the user to the suspension/appeal screen.
+ */
+const suspendedListeners = new Set<SessionListener>();
+
+export function onAccountSuspended(listener: SessionListener): () => void {
+  suspendedListeners.add(listener);
+  return () => {
+    suspendedListeners.delete(listener);
+  };
+}
+
+export function emitAccountSuspended(): void {
+  suspendedListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch {
+      // A misbehaving listener must not break the others.
+    }
+  });
+}

@@ -55,6 +55,10 @@ export default function SignInScreen() {
       if (!active) {
         return;
       }
+      if ((accessToken || refreshToken) && user?.suspended) {
+        router.replace('/account-suspended');
+        return;
+      }
       if ((accessToken || refreshToken) && user?.registrationStatus === 'completed') {
         router.replace('/home');
         return;
@@ -89,6 +93,12 @@ export default function SignInScreen() {
     try {
       const result = await loginAccount(email.trim(), password);
       await saveSession(result.tokens, result.user);
+
+      if (result.user.suspended) {
+        router.replace('/account-suspended');
+        return;
+      }
+
       void registerForPushNotifications();
 
       if (result.user.registrationCompleted) {

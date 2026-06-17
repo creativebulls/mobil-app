@@ -9,6 +9,10 @@ export interface IConversation {
   lastMessage?: string;
   lastMessageAt?: Date;
   lastMessageSender?: Types.ObjectId;
+  // Per-user "delete chat history" markers: messages at/before this time are
+  // hidden from that participant, and the chat drops off their list until a
+  // newer message arrives.
+  clearedAt?: Map<string, Date>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +29,7 @@ const conversationSchema = new Schema<ConversationDocument>(
     lastMessage: { type: String },
     lastMessageAt: { type: Date },
     lastMessageSender: { type: Schema.Types.ObjectId, ref: 'User' },
+    clearedAt: { type: Map, of: Date, default: undefined },
   },
   { timestamps: true },
 );

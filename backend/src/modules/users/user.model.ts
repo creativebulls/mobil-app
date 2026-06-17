@@ -27,6 +27,9 @@ export interface IUser {
   isPrivate: boolean;
   pushPreferences: PushPreferences;
   connectCode?: string;
+  suspended: boolean;
+  suspendedAt?: Date;
+  suspensionReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +93,9 @@ const userSchema = new Schema<UserDocument>(
       messages: { type: Boolean, default: true },
     },
     connectCode: { type: String, unique: true, sparse: true },
+    suspended: { type: Boolean, default: false, index: true },
+    suspendedAt: { type: Date },
+    suspensionReason: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true },
 );
@@ -141,6 +147,8 @@ export function serializeUser(user: UserDocument) {
     points: user.points ?? 0,
     isPrivate: user.isPrivate ?? false,
     pushPreferences: { ...DEFAULT_PUSH_PREFERENCES, ...(user.pushPreferences ?? {}) },
+    suspended: user.suspended ?? false,
+    suspensionReason: user.suspensionReason ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

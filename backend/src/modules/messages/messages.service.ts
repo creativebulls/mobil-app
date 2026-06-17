@@ -207,6 +207,24 @@ async function deliverToConversation(
   return { message: serialized, conversationId: conversation._id.toString() };
 }
 
+export async function deleteConversationHistory(userId: string, conversationId: string) {
+  const conversation = await Conversation.findById(conversationId);
+
+  if (!conversation || !conversation.participants.some((id) => id.toString() === userId)) {
+    throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
+  }
+
+  if (!conversation.clearedAt) {
+    conversation.clearedAt = new Map<string, Date>();
+  }
+  conversation.clearedAt.set(userId, new Date());
+  await conversation.save();
+
+  emitToUser(userId, 'conversation:removed', { conversationId });
+
+  return { conversationId, cleared: true };
+}
+
 export async function listConversations(userId: string) {
   const conversations = await Conversation.find({
     participants: userId,
@@ -218,6 +236,12 @@ export async function listConversations(userId: string) {
 
   const items = await Promise.all(
     conversations.map(async (conversation) => {
+      // Hide chats the user cleared, until a newer message arrives.
+      const clearedAt = conversation.clearedAt?.get(userId);
+      if (clearedAt && conversation.lastMessageAt && conversation.lastMessageAt <= clearedAt) {
+        return null;
+      }
+
       const participants = conversation.participants as unknown as PopulatedUser[];
       const lastMessageMine = conversation.lastMessageSender?.toString() === userId;
       const timeAgo = conversation.lastMessageAt ? formatRelativeTime(conversation.lastMessageAt) : null;
@@ -269,7 +293,7 @@ export async function listConversations(userId: string) {
     }),
   );
 
-  return { conversations: items };
+  return { conversations: items.filter((item): item is NonNullable<typeof item> => item !== null) };
 }
 
 export async function getTotalUnread(userId: string): Promise<number> {
@@ -534,8 +558,16 @@ export async function listMessages(userId: string, conversationId: string, limit
   }
 
   const query: Record<string, unknown> = { conversation: conversationId };
+  const clearedAt = conversation.clearedAt?.get(userId);
+  const createdAt: Record<string, Date> = {};
   if (before) {
-    query.createdAt = { $lt: new Date(before) };
+    createdAt.$lt = new Date(before);
+  }
+  if (clearedAt) {
+    createdAt.$gt = clearedAt;
+  }
+  if (Object.keys(createdAt).length > 0) {
+    query.createdAt = createdAt;
   }
 
   const messages = await Message.find(query)

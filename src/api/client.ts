@@ -1,6 +1,7 @@
 import { getApiBaseUrl, resetBackendHost } from '../config/api';
 import { ApiError, type ApiSuccessBody } from './types';
 import { getAccessToken, getRefreshToken, saveSession, clearSession } from '../storage/authSession';
+import { emitAccountSuspended } from '../auth/sessionEvents';
 import type { AuthResponse } from './types';
 
 type HttpResponse = {
@@ -85,9 +86,17 @@ async function parseResponse<T>(response: HttpResponse): Promise<T> {
 
   if (!response.ok || !('success' in payload) || !payload.success) {
     const errorPayload = payload as { error?: { code?: string; message?: string; details?: unknown } };
+    const code = errorPayload.error?.code ?? 'REQUEST_FAILED';
+
+    // A suspended account should be redirected to the appeal screen no matter
+    // which call surfaced the rejection.
+    if (response.status === 403 && code === 'ACCOUNT_SUSPENDED') {
+      emitAccountSuspended();
+    }
+
     throw new ApiError(
       response.status,
-      errorPayload.error?.code ?? 'REQUEST_FAILED',
+      code,
       errorPayload.error?.message ?? 'Request failed',
       errorPayload.error?.details,
     );

@@ -12,7 +12,15 @@ adminRouter.use(requireAdmin);
 adminRouter.get('/users', adminController.listUsers);
 adminRouter.post('/users/:id/verify', adminController.forceVerifyUser);
 adminRouter.post('/users/:id/reset-password', adminController.resetUserPassword);
+adminRouter.post('/users/:id/suspend', adminController.suspendUser);
+adminRouter.post('/users/:id/unsuspend', adminController.unsuspendUser);
 adminRouter.delete('/users/:id', adminController.deleteUser);
+
+adminRouter.get('/reports', adminController.listReports);
+adminRouter.post('/reports/:id/status', adminController.setReportStatus);
+
+adminRouter.get('/appeals', adminController.listAppeals);
+adminRouter.post('/appeals/:id/review', adminController.reviewAppeal);
 
 adminRouter.get('/push-config', adminController.getPushConfig);
 adminRouter.put('/push-config', adminController.setPushConfig);
