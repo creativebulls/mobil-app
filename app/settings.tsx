@@ -1,14 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { logoutAccount } from '../src/api/authApi';
 import { fetchSettings, updateSettings } from '../src/api/profileApi';
 import type { PushPreferences, UserSettings } from '../src/api/types';
 import { useDialog } from '../src/components/dialog/DialogProvider';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { unregisterPushNotifications } from '../src/notifications/pushNotifications';
 import { disconnectRealtimeSocket } from '../src/realtime/socket';
 import { clearSession, getRefreshToken } from '../src/storage/authSession';
@@ -103,10 +102,8 @@ export default function SettingsScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -184,19 +181,11 @@ export default function SettingsScreen() {
             </Pressable>
           </ScrollView>
         )}
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

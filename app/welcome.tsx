@@ -2,8 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { BackHandler, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { GlossyButton } from '../src/components/GlossyButton';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { WelcomeTaglineCarousel } from '../src/components/WelcomeTaglineCarousel';
@@ -55,7 +54,7 @@ export default function WelcomeScreen() {
           style={styles.overlay}
         />
 
-        <SafeAreaView style={styles.container}>
+        <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
           <ScreenBackRow />
 
           <View style={styles.bottomSection}>
@@ -72,7 +71,7 @@ export default function WelcomeScreen() {
               <GlossyButton label="I have an account" onPress={handleExistingAccount} />
             </View>
           </View>
-        </SafeAreaView>
+        </ScreenSafeArea>
       </ImageBackground>
     </View>
   );

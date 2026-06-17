@@ -10,6 +10,11 @@ echo "Building release AAB"
 echo "  API: $EXPO_PUBLIC_API_URL"
 echo "  JAVA_HOME: $JAVA_HOME"
 
+WEBRTC_GRADLE="$ROOT/node_modules/react-native-webrtc/android/build.gradle"
+if [[ -f "$WEBRTC_GRADLE" ]]; then
+  sed -i '' "s/org.jitsi:webrtc:124.+/org.jitsi:webrtc:124.0.0/g" "$WEBRTC_GRADLE"
+fi
+
 cd "$ROOT/android"
 ./gradlew bundleRelease -x lintVitalAnalyzeRelease "$@"
 

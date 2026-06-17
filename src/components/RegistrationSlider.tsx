@@ -13,7 +13,7 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from './ScreenSafeArea';
 
 import { GenderDropdown } from './GenderDropdown';
 import { ScreenBackRow } from './ScreenBackRow';
@@ -337,7 +337,7 @@ export function RegistrationSlider({ onSubmit, resumeAt, externalError }: Regist
   return (
     <View style={authStyles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={authStyles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={authStyles.container}>
         <ScreenBackRow fallbackHref="/your-name" variant="light" />
         <FlatList
           ref={flatListRef}
@@ -387,7 +387,7 @@ export function RegistrationSlider({ onSubmit, resumeAt, externalError }: Regist
           onClose={() => setShowDatePicker(false)}
           onConfirm={handleDateConfirm}
         />
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

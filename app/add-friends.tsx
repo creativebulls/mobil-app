@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,11 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { searchUsers, sendFriendRequest } from '../src/api/profileApi';
 import { getErrorMessage, type UserSearchResult } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { getStoredUser } from '../src/storage/authSession';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
@@ -119,10 +118,8 @@ export default function AddFriendsScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -188,19 +185,11 @@ export default function AddFriendsScreen() {
             </View>
           )}
         />
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -76,6 +76,10 @@ function resolveMessageMediaUrl(filename: string): string {
   return `/uploads/messages/${filename}`;
 }
 
+function resolveGroupPhotoUrl(filename: string): string {
+  return `/uploads/group-photos/${filename}`;
+}
+
 function mediaPreview(type: MessageMediaType): string {
   return type === 'video' ? '🎥 Video' : '📷 Photo';
 }
@@ -229,7 +233,7 @@ export async function listConversations(userId: string) {
           id: conversation._id.toString(),
           isGroup: true,
           name: conversation.name ?? 'Group chat',
-          avatarUri: null,
+          avatarUri: conversation.avatarUrl ?? null,
           memberCount: participants.length,
           isOnline: false,
           user: null,
@@ -358,6 +362,37 @@ export async function createGroup(ownerId: string, name: string, memberIds: stri
     id: conversation._id.toString(),
     name: trimmedName,
     memberCount: participants.length,
+    avatarUri: conversation.avatarUrl ?? null,
+  };
+}
+
+export async function updateGroupPhoto(userId: string, conversationId: string, filename: string) {
+  const conversation = await Conversation.findById(conversationId);
+
+  if (!conversation || !conversation.isGroup) {
+    throw new AppError(404, 'Group not found', 'GROUP_NOT_FOUND');
+  }
+
+  if (!conversation.participants.some((id) => id.toString() === userId)) {
+    throw new AppError(404, 'Group not found', 'GROUP_NOT_FOUND');
+  }
+
+  if (conversation.owner?.toString() !== userId) {
+    throw new AppError(403, 'Only the group owner can change the photo', 'GROUP_PHOTO_FORBIDDEN');
+  }
+
+  conversation.avatarUrl = resolveGroupPhotoUrl(filename);
+  await conversation.save();
+
+  for (const participantId of conversation.participants.map((id) => id.toString())) {
+    emitToUser(participantId, 'conversation:updated', {
+      conversationId: conversation._id.toString(),
+    });
+  }
+
+  return {
+    conversationId: conversation._id.toString(),
+    avatarUri: conversation.avatarUrl,
   };
 }
 
@@ -398,6 +433,8 @@ export async function listMessages(userId: string, conversationId: string, limit
       id: conversation._id.toString(),
       isGroup: conversation.isGroup,
       name: conversation.name ?? null,
+      avatarUri: conversation.avatarUrl ?? null,
+      ownerId: conversation.owner?.toString() ?? null,
       memberCount: participants.length,
       participants,
     },

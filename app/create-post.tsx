@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,12 +14,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { createPost } from '../src/api/postsApi';
 import { getErrorMessage } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { getStoredUser } from '../src/storage/authSession';
 import type { PostReaction, UserProfile } from '../src/api/types';
 import { colors } from '../src/theme/colors';
@@ -124,10 +123,8 @@ export default function CreatePostScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Close">
             <Ionicons name="close" size={26} color={colors.text} />
           </Pressable>
@@ -311,19 +308,11 @@ export default function CreatePostScreen() {
             {isSubmitting ? <ActivityIndicator color={colors.brand} /> : null}
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   flex: {
     flex: 1,
   },

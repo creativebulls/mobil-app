@@ -65,7 +65,7 @@ export function useLocationPrompt(enabled = true) {
       title: 'Enable location',
       message:
         'Turn on location to discover awesome places near you and get better recommendations.',
-      dismissable: false,
+      dismissable: true,
       buttons: [
         { text: 'Not now', style: 'cancel', value: 'not_now' },
         { text: 'Allow location', style: 'default', value: 'allow' },

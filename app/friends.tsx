@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, memo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,18 +10,47 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchFriends, type FriendSummary } from '../src/api/profileApi';
 import { Avatar } from '../src/components/Avatar';
-import { usePresence } from '../src/realtime/PresenceProvider';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
+import { useIsOnline, usePresenceVersion } from '../src/realtime/PresenceProvider';
+import { isUserOnline, seedPresence } from '../src/realtime/presenceStore';
 import { getStoredUser } from '../src/storage/authSession';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
+const FriendRow = memo(function FriendRow({
+  friend,
+  onPress,
+}: {
+  friend: FriendSummary;
+  onPress: () => void;
+}) {
+  const online = useIsOnline(friend.id);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <Avatar uri={friend.avatarUri} name={friend.name} size={52} presenceUserId={friend.id} />
+      <View style={styles.rowText}>
+        <Text style={styles.name} numberOfLines={1}>
+          {friend.name}
+        </Text>
+        <Text style={[styles.status, online && styles.statusOnline]} numberOfLines={1}>
+          {online ? 'Online' : friend.statusText ?? 'Offline'}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.labelGray} />
+    </Pressable>
+  );
+});
+
 export default function FriendsScreen() {
   const router = useRouter();
-  const presence = usePresence();
+  const presenceVersion = usePresenceVersion();
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -34,13 +62,13 @@ export default function FriendsScreen() {
       setFriends(result.friends);
       setCurrentUserId(me?.id ?? null);
       // Seed presence with whoever the server reported as online.
-      presence.seed(result.friends.filter((friend) => friend.isOnline).map((friend) => friend.id));
+      seedPresence(result.friends.filter((friend) => friend.isOnline).map((friend) => friend.id));
     } catch {
       // Empty state covers load failure.
     } finally {
       setIsLoading(false);
     }
-  }, [presence]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,20 +80,19 @@ export default function FriendsScreen() {
     const q = search.trim().toLowerCase();
     const list = q ? friends.filter((friend) => friend.name.toLowerCase().includes(q)) : friends;
     // Online friends bubble to the top.
-    return [...list].sort((a, b) => {
-      const aOnline = presence.isOnline(a.id) ? 1 : 0;
-      const bOnline = presence.isOnline(b.id) ? 1 : 0;
-      return bOnline - aOnline;
-    });
-  }, [friends, search, presence]);
+    return [...list].sort(
+      (a, b) => Number(isUserOnline(b.id)) - Number(isUserOnline(a.id)),
+    );
+  }, [friends, search, presenceVersion]);
 
-  const onlineCount = friends.filter((friend) => presence.isOnline(friend.id)).length;
+  const onlineCount = useMemo(
+    () => friends.filter((friend) => isUserOnline(friend.id)).length,
+    [friends, presenceVersion],
+  );
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -106,41 +133,19 @@ export default function FriendsScreen() {
             data={filtered}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
-            renderItem={({ item }) => {
-              const online = presence.isOnline(item.id);
-              return (
-                <Pressable
-                  onPress={() => openUserProfile(router, item.id, currentUserId)}
-                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                >
-                  <Avatar uri={item.avatarUri} name={item.name} size={52} online={online} />
-                  <View style={styles.rowText}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.status, online && styles.statusOnline]} numberOfLines={1}>
-                      {online ? 'Online' : item.statusText ?? 'Offline'}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.labelGray} />
-                </Pressable>
-              );
-            }}
+            renderItem={({ item }) => (
+              <FriendRow
+                friend={item}
+                onPress={() => openUserProfile(router, item.id, currentUserId)}
+              />
+            )}
           />
         )}
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,46 +1,73 @@
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useMemo } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { MEET_FRIENDS_DUMMY, type MeetFriend } from '../constants/meetFriends';
+import { isUserOnline } from '../realtime/presenceStore';
+import { useIsOnline, usePresenceVersion } from '../realtime/PresenceProvider';
+import { Avatar } from './Avatar';
 import { SectionHeader } from './SectionHeader';
 import { colors } from '../theme/colors';
 
-type MeetFriendsSectionProps = {
-  title?: string;
-  friends?: MeetFriend[];
-  onViewAllPress?: () => void;
-  onFriendPress?: (friend: MeetFriend) => void;
+export type MeetFriendItem = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  subtitle?: string | null;
 };
 
-function formatDistance(km: number): string {
-  return `${km.toFixed(km < 10 ? 1 : 0)} KM`;
-}
+type MeetFriendsSectionProps = {
+  title?: string;
+  friends?: MeetFriendItem[];
+  onViewAllPress?: () => void;
+  onFriendPress?: (friend: MeetFriendItem) => void;
+};
+
+const FriendCard = memo(function FriendCard({
+  item,
+  onPress,
+}: {
+  item: MeetFriendItem;
+  onPress?: (friend: MeetFriendItem) => void;
+}) {
+  const isOnline = useIsOnline(item.id);
+  const subtitle = item.subtitle?.trim() || (isOnline ? 'Online' : null);
+
+  return (
+    <Pressable
+      onPress={() => onPress?.(item)}
+      style={({ pressed }) => [styles.friendItem, pressed && styles.friendItemPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${item.name}, ${subtitle}` : item.name}
+    >
+      <Avatar uri={item.avatarUri} name={item.name} size={72} presenceUserId={item.id} />
+
+      <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+        {item.name.split(' ')[0]}
+      </Text>
+
+      {subtitle ? (
+        <Text style={[styles.subtitle, isOnline && styles.subtitleOnline]} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+});
 
 export function MeetFriendsSection({
   title = 'Meet Friends',
-  friends = MEET_FRIENDS_DUMMY,
+  friends = [],
   onViewAllPress,
   onFriendPress,
 }: MeetFriendsSectionProps) {
-  function renderFriend({ item }: { item: MeetFriend }) {
-    return (
-      <Pressable
-        onPress={() => onFriendPress?.(item)}
-        style={({ pressed }) => [styles.friendItem, pressed && styles.friendItemPressed]}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.name}, ${formatDistance(item.distanceKm)} away`}
-      >
-        <Image source={{ uri: item.avatarUri }} style={styles.avatar} resizeMode="cover" />
+  const presenceVersion = usePresenceVersion();
 
-        <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
-          {item.name}
-        </Text>
-
-        <Text style={styles.distance} numberOfLines={1} ellipsizeMode="tail">
-          {formatDistance(item.distanceKm)}
-        </Text>
-      </Pressable>
-    );
-  }
+  const sortedFriends = useMemo(
+    () =>
+      [...friends].sort(
+        (a, b) => Number(isUserOnline(b.id)) - Number(isUserOnline(a.id)),
+      ),
+    [friends, presenceVersion],
+  );
 
   return (
     <View style={styles.section}>
@@ -50,20 +77,28 @@ export function MeetFriendsSection({
         accessibilityLabel="View all friends"
       />
 
-      <FlatList
-        data={friends}
-        keyExtractor={(item) => item.id}
-        renderItem={renderFriend}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        style={styles.list}
-      />
+      {sortedFriends.length === 0 ? (
+        <Text style={styles.empty}>Add friends to see them here.</Text>
+      ) : (
+        <FlatList
+          data={sortedFriends}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <FriendCard item={item} onPress={onFriendPress} />}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          contentContainerStyle={styles.listContent}
+          style={styles.list}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews
+        />
+      )}
     </View>
   );
 }
 
-const AVATAR_SIZE = 72;
 const ITEM_WIDTH = 88;
 
 const styles = StyleSheet.create({
@@ -87,12 +122,6 @@ const styles = StyleSheet.create({
   friendItemPressed: {
     opacity: 0.85,
   },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    backgroundColor: colors.inputGray,
-  },
   name: {
     width: '100%',
     fontSize: 13,
@@ -100,11 +129,19 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
-  distance: {
+  subtitle: {
     width: '100%',
     fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  subtitleOnline: {
+    color: '#22C55E',
+  },
+  empty: {
+    paddingHorizontal: 20,
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });

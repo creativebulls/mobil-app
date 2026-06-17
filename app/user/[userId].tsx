@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +12,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   acceptFriendRequest,
@@ -31,6 +29,7 @@ import {
 import type { PublicUserProfile, UserRelationship } from '../../src/api/types';
 import { getErrorMessage, type Post } from '../../src/api/types';
 import { Avatar } from '../../src/components/Avatar';
+import { StackScreenLayout } from '../../src/components/StackScreenLayout';
 import { BrandButton } from '../../src/components/BrandButton';
 import { FeedPostCard } from '../../src/components/FeedPostCard';
 import { useDialog } from '../../src/components/dialog/DialogProvider';
@@ -330,10 +329,8 @@ export default function UserProfileScreen() {
   const username = profile?.name.split(' ')[0] ?? 'User';
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -475,19 +472,11 @@ export default function UserProfileScreen() {
             </View>
           </Pressable>
         </Modal>
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

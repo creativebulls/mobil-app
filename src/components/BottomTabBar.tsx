@@ -4,6 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../theme/colors';
+import { emitHomeReselect } from '../navigation/tabEvents';
 
 export type MainTabKey = 'home' | 'messages' | 'profile';
 
@@ -24,6 +25,14 @@ export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: 
   const insets = useSafeAreaInsets();
 
   function handleTabPress(tab: MainTabKey) {
+    if (tab === 'home') {
+      if (activeTab === 'home') {
+        emitHomeReselect();
+      }
+      router.replace(TAB_ROUTES.home);
+      return;
+    }
+
     if (tab === activeTab) {
       return;
     }

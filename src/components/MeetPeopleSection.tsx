@@ -1,12 +1,12 @@
 import { MEET_PEOPLE_DUMMY } from '../constants/meetPeople';
-import type { MeetFriend } from '../constants/meetFriends';
+import type { MeetFriendItem } from './MeetFriendsSection';
 import { MeetFriendsSection } from './MeetFriendsSection';
 
 type MeetPeopleSectionProps = {
   title?: string;
-  people?: MeetFriend[];
+  people?: MeetFriendItem[];
   onViewAllPress?: () => void;
-  onPersonPress?: (person: MeetFriend) => void;
+  onPersonPress?: (person: MeetFriendItem) => void;
 };
 
 export function MeetPeopleSection({

@@ -13,8 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { loginAccount } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
@@ -134,7 +133,7 @@ export default function SignInScreen() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={styles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
         <View style={styles.topSection}>
           <ScreenBackRow fallbackHref="/welcome" variant="light" />
           <View style={styles.logoWrap} pointerEvents="none">
@@ -213,7 +212,7 @@ export default function SignInScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

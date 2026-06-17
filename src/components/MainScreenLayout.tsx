@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from 'expo-router';
 import { ReactNode, useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -6,6 +7,7 @@ import { fetchUnreadMessageCount } from '../api/messagesApi';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getStoredUser } from '../storage/authSession';
 import { BottomTabBar, type MainTabKey } from './BottomTabBar';
+import { ScreenSafeArea } from './ScreenSafeArea';
 import { colors } from '../theme/colors';
 
 type MainScreenLayoutProps = {
@@ -47,7 +49,8 @@ export function MainScreenLayout({ activeTab, children }: MainScreenLayoutProps)
 
   return (
     <View style={styles.root}>
-      <View style={styles.content}>{children}</View>
+      <StatusBar style="dark" />
+      <ScreenSafeArea style={styles.content}>{children}</ScreenSafeArea>
       <BottomTabBar
         activeTab={activeTab}
         profileImageUri={profileImageUri}

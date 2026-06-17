@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   fetchMyConnectCode,
@@ -21,6 +19,7 @@ import {
 import { getErrorMessage, type UserProfile } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { getStoredUser } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
 
@@ -214,10 +213,12 @@ export default function QrConnectScreen() {
   }
 
   return (
-    <View style={[styles.root, mode === 'scan' && styles.rootDark]}>
-      <StatusBar style={mode === 'scan' ? 'light' : 'dark'} />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
-        <View style={styles.header}>
+    <StackScreenLayout
+      statusBarStyle={mode === 'scan' ? 'light' : 'dark'}
+      rootStyle={mode === 'scan' ? styles.rootDark : undefined}
+      style={mode === 'scan' ? styles.containerDark : undefined}
+    >
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons
               name="chevron-back"
@@ -247,21 +248,17 @@ export default function QrConnectScreen() {
         </View>
 
         {mode === 'code' ? renderCode() : renderScan()}
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
   rootDark: {
     backgroundColor: '#000000',
   },
-  container: {
+  containerDark: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   header: {
     flexDirection: 'row',

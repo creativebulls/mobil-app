@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { FriendSummary } from '../api/profileApi';
-import { usePresence } from '../realtime/PresenceProvider';
 import { Avatar } from './Avatar';
 import { colors } from '../theme/colors';
 
@@ -13,7 +12,6 @@ type FriendsHorizontalListProps = {
 };
 
 export function FriendsHorizontalList({ friends, onAddPress, onFriendPress }: FriendsHorizontalListProps) {
-  const presence = usePresence();
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
@@ -46,12 +44,7 @@ export function FriendsHorizontalList({ friends, onAddPress, onFriendPress }: Fr
             onPress={() => onFriendPress?.(friend)}
             style={({ pressed }) => [styles.friendCard, pressed && styles.pressed]}
           >
-            <Avatar
-              uri={friend.avatarUri}
-              name={friend.name}
-              size={64}
-              online={presence.isOnline(friend.id) || Boolean(friend.isOnline)}
-            />
+            <Avatar uri={friend.avatarUri} name={friend.name} size={64} presenceUserId={friend.id} />
             <Text style={styles.friendName} numberOfLines={1}>
               {friend.name.split(' ')[0]}
             </Text>

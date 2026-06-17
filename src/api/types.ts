@@ -233,6 +233,8 @@ export type ConversationMeta = {
   id: string;
   isGroup: boolean;
   name: string | null;
+  avatarUri: string | null;
+  ownerId: string | null;
   memberCount: number;
   participants: ChatUser[];
 };
@@ -248,6 +250,7 @@ export type CreateGroupResponse = {
   id: string;
   name: string;
   memberCount: number;
+  avatarUri: string | null;
 };
 
 export type SendMessageResponse = {

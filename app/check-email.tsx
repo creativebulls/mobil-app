@@ -2,8 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import {
   getVerificationStatus,
   resendVerificationEmail,
@@ -175,7 +174,7 @@ export default function CheckEmailScreen() {
   return (
     <View style={authStyles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={authStyles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={authStyles.container}>
         <ScreenBackRow fallbackHref="/sign-up" variant="light" />
 
         <View style={authStyles.checkEmailContent}>
@@ -218,7 +217,7 @@ export default function CheckEmailScreen() {
         >
           <Text style={authStyles.checkEmailFooterLink}>Wrong email address?</Text>
         </Pressable>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

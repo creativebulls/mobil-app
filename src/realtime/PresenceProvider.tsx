@@ -1,22 +1,42 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { useSyncExternalStore } from 'react';
 
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getRealtimeSocket } from './socket';
+import {
+  getPresenceSnapshot,
+  isUserOnline,
+  seedPresence,
+  setPresenceList,
+  subscribePresence,
+  updatePresence,
+} from './presenceStore';
+
+type Listener = () => void;
+
+const noopSubscribe = () => () => undefined;
+
+/** Subscribe to online status for one user without re-rendering parent lists. */
+export function useIsOnline(userId: string | null | undefined): boolean {
+  const subscribe = useCallback(
+    (listener: Listener) => (userId ? subscribePresence(listener) : noopSubscribe()),
+    [userId],
+  );
+  const getSnapshot = useCallback(() => isUserOnline(userId), [userId]);
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
 
 type PresenceContextValue = {
   isOnline: (userId: string | null | undefined) => boolean;
-  /** Seed the online set from a server response (e.g. friends/conversations list). */
   seed: (userIds: string[]) => void;
 };
 
 const PresenceContext = createContext<PresenceContextValue>({
-  isOnline: () => false,
-  seed: () => undefined,
+  isOnline: isUserOnline,
+  seed: seedPresence,
 });
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
-  const [online, setOnline] = useState<Set<string>>(new Set());
-
   const requestPresence = useCallback(() => {
     void getRealtimeSocket().then((socket) => socket?.emit('presence:request'));
   }, []);
@@ -25,48 +45,25 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     requestPresence();
   }, [requestPresence]);
 
-  // Re-sync whenever the socket (re)connects, since the server pushes the
-  // current online set on connect and we may have missed updates while away.
   useRealtimeEvent('connection:ready', requestPresence);
 
   useRealtimeEvent<{ online: string[] }>('presence:list', (payload) => {
-    setOnline(new Set(payload.online ?? []));
+    setPresenceList(payload.online ?? []);
   });
 
   useRealtimeEvent<{ userId: string; online: boolean }>('presence:update', (payload) => {
     if (!payload?.userId) {
       return;
     }
-    setOnline((current) => {
-      const next = new Set(current);
-      if (payload.online) {
-        next.add(payload.userId);
-      } else {
-        next.delete(payload.userId);
-      }
-      return next;
-    });
+    updatePresence(payload.userId, payload.online);
   });
-
-  const seed = useCallback((userIds: string[]) => {
-    if (userIds.length === 0) {
-      return;
-    }
-    setOnline((current) => {
-      const next = new Set(current);
-      for (const id of userIds) {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
 
   const value = useMemo<PresenceContextValue>(
     () => ({
-      isOnline: (userId) => (userId ? online.has(userId) : false),
-      seed,
+      isOnline: isUserOnline,
+      seed: seedPresence,
     }),
-    [online, seed],
+    [],
   );
 
   return <PresenceContext.Provider value={value}>{children}</PresenceContext.Provider>;
@@ -74,4 +71,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
 export function usePresence(): PresenceContextValue {
   return useContext(PresenceContext);
+}
+
+/** Forces re-render when presence set changes (use sparingly). */
+export function usePresenceVersion(): number {
+  return useSyncExternalStore(subscribePresence, getPresenceSnapshot, () => 0);
 }

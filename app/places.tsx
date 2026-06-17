@@ -1,14 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchPlaces, searchPlaces } from '../src/api/placesApi';
 import { getErrorMessage, type Place } from '../src/api/types';
 import { FeedSearchInput } from '../src/components/FeedSearchInput';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { colors } from '../src/theme/colors';
 import { hasLocationAccess } from '../src/utils/locationAccess';
 
@@ -90,10 +89,8 @@ export default function PlacesScreen() {
   }, [query, load]);
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Back">
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -170,19 +167,11 @@ export default function PlacesScreen() {
             }
           />
         )}
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

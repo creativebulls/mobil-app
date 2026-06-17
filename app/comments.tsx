@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +12,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   addComment,
@@ -26,6 +24,7 @@ import { getErrorMessage, type Post, type PostComment } from '../src/api/types';
 import { CommentComposer } from '../src/components/CommentComposer';
 import { CommentItem } from '../src/components/CommentItem';
 import { FeedPostCard } from '../src/components/FeedPostCard';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { getStoredUser } from '../src/storage/authSession';
 import { hidePost } from '../src/storage/hiddenPosts';
@@ -244,10 +243,8 @@ export default function PostDetailScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Back">
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -365,19 +362,11 @@ export default function PostDetailScreen() {
             isSending={isSending}
           />
         </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   flex: {
     flex: 1,
   },

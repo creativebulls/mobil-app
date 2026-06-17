@@ -1,7 +1,7 @@
 import { Response } from 'express';
 
 import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '../../shared/middleware/auth.middleware';
-import { messageMediaUpload } from '../../shared/middleware/upload.middleware';
+import { messageMediaUpload, groupPhotoUpload } from '../../shared/middleware/upload.middleware';
 import { AppError } from '../../shared/errors/AppError';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
@@ -86,6 +86,23 @@ export const createGroup = asyncHandler(async (req: AuthenticatedRequest, res: R
   const body = createGroupSchema.parse(req.body);
   const result = await messagesService.createGroup(req.auth!.userId, body.name, body.memberIds);
   sendSuccess(res, result, 201);
+});
+
+export const uploadGroupPhotoMiddleware = groupPhotoUpload.single('groupPhoto');
+
+export const uploadGroupPhoto = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = conversationIdParamSchema.parse(req.params);
+  const file = req.file;
+  if (!file) {
+    throw new AppError(422, 'A group photo is required', 'GROUP_PHOTO_REQUIRED');
+  }
+
+  const result = await messagesService.updateGroupPhoto(
+    req.auth!.userId,
+    params.conversationId,
+    file.filename,
+  );
+  sendSuccess(res, result);
 });
 
 export const sharePlaceInConversation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

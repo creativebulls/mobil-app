@@ -1,5 +1,4 @@
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { BackHandler } from 'react-native';
 
@@ -25,7 +24,6 @@ export default function HomeScreen() {
 
   return (
     <MainScreenLayout activeTab="home">
-      <StatusBar style="dark" />
       <MyFeedScreen />
     </MainScreenLayout>
   );

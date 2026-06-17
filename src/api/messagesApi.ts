@@ -115,6 +115,26 @@ export async function createGroup(input: {
   });
 }
 
+export async function updateGroupPhoto(
+  conversationId: string,
+  photoUri: string,
+): Promise<{ conversationId: string; avatarUri: string }> {
+  const formData = new FormData();
+  formData.append('groupPhoto', {
+    uri: photoUri,
+    name: 'group.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
+
+  return apiRequest<{ conversationId: string; avatarUri: string }>(
+    `/messages/group/${conversationId}/photo`,
+    {
+      method: 'POST',
+      formData,
+    },
+  );
+}
+
 export async function sharePlaceInConversation(input: {
   conversationId?: string;
   recipientId?: string;

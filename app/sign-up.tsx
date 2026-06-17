@@ -13,8 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { registerAccount } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
@@ -111,7 +110,7 @@ export default function SignUpScreen() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={styles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
         <ScreenBackRow fallbackHref="/welcome" variant="light" />
 
         <KeyboardAvoidingView
@@ -180,7 +179,7 @@ export default function SignUpScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

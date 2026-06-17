@@ -9,6 +9,11 @@ messagesRouter.use(...messagesController.messagesGuards);
 messagesRouter.get('/', messagesController.listConversations);
 messagesRouter.get('/unread-count', messagesController.unreadCount);
 messagesRouter.post('/group', messagesController.createGroup);
+messagesRouter.post(
+  '/group/:conversationId/photo',
+  messagesController.uploadGroupPhotoMiddleware,
+  messagesController.uploadGroupPhoto,
+);
 messagesRouter.post('/with/:userId', messagesController.openConversation);
 messagesRouter.post('/share-place', messagesController.sharePlace);
 messagesRouter.post('/conversation-place', messagesController.sharePlaceInConversation);

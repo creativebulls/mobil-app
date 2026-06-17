@@ -64,7 +64,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <DialogProvider>
           <NotificationsProvider>
             <PresenceProvider>

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { usePathname } from 'expo-router';
 import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../../theme/colors';
@@ -50,8 +51,12 @@ type ActiveDialog = {
 };
 
 export function DialogProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [active, setActive] = useState<ActiveDialog | null>(null);
   const progress = useRef(new Animated.Value(0)).current;
+  const activeRef = useRef<ActiveDialog | null>(null);
+  const pathnameRef = useRef(pathname);
+  activeRef.current = active;
 
   const settle = useCallback(
     (value: string | null) => {
@@ -100,9 +105,18 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (pathnameRef.current !== pathname) {
+      pathnameRef.current = pathname;
+      if (activeRef.current) {
+        settle(null);
+      }
+    }
+  }, [pathname, settle]);
+
+  useEffect(() => {
     Animated.timing(progress, {
       toValue: active ? 1 : 0,
-      duration: 180,
+      duration: active ? 180 : 0,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -134,7 +148,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
         {children}
 
         {active ? (
-          <Animated.View style={[styles.overlay, { opacity: progress }]} pointerEvents="auto">
+          <View style={styles.overlay} pointerEvents="box-none">
             <Pressable
               style={styles.backdrop}
               onPress={() => {
@@ -153,6 +167,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                       scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }),
                     },
                   ],
+                  opacity: progress,
                 },
               ]}
             >
@@ -194,7 +209,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                 })}
               </View>
             </Animated.View>
-          </Animated.View>
+          </View>
         ) : null}
       </View>
     </DialogContext.Provider>

@@ -7,6 +7,7 @@ import { uploadsRoot } from '../../config/env';
 const uploadDir = path.join(uploadsRoot, 'profile-photos');
 const postImageDir = path.join(uploadsRoot, 'posts');
 const messageMediaDir = path.join(uploadsRoot, 'messages');
+const groupPhotoDir = path.join(uploadsRoot, 'group-photos');
 
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,6 +19,10 @@ if (!fs.existsSync(postImageDir)) {
 
 if (!fs.existsSync(messageMediaDir)) {
   fs.mkdirSync(messageMediaDir, { recursive: true });
+}
+
+if (!fs.existsSync(groupPhotoDir)) {
+  fs.mkdirSync(groupPhotoDir, { recursive: true });
 }
 
 function createDiskStorage(destination: string) {
@@ -79,4 +84,10 @@ export const messageMediaUpload = multer({
   storage: createDiskStorage(messageMediaDir),
   fileFilter: mediaFileFilter,
   limits: { fileSize: 40 * 1024 * 1024, files: 1 },
+});
+
+export const groupPhotoUpload = multer({
+  storage: createDiskStorage(groupPhotoDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
 });

@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,12 +10,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchNotifications, markNotificationsRead } from '../src/api/notificationsApi';
 import { acceptFriendRequest, rejectFriendRequest } from '../src/api/profileApi';
 import type { AppNotification, NotificationType } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { useNotifications } from '../src/notifications/NotificationsProvider';
 import { openUserProfile } from '../src/utils/openUserProfile';
@@ -188,10 +187,8 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Back">
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -280,19 +277,11 @@ export default function NotificationsScreen() {
             )}
           />
         )}
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

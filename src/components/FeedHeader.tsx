@@ -40,7 +40,7 @@ export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress
         accessibilityLabel="WhereAbout logo"
       />
 
-      <Text style={styles.title} numberOfLines={1}>
+      <Text style={styles.title} numberOfLines={1} pointerEvents="none">
         {title}
       </Text>
 

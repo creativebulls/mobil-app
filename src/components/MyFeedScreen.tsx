@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { fetchFriends, type FriendSummary } from '../api/profileApi';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { usePlaces } from '../hooks/usePlaces';
+import { onHomeReselect } from '../navigation/tabEvents';
+import { seedPresence } from '../realtime/presenceStore';
 import { getStoredUser } from '../storage/authSession';
 import { colors } from '../theme/colors';
+import { openUserProfile } from '../utils/openUserProfile';
 import { placeToDiscoverPlace } from '../utils/places';
 import { DiscoverPlacesSection } from './DiscoverPlacesSection';
 import { FeedHeader } from './FeedHeader';
@@ -18,12 +21,10 @@ import { MeetPeopleSection } from './MeetPeopleSection';
 import { RecommendedPlacesByFriendsSection } from './RecommendedPlacesByFriendsSection';
 import { SearchResults } from './SearchResults';
 
-// Height of the collapsible logo/actions row. It slides out of view as the
-// user scrolls down while the search bar below it stays pinned to the top.
+// Logo/actions row height — scrolls away naturally; only the search bar stays pinned.
 const FEED_HEADER_HEIGHT = 56;
 // Search bar region height (input + its bottom padding).
 const SEARCH_REGION_HEIGHT = 60;
-const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
 
 export function MyFeedScreen() {
   const router = useRouter();
@@ -32,14 +33,17 @@ export function MyFeedScreen() {
   const [query, setQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
   const debouncedQuery = useDebouncedValue(query, 300);
 
+  const scrollRef = useRef<Animated.ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
-  const headerTranslateY = useMemo(
+  const stickyDividerOpacity = useMemo(
     () =>
-      Animated.diffClamp(scrollY, 0, FEED_HEADER_HEIGHT).interpolate({
-        inputRange: [0, FEED_HEADER_HEIGHT],
-        outputRange: [0, -FEED_HEADER_HEIGHT],
+      scrollY.interpolate({
+        inputRange: [FEED_HEADER_HEIGHT - 12, FEED_HEADER_HEIGHT],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
       }),
     [scrollY],
   );
@@ -47,6 +51,44 @@ export function MyFeedScreen() {
   useEffect(() => {
     void getStoredUser().then((user) => setCurrentUserId(user?.id ?? null));
   }, []);
+
+  const loadFriends = useCallback(async () => {
+    try {
+      const result = await fetchFriends();
+      setFriends(result.friends);
+      seedPresence(result.friends.filter((friend) => friend.isOnline).map((friend) => friend.id));
+    } catch {
+      // Keep whatever friends were already shown.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadFriends();
+    }, [loadFriends]),
+  );
+
+  useEffect(
+    () =>
+      onHomeReselect(() => {
+        setSearchActive(false);
+        setQuery('');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        scrollY.setValue(0);
+      }),
+    [scrollY],
+  );
+
+  const meetFriends = useMemo(
+    () =>
+      friends.map((friend) => ({
+        id: friend.id,
+        name: friend.name,
+        avatarUri: friend.avatarUri,
+        subtitle: friend.statusText,
+      })),
+    [friends],
+  );
 
   function openPlaces(sectionTitle: string) {
     router.push({ pathname: '/places', params: { title: sectionTitle } });
@@ -78,7 +120,7 @@ export function MyFeedScreen() {
 
   if (searchActive) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
         <View style={styles.searchActiveRow}>
           <View style={styles.searchActiveInput}>
             <FeedSearchInput
@@ -93,13 +135,14 @@ export function MyFeedScreen() {
           </Pressable>
         </View>
         <SearchResults query={debouncedQuery} currentUserId={currentUserId} />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <View style={styles.container}>
       <Animated.ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -108,7 +151,12 @@ export function MyFeedScreen() {
           useNativeDriver: true,
         })}
       >
-        <MeetFriendsSection />
+        <FeedHeader />
+        <MeetFriendsSection
+          friends={meetFriends}
+          onViewAllPress={() => router.push('/friends')}
+          onFriendPress={(friend) => openUserProfile(router, friend.id, currentUserId)}
+        />
         <DiscoverPlacesSection
           title={discoverTitle}
           places={discoverPlaces}
@@ -128,18 +176,19 @@ export function MyFeedScreen() {
         <MeetPeopleSection />
       </Animated.ScrollView>
 
-      <Animated.View
-        style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
-      >
-        <FeedHeader />
+      <View style={styles.stickySearch} pointerEvents="box-none">
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.stickyDivider, { opacity: stickyDividerOpacity }]}
+        />
         <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
           <View style={styles.searchTriggerInner}>
             <Ionicons name="search-outline" size={20} color={colors.labelGray} />
             <Text style={styles.searchTriggerText}>Search friends, places, posts…</Text>
           </View>
         </Pressable>
-      </Animated.View>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -149,11 +198,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   content: {
-    paddingTop: TOP_BAR_HEIGHT + 8,
+    paddingTop: SEARCH_REGION_HEIGHT + 8,
     paddingBottom: 32,
     gap: 28,
   },
-  topBar: {
+  stickySearch: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -161,6 +210,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     zIndex: 10,
     elevation: 4,
+  },
+  stickyDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   searchTrigger: {
     paddingHorizontal: 20,

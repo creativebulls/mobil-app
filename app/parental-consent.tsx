@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,13 +11,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { recordParentalConsent } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { BrandButton } from '../src/components/BrandButton';
 import { ConsentCheckbox } from '../src/components/ConsentCheckbox';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { updateStoredUser } from '../src/storage/authSession';
 import {
   getSignUpProfilePhoto,
@@ -67,7 +68,8 @@ export default function ParentalConsentScreen() {
 
   return (
     <View style={styles.root}>
-      <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
         <ScreenBackRow fallbackHref="/registration-details" variant="light" />
 
         <ScrollView
@@ -118,7 +120,7 @@ export default function ParentalConsentScreen() {
 
           {isSubmitting ? <ActivityIndicator color={colors.brand} /> : null}
         </ScrollView>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

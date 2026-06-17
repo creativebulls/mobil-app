@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +10,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchConversations } from '../src/api/messagesApi';
 import type { ChatMessage, ConversationSummary } from '../src/api/types';
@@ -19,21 +17,36 @@ import { FeedHeader } from '../src/components/FeedHeader';
 import { MainScreenLayout } from '../src/components/MainScreenLayout';
 import { Avatar } from '../src/components/Avatar';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
-import { usePresence } from '../src/realtime/PresenceProvider';
+import { seedPresence } from '../src/realtime/presenceStore';
+import { getStoredUser } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
+
+function messagePreview(message: ChatMessage): string {
+  if (message.text?.trim()) {
+    return message.text.trim();
+  }
+  if (message.sharedPlace?.name) {
+    return message.sharedPlace.name;
+  }
+  if (message.media) {
+    return message.media.type === 'video' ? 'Video' : 'Photo';
+  }
+  return '';
+}
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const presence = usePresence();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const result = await fetchConversations();
+      const [result, me] = await Promise.all([fetchConversations(), getStoredUser()]);
+      currentUserIdRef.current = me?.id ?? null;
       setConversations(result.conversations);
-      presence.seed(
+      seedPresence(
         result.conversations
           .filter((item) => item.isOnline && item.user?.id)
           .map((item) => item.user!.id),
@@ -43,7 +56,7 @@ export default function MessagesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [presence]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -51,11 +64,42 @@ export default function MessagesScreen() {
     }, [load]),
   );
 
-  useRealtimeEvent<ChatMessage>('message:new', () => {
+  useRealtimeEvent<ChatMessage>('message:new', (message) => {
+    setConversations((current) => {
+      const index = current.findIndex((item) => item.id === message.conversationId);
+      if (index === -1) {
+        void load();
+        return current;
+      }
+
+      const existing = current[index];
+      const mine = message.senderId === currentUserIdRef.current;
+      const updated: ConversationSummary = {
+        ...existing,
+        lastMessage: messagePreview(message),
+        lastMessageAt: message.createdAt,
+        lastMessageMine: mine,
+        timeAgo: message.timeAgo,
+        unreadCount: mine ? existing.unreadCount : existing.unreadCount + 1,
+      };
+
+      const next = [...current];
+      next.splice(index, 1);
+      next.unshift(updated);
+      return next;
+    });
+  });
+
+  useRealtimeEvent<{ conversationId: string }>('conversation:updated', () => {
     void load();
   });
-  useRealtimeEvent<{ conversationId: string }>('message:read', () => {
-    void load();
+
+  useRealtimeEvent<{ conversationId: string }>('message:read', (payload) => {
+    setConversations((current) =>
+      current.map((item) =>
+        item.id === payload.conversationId ? { ...item, unreadCount: 0 } : item,
+      ),
+    );
   });
 
   async function handleRefresh() {
@@ -79,8 +123,7 @@ export default function MessagesScreen() {
 
   return (
     <MainScreenLayout activeTab="messages">
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
         <FeedHeader title="Messages" onAddPress={() => router.push('/new-group')} />
 
         {isLoading ? (
@@ -107,15 +150,13 @@ export default function MessagesScreen() {
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                 >
                   {item.isGroup ? (
-                    <View style={styles.groupGlyph}>
-                      <Ionicons name="people" size={26} color={colors.white} />
-                    </View>
+                    <Avatar uri={item.avatarUri} name={item.name} size={56} />
                   ) : (
                     <Avatar
                       uri={item.user?.avatarUri}
                       name={item.user?.name}
                       size={56}
-                      online={presence.isOnline(item.user?.id)}
+                      presenceUserId={item.isGroup ? undefined : item.user?.id}
                     />
                   )}
                   <View style={styles.rowText}>
@@ -146,7 +187,7 @@ export default function MessagesScreen() {
             }}
           />
         )}
-      </SafeAreaView>
+      </View>
     </MainScreenLayout>
   );
 }

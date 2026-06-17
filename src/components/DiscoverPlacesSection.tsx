@@ -87,6 +87,7 @@ export function DiscoverPlacesSection({
           decelerationRate="fast"
           snapToInterval={SCREEN_WIDTH}
           snapToAlignment="start"
+          nestedScrollEnabled
           style={styles.list}
           getItemLayout={(_, index) => ({
             length: SCREEN_WIDTH,

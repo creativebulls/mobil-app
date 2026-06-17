@@ -2,8 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { resumeVerifiedSession, verifyEmailToken } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AuthSuccessIcon } from '../src/components/AuthSuccessIcon';
@@ -62,7 +61,7 @@ export default function EmailVerifiedScreen() {
   return (
     <View style={authStyles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={[authStyles.container, authStyles.checkEmailContent]}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={[authStyles.container, authStyles.checkEmailContent]}>
         {isLoading ? (
           <>
             <ActivityIndicator color={colors.brand} size="large" />
@@ -85,7 +84,7 @@ export default function EmailVerifiedScreen() {
             <Text style={authStyles.checkEmailHeading}>Email verified</Text>
           </>
         )}
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

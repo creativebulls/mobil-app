@@ -89,7 +89,7 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
         </View>
       ) : (
         <View style={styles.list}>
-          {posts.map((post) => (
+          {posts.slice(0, 12).map((post) => (
             <FeedPostCard
               key={post.id}
               post={post}

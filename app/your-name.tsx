@@ -11,12 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { updateProfileNames } from '../src/api/authApi';
-import { getErrorMessage } from '../src/api/types';
-import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
-import { BrandButton } from '../src/components/BrandButton';
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { updateStoredUser } from '../src/storage/authSession';
 import { setSignUpName } from '../src/storage/signUpDraft';
@@ -71,7 +66,7 @@ export default function YourNameScreen() {
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
-      <SafeAreaView style={styles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
         <ScreenBackRow fallbackHref="/check-email" variant="light" />
 
         <KeyboardAvoidingView
@@ -116,7 +111,7 @@ export default function YourNameScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </View>
   );
 }

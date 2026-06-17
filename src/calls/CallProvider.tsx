@@ -63,7 +63,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<CallStatus>('idle');
   const [peer, setPeer] = useState<PeerInfo | null>(null);
   const [muted, setMuted] = useState(false);
-  const [seconds, setSeconds] = useState(0);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -99,7 +98,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
     peerIdRef.current = null;
     callIdRef.current = null;
     setMuted(false);
-    setSeconds(0);
     setPeer(null);
     setStatus('idle');
   }, []);
@@ -432,14 +430,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     };
   }, [emit, cleanup, flushPendingCandidates]);
 
-  // Call duration timer (runs only while connected).
-  useEffect(() => {
-    if (status !== 'active') {
-      return;
-    }
-    const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => clearInterval(interval);
-  }, [status]);
+  // Call duration timer lives in CallOverlay so the rest of the app does not re-render every second.
 
   // Ring while the call is being established (outgoing ringback / incoming ring),
   // then stop once it connects or ends.
@@ -452,6 +443,54 @@ export function CallProvider({ children }: { children: ReactNode }) {
       stopRings();
     }
     return () => stopRings();
+  }, [status]);
+
+  const value = useMemo<CallContextValue>(() => ({ status, startCall }), [status, startCall]);
+
+  return (
+    <CallContext.Provider value={value}>
+      {children}
+      <CallOverlay
+        status={status}
+        peer={peer}
+        muted={muted}
+        onReject={() => void rejectCall()}
+        onAccept={() => void acceptCall()}
+        onEnd={() => void endCall()}
+        onToggleMute={toggleMute}
+      />
+    </CallContext.Provider>
+  );
+}
+
+type CallOverlayProps = {
+  status: CallStatus;
+  peer: PeerInfo | null;
+  muted: boolean;
+  onReject: () => void;
+  onAccept: () => void;
+  onEnd: () => void;
+  onToggleMute: () => void;
+};
+
+function CallOverlay({
+  status,
+  peer,
+  muted,
+  onReject,
+  onAccept,
+  onEnd,
+  onToggleMute,
+}: CallOverlayProps) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    if (status !== 'active') {
+      setSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
+    return () => clearInterval(interval);
   }, [status]);
 
   const statusLabel = useMemo(() => {
@@ -469,12 +508,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [status, seconds]);
 
-  const value = useMemo<CallContextValue>(() => ({ status, startCall }), [status, startCall]);
-
   return (
-    <CallContext.Provider value={value}>
-      {children}
-      <Modal visible={status !== 'idle'} animationType="slide" transparent={false} onRequestClose={() => undefined}>
+      <Modal
+        visible={status !== 'idle'}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={onEnd}
+      >
         <View style={styles.overlay}>
           <View style={styles.peerBlock}>
             <Avatar uri={peer?.avatarUri ?? null} name={peer?.name ?? 'Call'} size={120} />
@@ -486,13 +526,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
             {status === 'incoming' ? (
               <View style={styles.incomingRow}>
                 <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={() => void rejectCall()}>
+                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onReject}>
                     <Ionicons name="close" size={30} color={colors.white} />
                   </Pressable>
                   <Text style={styles.actionLabel}>Decline</Text>
                 </View>
                 <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.acceptButton]} onPress={() => void acceptCall()}>
+                  <Pressable style={[styles.roundButton, styles.acceptButton]} onPress={onAccept}>
                     <Ionicons name="call" size={30} color={colors.white} />
                   </Pressable>
                   <Text style={styles.actionLabel}>Accept</Text>
@@ -504,7 +544,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
                   <View style={styles.actionWrap}>
                     <Pressable
                       style={[styles.roundButton, muted ? styles.mutedButton : styles.secondaryButton]}
-                      onPress={toggleMute}
+                      onPress={onToggleMute}
                     >
                       <Ionicons name={muted ? 'mic-off' : 'mic'} size={26} color={colors.white} />
                     </Pressable>
@@ -512,7 +552,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
                   </View>
                 ) : null}
                 <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={() => void endCall()}>
+                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onEnd}>
                     <Ionicons name="call" size={30} color={colors.white} style={styles.endIcon} />
                   </Pressable>
                   <Text style={styles.actionLabel}>End</Text>
@@ -522,7 +562,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
           </View>
         </View>
       </Modal>
-    </CallContext.Provider>
   );
 }
 

@@ -1,8 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { OnboardingSlider } from '../src/components/OnboardingSlider';
 import { GradientBackground } from '../src/components/GradientBackground';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
@@ -46,12 +45,12 @@ export default function OnboardingScreen() {
   if (isChecking) {
     return (
       <GradientBackground variant="screen">
-        <SafeAreaView style={styles.loadingContainer}>
+        <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.loadingContainer}>
           <ScreenBackRow fallbackHref="/welcome" />
           <View style={styles.loading}>
             <ActivityIndicator size="large" color={colors.white} />
           </View>
-        </SafeAreaView>
+        </ScreenSafeArea>
       </GradientBackground>
     );
   }

@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +12,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   fetchFavoritePlaces,
@@ -170,8 +168,7 @@ export default function ProfileScreen() {
 
   return (
     <MainScreenLayout activeTab="profile">
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
         <View style={styles.topHeader}>
           <Pressable
             onPress={() => router.push('/qr-connect')}
@@ -296,7 +293,7 @@ export default function ProfileScreen() {
           onClose={() => setStatusEditorVisible(false)}
           onSave={handleSaveStatus}
         />
-      </SafeAreaView>
+      </View>
     </MainScreenLayout>
   );
 }

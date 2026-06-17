@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,13 +14,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { createGroup } from '../src/api/messagesApi';
+import { createGroup, updateGroupPhoto } from '../src/api/messagesApi';
 import { fetchFriends, type FriendSummary } from '../src/api/profileApi';
 import { getErrorMessage } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { colors } from '../src/theme/colors';
 
 export default function NewGroupScreen() {
@@ -28,6 +29,8 @@ export default function NewGroupScreen() {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState('');
+  const [groupPhotoUri, setGroupPhotoUri] = useState<string | null>(null);
+  const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -68,6 +71,37 @@ export default function NewGroupScreen() {
     });
   }
 
+  async function handlePickPhoto() {
+    if (isPickingPhoto) {
+      return;
+    }
+
+    setIsPickingPhoto(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        await dialog.alert({
+          title: 'Permission required',
+          message: 'Please allow photo library access to set a group picture.',
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (!result.canceled && result.assets[0]?.uri) {
+        setGroupPhotoUri(result.assets[0].uri);
+      }
+    } finally {
+      setIsPickingPhoto(false);
+    }
+  }
+
   async function handleCreate() {
     const name = groupName.trim();
     if (!name) {
@@ -82,9 +116,19 @@ export default function NewGroupScreen() {
     setIsCreating(true);
     try {
       const group = await createGroup({ name, memberIds: Array.from(selected) });
+      let avatarUri = group.avatarUri;
+      if (groupPhotoUri) {
+        const uploaded = await updateGroupPhoto(group.id, groupPhotoUri);
+        avatarUri = uploaded.avatarUri;
+      }
       router.replace({
         pathname: '/chat',
-        params: { conversationId: group.id, isGroup: '1', name: group.name },
+        params: {
+          conversationId: group.id,
+          isGroup: '1',
+          name: group.name,
+          avatarUri: avatarUri ?? '',
+        },
       });
     } catch (error) {
       await dialog.alert({
@@ -99,10 +143,8 @@ export default function NewGroupScreen() {
   const canCreate = groupName.trim().length > 0 && selected.size > 0 && !isCreating;
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.header}>
+    <StackScreenLayout>
+      <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
@@ -117,9 +159,23 @@ export default function NewGroupScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.nameRow}>
-            <View style={styles.groupGlyph}>
-              <Ionicons name="people" size={24} color={colors.white} />
-            </View>
+            <Pressable
+              onPress={handlePickPhoto}
+              style={styles.groupPhotoButton}
+              accessibilityRole="button"
+              accessibilityLabel="Set group picture"
+            >
+              {groupPhotoUri ? (
+                <Image source={{ uri: groupPhotoUri }} style={styles.groupPhotoImage} />
+              ) : (
+                <View style={styles.groupGlyph}>
+                  <Ionicons name="people" size={24} color={colors.white} />
+                </View>
+              )}
+              <View style={styles.groupPhotoBadge}>
+                <Ionicons name="camera" size={12} color={colors.white} />
+              </View>
+            </Pressable>
             <TextInput
               style={styles.nameInput}
               placeholder="Group name"
@@ -182,19 +238,11 @@ export default function NewGroupScreen() {
             />
           )}
         </KeyboardAvoidingView>
-      </SafeAreaView>
-    </View>
+    </StackScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  container: {
-    flex: 1,
-  },
   flex: {
     flex: 1,
   },
@@ -227,6 +275,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  groupPhotoButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    overflow: 'visible',
+  },
+  groupPhotoImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  groupPhotoBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
   },
   groupGlyph: {
     width: 52,

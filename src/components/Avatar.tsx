@@ -1,6 +1,7 @@
 import { Image, StyleSheet, Text, View, type ImageStyle, type ViewStyle } from 'react-native';
 
 import { useMediaUrl } from '../hooks/useMediaUrl';
+import { useIsOnline } from '../realtime/PresenceProvider';
 import { colors } from '../theme/colors';
 
 type AvatarProps = {
@@ -9,6 +10,8 @@ type AvatarProps = {
   size?: number;
   style?: ViewStyle;
   online?: boolean;
+  /** When set, online dot updates live without re-rendering parent lists. */
+  presenceUserId?: string | null;
 };
 
 function getInitials(name?: string | null): string {
@@ -24,11 +27,20 @@ function getInitials(name?: string | null): string {
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
-export function Avatar({ uri, name, size = 44, style, online = false }: AvatarProps) {
+export function Avatar({
+  uri,
+  name,
+  size = 44,
+  style,
+  online = false,
+  presenceUserId,
+}: AvatarProps) {
+  const liveOnline = useIsOnline(presenceUserId);
+  const showOnline = presenceUserId != null ? liveOnline : online;
   const dimensions = { width: size, height: size, borderRadius: size / 2 };
   const resolvedUri = useMediaUrl(uri);
 
-  if (!online) {
+  if (!showOnline) {
     if (resolvedUri) {
       return (
         <Image

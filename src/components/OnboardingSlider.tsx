@@ -12,7 +12,7 @@ import {
   View,
   ViewToken,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenSafeArea, STACK_SCREEN_EDGES } from './ScreenSafeArea';
 
 import { ONBOARDING_SLIDES, OnboardingSlide } from '../constants/onboarding';
 import { ScreenBackRow } from './ScreenBackRow';
@@ -92,7 +92,7 @@ export function OnboardingSlider({ onAdvance, onComplete }: OnboardingSliderProp
 
   return (
     <GradientBackground variant="screen">
-      <SafeAreaView style={styles.container}>
+      <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
         <ScreenBackRow fallbackHref="/welcome" />
         <FlatList
           ref={flatListRef}
@@ -130,7 +130,7 @@ export function OnboardingSlider({ onAdvance, onComplete }: OnboardingSliderProp
             onPress={handleNextPress}
           />
         </View>
-      </SafeAreaView>
+      </ScreenSafeArea>
     </GradientBackground>
   );
 }

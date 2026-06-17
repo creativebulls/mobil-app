@@ -1,14 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,7 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   fetchMessages,
@@ -25,6 +23,7 @@ import {
   sendMediaMessage,
   sendMessage,
   sharePlaceInConversation,
+  updateGroupPhoto,
 } from '../src/api/messagesApi';
 import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
@@ -32,8 +31,10 @@ import { useCall } from '../src/calls/CallProvider';
 import { Avatar } from '../src/components/Avatar';
 import { ChatMediaBubble, MediaViewerModal, type OpenableMedia } from '../src/components/ChatMedia';
 import { PlacePickerModal } from '../src/components/PlacePickerModal';
+import { TAB_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
+import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useDialog } from '../src/components/dialog/DialogProvider';
-import { usePresence } from '../src/realtime/PresenceProvider';
+import { useIsOnline } from '../src/realtime/PresenceProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { getRealtimeSocket } from '../src/realtime/socket';
 import { getStoredUser } from '../src/storage/authSession';
@@ -41,6 +42,7 @@ import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 const TICK_READ = '#34B7F1';
+const INPUT_BAR_HEIGHT = 58;
 
 function formatClock(iso: string): string {
   const date = new Date(iso);
@@ -61,9 +63,8 @@ export default function ChatScreen() {
   const router = useRouter();
   const dialog = useDialog();
   const call = useCall();
-  const presence = usePresence();
   const insets = useSafeAreaInsets();
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const params = useLocalSearchParams<{
     conversationId?: string;
     userId?: string;
@@ -78,6 +79,7 @@ export default function ChatScreen() {
     params.conversationId || null,
   );
   const [otherUserId, setOtherUserId] = useState<string | null>(params.userId || null);
+  const otherOnline = useIsOnline(isGroup ? null : otherUserId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -88,12 +90,16 @@ export default function ChatScreen() {
   const [otherTyping, setOtherTyping] = useState(false);
   const [viewerMedia, setViewerMedia] = useState<OpenableMedia | null>(null);
   const [groupName, setGroupName] = useState<string | null>(isGroup ? params.name || 'Group' : null);
+  const [groupAvatar, setGroupAvatar] = useState<string | null>(params.avatarUri || null);
+  const [groupOwnerId, setGroupOwnerId] = useState<string | null>(null);
   const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [isUpdatingGroupPhoto, setIsUpdatingGroupPhoto] = useState(false);
   const [placePickerVisible, setPlacePickerVisible] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const headerName = (isGroup ? groupName : params.name) || (isGroup ? 'Group' : 'Chat');
-  const headerAvatar = params.avatarUri || null;
+  const headerAvatar = isGroup ? groupAvatar : params.avatarUri || null;
+  const canEditGroupPhoto = isGroup && groupOwnerId != null && groupOwnerId === currentUserId;
 
   const load = useCallback(async () => {
     try {
@@ -119,6 +125,8 @@ export default function ChatScreen() {
       setNextCursor(result.nextCursor);
       if (result.conversation?.isGroup) {
         setGroupName(result.conversation.name);
+        setGroupAvatar(result.conversation.avatarUri);
+        setGroupOwnerId(result.conversation.ownerId);
         setMemberCount(result.conversation.memberCount);
       } else if (result.user) {
         setOtherUserId(result.user.id);
@@ -143,13 +151,20 @@ export default function ChatScreen() {
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
+
+  const inputBottomInset = keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 8);
+  const listBottomInset = INPUT_BAR_HEIGHT + inputBottomInset;
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -192,6 +207,58 @@ export default function ChatScreen() {
         : current,
     );
   });
+
+  useRealtimeEvent<{ conversationId: string }>('conversation:updated', (payload) => {
+    if (!conversationId || payload.conversationId !== conversationId) {
+      return;
+    }
+    void fetchMessages(conversationId).then((result) => {
+      if (result.conversation?.isGroup) {
+        setGroupAvatar(result.conversation.avatarUri);
+        setGroupName(result.conversation.name);
+        setMemberCount(result.conversation.memberCount);
+      }
+    });
+  });
+
+  async function handleGroupPhotoPress() {
+    if (!canEditGroupPhoto || !conversationId || isUpdatingGroupPhoto) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      await dialog.alert({
+        title: 'Permission required',
+        message: 'Please allow photo library access to change the group picture.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) {
+      return;
+    }
+
+    setIsUpdatingGroupPhoto(true);
+    try {
+      const uploaded = await updateGroupPhoto(conversationId, result.assets[0].uri);
+      setGroupAvatar(uploaded.avatarUri);
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not update photo',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    } finally {
+      setIsUpdatingGroupPhoto(false);
+    }
+  }
 
   function emitTyping(typing: boolean) {
     if (!otherUserId) {
@@ -396,28 +463,35 @@ export default function ChatScreen() {
   );
 
   return (
-    <View style={styles.root}>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <>
+      <StackScreenLayout edges={TAB_SCREEN_EDGES} style={styles.container}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
           <Pressable
             style={styles.headerUser}
-            disabled={isGroup}
-            onPress={() => !isGroup && otherUserId && openUserProfile(router, otherUserId, currentUserId)}
+            disabled={!isGroup && !otherUserId}
+            onPress={() => {
+              if (isGroup) {
+                if (canEditGroupPhoto) {
+                  void handleGroupPhotoPress();
+                }
+                return;
+              }
+              if (otherUserId) {
+                openUserProfile(router, otherUserId, currentUserId);
+              }
+            }}
           >
             {isGroup ? (
-              <View style={styles.headerGroupGlyph}>
-                <Ionicons name="people" size={20} color={colors.white} />
-              </View>
+              <Avatar uri={headerAvatar} name={headerName} size={34} />
             ) : (
               <Avatar
                 uri={headerAvatar}
                 name={headerName}
                 size={34}
-                online={presence.isOnline(otherUserId)}
+                presenceUserId={otherUserId}
               />
             )}
             <View style={styles.headerTitleWrap}>
@@ -428,7 +502,7 @@ export default function ChatScreen() {
                 <Text style={styles.headerSubtitle} numberOfLines={1}>
                   {memberCount} members
                 </Text>
-              ) : !isGroup && presence.isOnline(otherUserId) ? (
+              ) : !isGroup && otherOnline ? (
                 <Text style={[styles.headerSubtitle, styles.headerOnline]} numberOfLines={1}>
                   Online
                 </Text>
@@ -457,21 +531,20 @@ export default function ChatScreen() {
           ) : null}
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-        >
+        <View style={styles.flex}>
           {isLoading ? (
             <ActivityIndicator color={colors.brand} style={styles.loader} />
           ) : (
             <FlatList
               data={rows}
               keyExtractor={(item) => item.message.id}
-              contentContainerStyle={styles.list}
+              style={styles.flex}
+              contentContainerStyle={[styles.list, { paddingTop: listBottomInset }]}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.3}
               inverted
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
               renderItem={renderRow}
               initialNumToRender={18}
               maxToRenderPerBatch={12}
@@ -480,12 +553,26 @@ export default function ChatScreen() {
             />
           )}
 
-          {otherTyping ? <Text style={styles.typing}>{headerName} is typing…</Text> : null}
+          {otherTyping ? (
+            <Text
+              style={[
+                styles.typing,
+                styles.typingDocked,
+                { bottom: keyboardHeight + INPUT_BAR_HEIGHT + inputBottomInset },
+              ]}
+            >
+              {headerName} is typing…
+            </Text>
+          ) : null}
 
           <View
             style={[
               styles.inputBar,
-              { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) },
+              styles.inputBarDocked,
+              {
+                bottom: keyboardHeight,
+                paddingBottom: inputBottomInset,
+              },
             ]}
           >
             <Pressable
@@ -528,15 +615,15 @@ export default function ChatScreen() {
               <Ionicons name="send" size={20} color={colors.white} />
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+        </View>
+      </StackScreenLayout>
       <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
       <PlacePickerModal
         visible={placePickerVisible}
         onClose={() => setPlacePickerVisible(false)}
         onSelect={handleSharePlace}
       />
-    </View>
+    </>
   );
 }
 
@@ -657,6 +744,7 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+    position: 'relative',
   },
   header: {
     flexDirection: 'row',
@@ -834,19 +922,29 @@ const styles = StyleSheet.create({
   },
   typing: {
     paddingHorizontal: 16,
-    paddingBottom: 4,
     fontSize: 12,
     color: colors.labelGray,
     fontStyle: 'italic',
+  },
+  typingDocked: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
     gap: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  inputBarDocked: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: colors.white,
   },
   input: {
     flex: 1,
