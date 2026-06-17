@@ -20,7 +20,12 @@ import { getErrorMessage } from '../src/api/types';
 import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { registerForPushNotifications } from '../src/notifications/pushNotifications';
-import { saveSession } from '../src/storage/authSession';
+import {
+  getAccessToken,
+  getRefreshToken,
+  getStoredUser,
+  saveSession,
+} from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,7 +40,32 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const isFormValid = useMemo(() => isSignInFormValid(email, password), [email, password]);
+
+  // A logged-in user should never see the login screen. If a completed session
+  // is still saved, bounce straight to home.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const [accessToken, refreshToken, user] = await Promise.all([
+        getAccessToken(),
+        getRefreshToken(),
+        getStoredUser(),
+      ]);
+      if (!active) {
+        return;
+      }
+      if ((accessToken || refreshToken) && user?.registrationStatus === 'completed') {
+        router.replace('/home');
+        return;
+      }
+      setCheckingSession(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -90,6 +120,15 @@ export default function SignInScreen() {
 
   function handleFacebookLogin() {
     router.replace('/home');
+  }
+
+  if (checkingSession) {
+    return (
+      <View style={[styles.root, styles.sessionLoader]}>
+        <StatusBar style="dark" />
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    );
   }
 
   return (
@@ -183,6 +222,10 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.white,
+  },
+  sessionLoader: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   container: {
     flex: 1,

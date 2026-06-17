@@ -8,6 +8,7 @@ postRouter.use(...postController.postGuards);
 
 postRouter.get('/', postController.getFeed);
 postRouter.post('/', postController.createPostMiddleware, postController.createPost);
+postRouter.get('/search', postController.searchPosts);
 postRouter.get('/:id', postController.getPost);
 postRouter.delete('/:id', postController.deletePost);
 postRouter.post('/:id/like', postController.toggleLike);

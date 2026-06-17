@@ -109,7 +109,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         | undefined;
 
       if (data?.type === 'message' && data.conversationId) {
-        router.push({ pathname: '/chat', params: { conversationId: data.conversationId } });
+        router.push({
+          pathname: '/chat',
+          params: {
+            conversationId: data.conversationId,
+            name: (data as { senderName?: string }).senderName ?? 'Chat',
+            userId: (data as { senderId?: string }).senderId ?? '',
+            isGroup: (data as { isGroup?: string }).isGroup === '1' ? '1' : '',
+          },
+        });
         return;
       }
 

@@ -41,6 +41,7 @@ export type FriendSummary = {
   name: string;
   avatarUri: string | null;
   statusText: string | null;
+  isOnline?: boolean;
 };
 
 export async function fetchProfileStats(): Promise<ProfileStats> {

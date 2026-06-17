@@ -16,6 +16,7 @@ import type { Post, PostReaction } from '../api/types';
 import { toggleLike as toggleLikeRequest, deletePost as deletePostRequest } from '../api/postsApi';
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
+import { PostImageViewer } from './PostImageViewer';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
 import { colors } from '../theme/colors';
@@ -69,6 +70,8 @@ export function FeedPostCard({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   const menuButtonRef = useRef<View>(null);
   const dialog = useDialog();
@@ -186,6 +189,11 @@ export function FeedPostCard({
     setActiveImageIndex(index);
   }
 
+  function openViewer(index: number) {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }
+
   const menuOptions: PostMenuOption[] = [
     { key: 'hide', label: 'Hide post from timeline', icon: 'eye-off-outline', onPress: handleHide },
     { key: 'report', label: 'Report', icon: 'flag-outline', onPress: handleReport },
@@ -284,7 +292,9 @@ export function FeedPostCard({
         ) : null}
 
         {postImages.length === 1 ? (
-          <MediaImage uri={postImages[0]} style={styles.postImage} resizeMode="cover" />
+          <Pressable onPress={() => openViewer(0)} accessibilityRole="imagebutton">
+            <MediaImage uri={postImages[0]} style={styles.postImage} resizeMode="cover" />
+          </Pressable>
         ) : postImages.length > 1 ? (
           <View style={styles.carouselWrap}>
             <FlatList
@@ -304,12 +314,10 @@ export function FeedPostCard({
                 offset: CAROUSEL_WIDTH * index,
                 index,
               })}
-              renderItem={({ item }) => (
-                <MediaImage
-                  uri={item}
-                  style={styles.carouselImage}
-                  resizeMode="cover"
-                />
+              renderItem={({ item, index }) => (
+                <Pressable onPress={() => openViewer(index)} accessibilityRole="imagebutton">
+                  <MediaImage uri={item} style={styles.carouselImage} resizeMode="cover" />
+                </Pressable>
               )}
             />
 
@@ -372,6 +380,22 @@ export function FeedPostCard({
           </Pressable>
         </View>
       </View>
+
+      {viewerVisible ? (
+        <PostImageViewer
+          visible={viewerVisible}
+          images={postImages}
+          initialIndex={viewerIndex}
+          post={post}
+          likedByMe={likedByMe}
+          likesCount={likesCount}
+          commentsCount={post.commentsCount}
+          onLikePress={handleLikePress}
+          onCommentPress={() => onCommentPress?.(post)}
+          onSharePress={handleShare}
+          onClose={() => setViewerVisible(false)}
+        />
+      ) : null}
     </View>
   );
 }

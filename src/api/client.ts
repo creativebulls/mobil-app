@@ -96,27 +96,56 @@ async function parseResponse<T>(response: HttpResponse): Promise<T> {
   return payload.data;
 }
 
-export async function refreshAccessToken(): Promise<string | null> {
+// Dedupe concurrent refreshes. The backend rotates (invalidates) the refresh
+// token on every use, so if several requests hit a 401 at once and each tried
+// to refresh, only the first would succeed and the rest would get "invalid
+// refresh token" and wrongly log the user out. Funnelling every caller through
+// a single in-flight promise guarantees exactly one refresh per expiry.
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function performRefresh(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
 
   if (!refreshToken) {
     return null;
   }
 
-  const response = await backendFetch(`/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  });
+  let response: HttpResponse;
+  try {
+    response = await backendFetch(`/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    // Network/connectivity error — keep the session so the user stays logged in
+    // and can retry once they're back online. Never log out on a transient blip.
+    return null;
+  }
+
+  // Only a definitive auth rejection (invalid/expired refresh token) should end
+  // the session. Server errors (5xx) are transient and must not log the user out.
+  if (response.status === 401) {
+    await clearSession();
+    return null;
+  }
 
   if (!response.ok) {
-    await clearSession();
     return null;
   }
 
   const data = await parseResponse<AuthResponse>(response);
   await saveSession(data.tokens, data.user);
   return data.tokens.accessToken;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

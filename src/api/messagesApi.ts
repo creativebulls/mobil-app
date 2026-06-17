@@ -1,6 +1,7 @@
 import { apiRequest } from './client';
 import type {
   ConversationsResponse,
+  CreateGroupResponse,
   MessagesResponse,
   OpenConversationResponse,
   SendMessageResponse,
@@ -99,6 +100,37 @@ export async function sharePlaceWithContacts(input: {
       name: input.name,
       imageUrl: input.imageUrl ?? undefined,
       recipientIds: input.recipientIds,
+      note: input.note?.trim() ? input.note.trim() : undefined,
+    },
+  });
+}
+
+export async function createGroup(input: {
+  name: string;
+  memberIds: string[];
+}): Promise<CreateGroupResponse> {
+  return apiRequest<CreateGroupResponse>('/messages/group', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export async function sharePlaceInConversation(input: {
+  conversationId?: string;
+  recipientId?: string;
+  placeId: string;
+  name: string;
+  imageUrl?: string | null;
+  note?: string;
+}): Promise<SendMessageResponse> {
+  return apiRequest<SendMessageResponse>('/messages/conversation-place', {
+    method: 'POST',
+    body: {
+      conversationId: input.conversationId,
+      recipientId: input.recipientId,
+      placeId: input.placeId,
+      name: input.name,
+      imageUrl: input.imageUrl ?? undefined,
       note: input.note?.trim() ? input.note.trim() : undefined,
     },
   });

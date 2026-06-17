@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { randomBytes } from 'crypto';
 
 import { AppError } from '../../shared/errors/AppError';
+import { isUserOnline } from '../../socket/index';
 import { createNotification } from '../notifications/notification.service';
 import { assertNotBlocked, isBlockedBetween } from '../relations/relations.service';
 import { User, getUserDisplayName, serializeAuthor } from '../users/user.model';
@@ -83,6 +84,7 @@ function serializeFriendUser(user: {
   return {
     ...serializeAuthor(user as Parameters<typeof serializeAuthor>[0]),
     statusText: user.statusText ?? null,
+    isOnline: isUserOnline(user._id.toString()),
   };
 }
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AuthTokens, UserProfile } from '../api/types';
+import { emitSessionCleared } from '../auth/sessionEvents';
 
 const ACCESS_TOKEN_KEY = '@whereabout/access_token';
 const REFRESH_TOKEN_KEY = '@whereabout/refresh_token';
@@ -46,6 +47,7 @@ export async function clearSession(): Promise<void> {
     PENDING_SESSION_KEY,
     RESET_TOKEN_KEY,
   ]);
+  emitSessionCleared();
 }
 
 export async function saveResetToken(token: string): Promise<void> {

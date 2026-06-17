@@ -1,5 +1,6 @@
 import { AppError } from '../../shared/errors/AppError';
 import { sendPushToUser } from '../../shared/services/push.service';
+import { resolveAbsoluteMediaUrl } from '../../shared/utils/mediaUrl';
 import { formatRelativeTime } from '../../shared/utils/time';
 import { emitToUser } from '../../socket/index';
 import { DEFAULT_PUSH_PREFERENCES, serializeAuthor, User, type PushPreferences } from '../users/user.model';
@@ -152,16 +153,22 @@ export async function createNotification(input: {
   };
 
   if (preferences[PUSH_CATEGORY_BY_TYPE[input.type]]) {
+    const pushBody = input.preview ? `${message}: ${input.preview}` : message;
     await sendPushToUser(input.recipientId, {
-      title: 'WhereAbout',
-      body: input.preview ? `${message}: ${input.preview}` : message,
+      title: actorSummary.name,
+      body: pushBody.length > 180 ? `${pushBody.slice(0, 180)}…` : pushBody,
+      imageUrl: resolveAbsoluteMediaUrl(actor.profilePhotoUrl ?? null),
+      subtitle: 'WhereAbout',
       data: {
         type: input.type,
         postId: input.postId ?? null,
         commentId: input.commentId ?? null,
         friendRequestId: input.friendRequestId ?? null,
         notificationId: serialized.id,
+        actorId: actorSummary.id,
+        actorName: actorSummary.name,
       },
+      channelId: 'default',
     });
   }
 }

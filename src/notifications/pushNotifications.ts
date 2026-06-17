@@ -1,20 +1,49 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { registerPushToken, removePushToken } from '../api/notificationsApi';
 import { getAccessToken } from '../storage/authSession';
+import { presentRichNotification } from './displayNotification';
 
 const PUSH_TOKEN_KEY = '@whereabout/fcm_push_token';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    const content = notification.request.content;
+    const data = (content.data ?? {}) as Record<string, string>;
+    const imageUrl = data.imageUrl ?? null;
+    const channelId = data.type === 'message' ? 'messages' : 'default';
+    const subtitle = content.subtitle ?? data.subtitle ?? null;
+
+    // In the foreground, re-present with avatar attachment so message/social
+    // pushes look like proper chat notifications (profile pic + subtitle).
+    if (AppState.currentState === 'active' && (imageUrl || subtitle)) {
+      await presentRichNotification({
+        title: content.title ?? '',
+        body: content.body ?? '',
+        subtitle,
+        imageUrl,
+        data,
+        channelId,
+      });
+
+      return {
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+
+    return {
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 async function ensureAndroidChannel(): Promise<void> {
@@ -23,21 +52,25 @@ async function ensureAndroidChannel(): Promise<void> {
   }
 
   await Notifications.setNotificationChannelAsync('default', {
-    name: 'Notifications',
+    name: 'Activity',
+    description: 'Likes, comments, and friend requests',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F36464',
     sound: 'default',
     enableVibrate: true,
+    showBadge: true,
   });
 
   await Notifications.setNotificationChannelAsync('messages', {
     name: 'Messages',
+    description: 'Direct messages and group chats',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F36464',
     sound: 'default',
     enableVibrate: true,
+    showBadge: true,
   });
 }
 

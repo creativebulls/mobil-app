@@ -6,9 +6,11 @@ import { AppError } from '../../shared/errors/AppError';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
   conversationIdParamSchema,
+  createGroupSchema,
   messagesQuerySchema,
   sendMediaMessageSchema,
   sendMessageSchema,
+  sharePlaceInConversationSchema,
   sharePlaceSchema,
   userIdParamSchema,
 } from './messages.validation';
@@ -76,6 +78,23 @@ export const sendMediaMessage = asyncHandler(async (req: AuthenticatedRequest, r
       height: body.height,
     },
     body.text ?? '',
+  );
+  sendSuccess(res, result, 201);
+});
+
+export const createGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = createGroupSchema.parse(req.body);
+  const result = await messagesService.createGroup(req.auth!.userId, body.name, body.memberIds);
+  sendSuccess(res, result, 201);
+});
+
+export const sharePlaceInConversation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = sharePlaceInConversationSchema.parse(req.body);
+  const result = await messagesService.sharePlaceInConversation(
+    req.auth!.userId,
+    { conversationId: body.conversationId, recipientId: body.recipientId },
+    { placeId: body.placeId, name: body.name, imageUrl: body.imageUrl ?? null },
+    body.note,
   );
   sendSuccess(res, result, 201);
 });

@@ -3,7 +3,8 @@ import { Types } from 'mongoose';
 import { AppError } from '../../shared/errors/AppError';
 import { formatRelativeTime } from '../../shared/utils/time';
 import { sendPushToUser } from '../../shared/services/push.service';
-import { emitToUser } from '../../socket/index';
+import { resolveAbsoluteMediaUrl } from '../../shared/utils/mediaUrl';
+import { emitToUser, isUserOnline } from '../../socket/index';
 import { DEFAULT_PUSH_PREFERENCES, getUserDisplayName, User } from '../users/user.model';
 import { assertNotBlocked, isBlockedBetween, isRestricted } from '../relations/relations.service';
 import { Conversation, type ConversationDocument } from './conversation.model';
@@ -29,12 +30,22 @@ function serializeParticipant(user: PopulatedUser) {
   };
 }
 
+function isPopulatedUser(value: unknown): value is PopulatedUser {
+  return typeof value === 'object' && value !== null && '_id' in value;
+}
+
 function serializeMessage(message: MessageDocument) {
+  const senderRaw = message.sender as unknown;
+  const senderPopulated = isPopulatedUser(senderRaw);
+  const senderId = senderPopulated ? senderRaw._id.toString() : (senderRaw as Types.ObjectId).toString();
+
   return {
     id: message._id.toString(),
     conversationId: message.conversation.toString(),
-    senderId: message.sender.toString(),
-    recipientId: message.recipient.toString(),
+    senderId,
+    senderName: senderPopulated ? getUserDisplayName(senderRaw) : null,
+    senderAvatar: senderPopulated ? senderRaw.profilePhotoUrl ?? null : null,
+    recipientId: message.recipient ? message.recipient.toString() : null,
     text: message.text,
     sharedPlace: message.sharedPlace
       ? {
@@ -80,19 +91,116 @@ async function isMessagePushEnabled(userId: string): Promise<boolean> {
 async function findOrCreateConversation(userA: string, userB: string): Promise<ConversationDocument> {
   const existing = await Conversation.findOne({
     participants: { $all: [userA, userB], $size: 2 },
+    isGroup: { $ne: true },
   });
 
   if (existing) {
     return existing;
   }
 
-  return Conversation.create({ participants: [userA, userB] });
+  return Conversation.create({ participants: [userA, userB], isGroup: false });
 }
 
 function otherParticipantId(conversation: ConversationDocument, userId: string): string {
   return conversation.participants
     .map((id) => id.toString())
     .find((id) => id !== userId) as string;
+}
+
+async function resolveConversation(
+  senderId: string,
+  conversationId: string | null,
+  recipientId: string | null,
+): Promise<ConversationDocument> {
+  if (conversationId) {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation || !conversation.participants.some((id) => id.toString() === senderId)) {
+      throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
+    }
+    return conversation;
+  }
+
+  if (recipientId) {
+    return findOrCreateConversation(senderId, recipientId);
+  }
+
+  throw new AppError(422, 'A conversation or recipient is required', 'INVALID_MESSAGE');
+}
+
+/**
+ * Persists a message, updates conversation metadata, emits the realtime event
+ * to every participant, and pushes notifications. Works for both 1:1 chats
+ * (single recipient + read flag) and group chats (no recipient, readBy array).
+ */
+async function deliverToConversation(
+  conversation: ConversationDocument,
+  senderId: string,
+  fields: {
+    text?: string;
+    media?: { url: string; mediaType: MessageMediaType; width?: number; height?: number };
+    sharedPlace?: { placeId: string; name: string; imageUrl?: string };
+    preview: string;
+  },
+) {
+  const participantIds = conversation.participants.map((id) => id.toString());
+  const others = participantIds.filter((id) => id !== senderId);
+  const recipientId = conversation.isGroup ? undefined : others[0];
+
+  const message = await Message.create({
+    conversation: conversation._id,
+    sender: senderId,
+    recipient: recipientId,
+    readBy: [senderId],
+    text: fields.text?.trim() ?? '',
+    media: fields.media,
+    sharedPlace: fields.sharedPlace,
+  });
+
+  conversation.lastMessage = fields.preview;
+  conversation.lastMessageAt = message.createdAt;
+  conversation.lastMessageSender = new Types.ObjectId(senderId);
+  await conversation.save();
+
+  await message.populate('sender', PARTICIPANT_FIELDS);
+  const serialized = serializeMessage(message);
+
+  emitToUser(senderId, 'message:new', serialized);
+  for (const other of others) {
+    emitToUser(other, 'message:new', serialized);
+  }
+
+  const senderName = serialized.senderName ?? 'Someone';
+  const title = conversation.isGroup ? conversation.name ?? 'Group chat' : senderName;
+  const body = conversation.isGroup ? `${senderName}: ${fields.preview}` : fields.preview;
+
+  for (const other of others) {
+    if (await isBlockedBetween(senderId, other)) {
+      continue;
+    }
+    if (await isRestricted(other, senderId)) {
+      continue;
+    }
+    if (!(await isMessagePushEnabled(other))) {
+      continue;
+    }
+    await sendPushToUser(other, {
+      title,
+      body: body.length > 140 ? `${body.slice(0, 140)}…` : body,
+      imageUrl: resolveAbsoluteMediaUrl(serialized.senderAvatar),
+      subtitle: conversation.isGroup ? senderName : null,
+      data: {
+        type: 'message',
+        conversationId: conversation._id.toString(),
+        senderId,
+        senderName,
+        isGroup: conversation.isGroup ? '1' : '0',
+      },
+      channelId: 'messages',
+      androidTag: `chat-${conversation._id.toString()}`,
+    });
+  }
+
+  return { message: serialized, conversationId: conversation._id.toString() };
 }
 
 export async function listConversations(userId: string) {
@@ -106,10 +214,34 @@ export async function listConversations(userId: string) {
 
   const items = await Promise.all(
     conversations.map(async (conversation) => {
-      const other = (conversation.participants as unknown as PopulatedUser[]).find(
-        (participant) => participant._id.toString() !== userId,
-      );
+      const participants = conversation.participants as unknown as PopulatedUser[];
+      const lastMessageMine = conversation.lastMessageSender?.toString() === userId;
+      const timeAgo = conversation.lastMessageAt ? formatRelativeTime(conversation.lastMessageAt) : null;
 
+      if (conversation.isGroup) {
+        const unreadCount = await Message.countDocuments({
+          conversation: conversation._id,
+          sender: { $ne: userId },
+          readBy: { $ne: userId },
+        });
+
+        return {
+          id: conversation._id.toString(),
+          isGroup: true,
+          name: conversation.name ?? 'Group chat',
+          avatarUri: null,
+          memberCount: participants.length,
+          isOnline: false,
+          user: null,
+          lastMessage: conversation.lastMessage ?? null,
+          lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
+          lastMessageMine,
+          timeAgo,
+          unreadCount,
+        };
+      }
+
+      const other = participants.find((participant) => participant._id.toString() !== userId);
       const unreadCount = await Message.countDocuments({
         conversation: conversation._id,
         recipient: userId,
@@ -118,11 +250,16 @@ export async function listConversations(userId: string) {
 
       return {
         id: conversation._id.toString(),
+        isGroup: false,
+        name: other ? getUserDisplayName(other) : 'Unknown',
+        avatarUri: other?.profilePhotoUrl ?? null,
+        memberCount: 2,
+        isOnline: other ? isUserOnline(other._id.toString()) : false,
         user: other ? serializeParticipant(other) : null,
         lastMessage: conversation.lastMessage ?? null,
         lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
-        lastMessageMine: conversation.lastMessageSender?.toString() === userId,
-        timeAgo: conversation.lastMessageAt ? formatRelativeTime(conversation.lastMessageAt) : null,
+        lastMessageMine,
+        timeAgo,
         unreadCount,
       };
     }),
@@ -132,7 +269,24 @@ export async function listConversations(userId: string) {
 }
 
 export async function getTotalUnread(userId: string): Promise<number> {
-  return Message.countDocuments({ recipient: userId, read: false });
+  const oneToOne = await Message.countDocuments({ recipient: userId, read: false });
+
+  const groupConversations = await Conversation.find({
+    participants: userId,
+    isGroup: true,
+  }).select('_id');
+
+  if (groupConversations.length === 0) {
+    return oneToOne;
+  }
+
+  const groupUnread = await Message.countDocuments({
+    conversation: { $in: groupConversations.map((conversation) => conversation._id) },
+    sender: { $ne: userId },
+    readBy: { $ne: userId },
+  });
+
+  return oneToOne + groupUnread;
 }
 
 export async function getOrCreateConversationWith(userId: string, targetUserId: string) {
@@ -155,6 +309,58 @@ export async function getOrCreateConversationWith(userId: string, targetUserId: 
   };
 }
 
+export async function createGroup(ownerId: string, name: string, memberIds: string[]) {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new AppError(422, 'Group name is required', 'GROUP_NAME_REQUIRED');
+  }
+
+  const unique = Array.from(new Set(memberIds)).filter((id) => id && id !== ownerId);
+  if (unique.length === 0) {
+    throw new AppError(422, 'Select at least one member', 'GROUP_MEMBERS_REQUIRED');
+  }
+
+  const validMembers: string[] = [];
+  for (const memberId of unique) {
+    if (await isBlockedBetween(ownerId, memberId)) {
+      continue;
+    }
+    const member = await User.findById(memberId);
+    if (member && member.registrationCompleted) {
+      validMembers.push(memberId);
+    }
+  }
+
+  if (validMembers.length === 0) {
+    throw new AppError(422, 'No valid members selected', 'GROUP_MEMBERS_INVALID');
+  }
+
+  const participants = [ownerId, ...validMembers];
+  const now = new Date();
+
+  const conversation = await Conversation.create({
+    participants,
+    isGroup: true,
+    name: trimmedName,
+    owner: ownerId,
+    lastMessage: 'Group created',
+    lastMessageAt: now,
+    lastMessageSender: new Types.ObjectId(ownerId),
+  });
+
+  for (const participantId of participants) {
+    emitToUser(participantId, 'conversation:new', {
+      conversationId: conversation._id.toString(),
+    });
+  }
+
+  return {
+    id: conversation._id.toString(),
+    name: trimmedName,
+    memberCount: participants.length,
+  };
+}
+
 export async function listMessages(userId: string, conversationId: string, limit = 30, before?: string) {
   const conversation = await Conversation.findById(conversationId);
 
@@ -167,74 +373,55 @@ export async function listMessages(userId: string, conversationId: string, limit
     query.createdAt = { $lt: new Date(before) };
   }
 
-  const messages = await Message.find(query).sort({ createdAt: -1 }).limit(limit);
+  const messages = await Message.find(query)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('sender', PARTICIPANT_FIELDS);
 
   const nextCursor =
     messages.length === limit ? messages[messages.length - 1].createdAt.toISOString() : null;
 
-  const other = await User.findById(otherParticipantId(conversation, userId)).select(PARTICIPANT_FIELDS);
+  const participantDocs = await User.find({ _id: { $in: conversation.participants } }).select(
+    PARTICIPANT_FIELDS,
+  );
+  const participants = participantDocs.map((doc) => serializeParticipant(doc as unknown as PopulatedUser));
+
+  const other = conversation.isGroup
+    ? null
+    : participants.find((participant) => participant.id !== userId) ?? null;
 
   return {
     messages: messages.reverse().map(serializeMessage),
     nextCursor,
-    user: other ? serializeParticipant(other as unknown as PopulatedUser) : null,
+    user: other,
+    conversation: {
+      id: conversation._id.toString(),
+      isGroup: conversation.isGroup,
+      name: conversation.name ?? null,
+      memberCount: participants.length,
+      participants,
+    },
   };
 }
 
-export async function sendMessage(senderId: string, conversationId: string | null, recipientId: string | null, text: string) {
+export async function sendMessage(
+  senderId: string,
+  conversationId: string | null,
+  recipientId: string | null,
+  text: string,
+) {
   const trimmed = text.trim();
   if (!trimmed) {
     throw new AppError(422, 'Message cannot be empty', 'EMPTY_MESSAGE');
   }
 
-  let conversation: ConversationDocument | null = null;
+  const conversation = await resolveConversation(senderId, conversationId, recipientId);
 
-  if (conversationId) {
-    conversation = await Conversation.findById(conversationId);
-    if (!conversation || !conversation.participants.some((id) => id.toString() === senderId)) {
-      throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
-    }
-  } else if (recipientId) {
-    conversation = await findOrCreateConversation(senderId, recipientId);
-  } else {
-    throw new AppError(422, 'A conversation or recipient is required', 'INVALID_MESSAGE');
+  if (!conversation.isGroup) {
+    await assertNotBlocked(senderId, otherParticipantId(conversation, senderId));
   }
 
-  const toUserId = otherParticipantId(conversation, senderId);
-
-  await assertNotBlocked(senderId, toUserId);
-
-  const message = await Message.create({
-    conversation: conversation._id,
-    sender: senderId,
-    recipient: toUserId,
-    text: trimmed,
-  });
-
-  conversation.lastMessage = trimmed;
-  conversation.lastMessageAt = message.createdAt;
-  conversation.lastMessageSender = new Types.ObjectId(senderId);
-  await conversation.save();
-
-  const serialized = serializeMessage(message);
-
-  emitToUser(toUserId, 'message:new', serialized);
-  emitToUser(senderId, 'message:new', serialized);
-
-  // Restricted senders are delivered silently (no push), Instagram-style.
-  const restricted = await isRestricted(toUserId, senderId);
-  if (!restricted && (await isMessagePushEnabled(toUserId))) {
-    const sender = await User.findById(senderId);
-    const senderName = sender ? getUserDisplayName(sender) : 'Someone';
-    await sendPushToUser(toUserId, {
-      title: senderName,
-      body: trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed,
-      data: { type: 'message', conversationId: conversation._id.toString() },
-      channelId: 'messages',
-    });
-  }
-
-  return { message: serialized, conversationId: conversation._id.toString() };
+  return deliverToConversation(conversation, senderId, { text: trimmed, preview: trimmed });
 }
 
 export async function sendMediaMessage(
@@ -246,27 +433,17 @@ export async function sendMediaMessage(
 ) {
   const trimmed = text.trim();
 
-  let conversation: ConversationDocument | null = null;
+  const conversation = await resolveConversation(senderId, conversationId, recipientId);
 
-  if (conversationId) {
-    conversation = await Conversation.findById(conversationId);
-    if (!conversation || !conversation.participants.some((id) => id.toString() === senderId)) {
-      throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
-    }
-  } else if (recipientId) {
-    conversation = await findOrCreateConversation(senderId, recipientId);
-  } else {
-    throw new AppError(422, 'A conversation or recipient is required', 'INVALID_MESSAGE');
+  if (!conversation.isGroup) {
+    await assertNotBlocked(senderId, otherParticipantId(conversation, senderId));
   }
 
-  const toUserId = otherParticipantId(conversation, senderId);
+  const preview = trimmed
+    ? `${mediaPreview(media.mediaType)} ${trimmed}`
+    : mediaPreview(media.mediaType);
 
-  await assertNotBlocked(senderId, toUserId);
-
-  const message = await Message.create({
-    conversation: conversation._id,
-    sender: senderId,
-    recipient: toUserId,
+  return deliverToConversation(conversation, senderId, {
     text: trimmed,
     media: {
       url: resolveMessageMediaUrl(media.filename),
@@ -274,32 +451,39 @@ export async function sendMediaMessage(
       width: media.width,
       height: media.height,
     },
+    preview,
   });
+}
 
-  const preview = trimmed ? `${mediaPreview(media.mediaType)} ${trimmed}` : mediaPreview(media.mediaType);
-  conversation.lastMessage = preview;
-  conversation.lastMessageAt = message.createdAt;
-  conversation.lastMessageSender = new Types.ObjectId(senderId);
-  await conversation.save();
+/** Share a place into an existing (1:1 or group) conversation. */
+export async function sharePlaceInConversation(
+  senderId: string,
+  target: { conversationId?: string | null; recipientId?: string | null },
+  place: { placeId: string; name: string; imageUrl?: string | null },
+  note?: string,
+) {
+  const conversation = await resolveConversation(
+    senderId,
+    target.conversationId ?? null,
+    target.recipientId ?? null,
+  );
 
-  const serialized = serializeMessage(message);
-
-  emitToUser(toUserId, 'message:new', serialized);
-  emitToUser(senderId, 'message:new', serialized);
-
-  const restricted = await isRestricted(toUserId, senderId);
-  if (!restricted && (await isMessagePushEnabled(toUserId))) {
-    const sender = await User.findById(senderId);
-    const senderName = sender ? getUserDisplayName(sender) : 'Someone';
-    await sendPushToUser(toUserId, {
-      title: senderName,
-      body: preview,
-      data: { type: 'message', conversationId: conversation._id.toString() },
-      channelId: 'messages',
-    });
+  if (!conversation.isGroup) {
+    await assertNotBlocked(senderId, otherParticipantId(conversation, senderId));
   }
 
-  return { message: serialized, conversationId: conversation._id.toString() };
+  const trimmedNote = note?.trim() ?? '';
+  const preview = trimmedNote ? `${trimmedNote} · ${placePreview(place.name)}` : placePreview(place.name);
+
+  return deliverToConversation(conversation, senderId, {
+    text: trimmedNote,
+    sharedPlace: {
+      placeId: place.placeId,
+      name: place.name,
+      imageUrl: place.imageUrl ?? undefined,
+    },
+    preview,
+  });
 }
 
 export async function sharePlaceWithContacts(
@@ -309,9 +493,6 @@ export async function sharePlaceWithContacts(
   note?: string,
 ) {
   const trimmedNote = note?.trim() ?? '';
-  const sender = await User.findById(senderId);
-  const senderName = sender ? getUserDisplayName(sender) : 'Someone';
-
   const uniqueRecipients = Array.from(new Set(recipientIds)).filter((id) => id && id !== senderId);
 
   const delivered: string[] = [];
@@ -327,37 +508,15 @@ export async function sharePlaceWithContacts(
     }
 
     const conversation = await findOrCreateConversation(senderId, recipientId);
-
-    const message = await Message.create({
-      conversation: conversation._id,
-      sender: senderId,
-      recipient: recipientId,
+    await deliverToConversation(conversation, senderId, {
       text: trimmedNote,
       sharedPlace: {
         placeId: place.placeId,
         name: place.name,
         imageUrl: place.imageUrl ?? undefined,
       },
+      preview: trimmedNote ? `${trimmedNote} · ${placePreview(place.name)}` : placePreview(place.name),
     });
-
-    conversation.lastMessage = trimmedNote || placePreview(place.name);
-    conversation.lastMessageAt = message.createdAt;
-    conversation.lastMessageSender = new Types.ObjectId(senderId);
-    await conversation.save();
-
-    const serialized = serializeMessage(message);
-    emitToUser(recipientId, 'message:new', serialized);
-    emitToUser(senderId, 'message:new', serialized);
-
-    const restricted = await isRestricted(recipientId, senderId);
-    if (!restricted && (await isMessagePushEnabled(recipientId))) {
-      await sendPushToUser(recipientId, {
-        title: senderName,
-        body: trimmedNote ? `${trimmedNote} · ${placePreview(place.name)}` : `shared ${placePreview(place.name)}`,
-        data: { type: 'message', conversationId: conversation._id.toString() },
-        channelId: 'messages',
-      });
-    }
 
     delivered.push(recipientId);
   }
@@ -372,13 +531,20 @@ export async function markConversationRead(userId: string, conversationId: strin
     throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
   }
 
-  await Message.updateMany(
-    { conversation: conversationId, recipient: userId, read: false },
-    { $set: { read: true, readAt: new Date() } },
-  );
+  if (conversation.isGroup) {
+    await Message.updateMany(
+      { conversation: conversationId, sender: { $ne: userId }, readBy: { $ne: userId } },
+      { $addToSet: { readBy: new Types.ObjectId(userId) } },
+    );
+  } else {
+    await Message.updateMany(
+      { conversation: conversationId, recipient: userId, read: false },
+      { $set: { read: true, readAt: new Date() } },
+    );
 
-  const otherUserId = otherParticipantId(conversation, userId);
-  emitToUser(otherUserId, 'message:read', { conversationId });
+    const otherUserId = otherParticipantId(conversation, userId);
+    emitToUser(otherUserId, 'message:read', { conversationId });
+  }
 
   const unreadCount = await getTotalUnread(userId);
   return { conversationId, unreadCount };

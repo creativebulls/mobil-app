@@ -4,11 +4,17 @@ import { isDevelopment } from '../../config/env';
 import { User } from '../../modules/users/user.model';
 import { getFirebaseMessaging } from './firebase';
 
-type PushPayload = {
+export type PushPayload = {
   title: string;
   body: string;
+  /** Absolute HTTPS URL for the sender/actor avatar shown in the notification. */
+  imageUrl?: string | null;
+  /** Shown under the title on iOS; subText on some Android devices. */
+  subtitle?: string | null;
   data?: Record<string, unknown>;
   channelId?: string;
+  /** Groups / replaces notifications for the same thread (e.g. conversation id). */
+  androidTag?: string;
 };
 
 // FCM error codes that mean a token is permanently invalid and should be purged.
@@ -63,21 +69,52 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
 
   const tokens = user.expoPushTokens;
   const channelId = payload.channelId ?? 'default';
+  const imageUrl = payload.imageUrl?.trim() || undefined;
+  const data = toStringData({
+    ...payload.data,
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(payload.subtitle ? { subtitle: payload.subtitle } : {}),
+  });
 
   const message: MulticastMessage = {
     tokens,
     notification: {
       title: payload.title,
       body: payload.body,
+      ...(imageUrl ? { imageUrl } : {}),
     },
-    data: toStringData(payload.data),
+    data,
     android: {
       priority: 'high',
+      collapseKey: payload.androidTag,
       notification: {
         channelId,
         sound: 'default',
         defaultVibrateTimings: true,
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(payload.androidTag ? { tag: payload.androidTag } : {}),
+        color: '#F36464',
       },
+    },
+    apns: {
+      payload: {
+        aps: {
+          alert: {
+            title: payload.title,
+            body: payload.body,
+            ...(payload.subtitle ? { subtitle: payload.subtitle } : {}),
+          },
+          sound: 'default',
+          ...(imageUrl ? { 'mutable-content': 1 } : {}),
+        },
+      },
+      ...(imageUrl
+        ? {
+            fcmOptions: {
+              imageUrl,
+            },
+          }
+        : {}),
     },
   };
 

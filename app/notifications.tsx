@@ -241,11 +241,13 @@ export default function NotificationsScreen() {
                 </View>
 
                 <View style={styles.rowText}>
-                  <Text style={styles.message}>{item.message}</Text>
+                  <Text style={[styles.message, !item.read && styles.messageUnread]}>{item.message}</Text>
                   {item.preview ? (
-                    <Text style={styles.preview} numberOfLines={2}>
-                      “{item.preview}”
-                    </Text>
+                    <View style={styles.previewBubble}>
+                      <Text style={styles.preview} numberOfLines={2}>
+                        {item.preview}
+                      </Text>
+                    </View>
                   ) : null}
                   {item.type === 'friend_request' &&
                   item.friendRequestId &&
@@ -366,13 +368,26 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 14,
-    fontWeight: '700',
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  messageUnread: {
     color: colors.text,
+    fontWeight: '700',
+  },
+  previewBubble: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: colors.inputGray,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
   preview: {
     fontSize: 13,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
+    lineHeight: 18,
+    color: colors.text,
   },
   friendActions: {
     flexDirection: 'row',

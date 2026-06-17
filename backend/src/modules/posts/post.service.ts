@@ -191,6 +191,23 @@ export async function getFeed(currentUserId: string, limit = 20, before?: string
   };
 }
 
+export async function searchPosts(currentUserId: string, q: string, limit = 20) {
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, 'i');
+
+  const query: Record<string, unknown> = {
+    author: { $in: await getVisibleAuthorIds(currentUserId) },
+    $or: [{ text: regex }, { 'place.name': regex }],
+  };
+
+  const posts = await Post.find(query)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('author', AUTHOR_FIELDS);
+
+  return { posts: posts.map((post) => serializePost(post, currentUserId)) };
+}
+
 function placeNameQuery(placeName: string): RegExp {
   const escaped = placeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^${escaped}$`, 'i');

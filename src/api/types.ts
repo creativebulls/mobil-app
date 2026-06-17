@@ -180,6 +180,8 @@ export type ChatUser = {
   avatarUri: string | null;
 };
 
+export type ConversationParticipant = ChatUser;
+
 export type SharedPlace = {
   placeId: string;
   name: string;
@@ -197,7 +199,9 @@ export type ChatMessage = {
   id: string;
   conversationId: string;
   senderId: string;
-  recipientId: string;
+  senderName: string | null;
+  senderAvatar: string | null;
+  recipientId: string | null;
   text: string;
   sharedPlace: SharedPlace | null;
   media: MessageMedia | null;
@@ -208,6 +212,11 @@ export type ChatMessage = {
 
 export type ConversationSummary = {
   id: string;
+  isGroup: boolean;
+  name: string;
+  avatarUri: string | null;
+  memberCount: number;
+  isOnline: boolean;
   user: ChatUser | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
@@ -220,10 +229,25 @@ export type ConversationsResponse = {
   conversations: ConversationSummary[];
 };
 
+export type ConversationMeta = {
+  id: string;
+  isGroup: boolean;
+  name: string | null;
+  memberCount: number;
+  participants: ChatUser[];
+};
+
 export type MessagesResponse = {
   messages: ChatMessage[];
   nextCursor: string | null;
   user: ChatUser | null;
+  conversation: ConversationMeta;
+};
+
+export type CreateGroupResponse = {
+  id: string;
+  name: string;
+  memberCount: number;
 };
 
 export type SendMessageResponse = {

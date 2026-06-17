@@ -4,7 +4,12 @@ import { requireAuth, requireVerifiedEmail, type AuthenticatedRequest } from '..
 import { MAX_POST_IMAGES, postImageUpload } from '../../shared/middleware/upload.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import * as postService from './post.service';
-import { addCommentSchema, createPostSchema, feedQuerySchema } from './post.validation';
+import {
+  addCommentSchema,
+  createPostSchema,
+  feedQuerySchema,
+  searchPostsQuerySchema,
+} from './post.validation';
 
 export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const body = createPostSchema.parse({
@@ -32,6 +37,12 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
 export const getFeed = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = feedQuerySchema.parse(req.query);
   const result = await postService.getFeed(req.auth!.userId, query.limit, query.before);
+  sendSuccess(res, result);
+});
+
+export const searchPosts = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const query = searchPostsQuerySchema.parse(req.query);
+  const result = await postService.searchPosts(req.auth!.userId, query.q, query.limit);
   sendSuccess(res, result);
 });
 

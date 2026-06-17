@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Server, type Socket } from 'socket.io';
 
 import { env } from '../config/env';
+import { FriendRequest } from '../modules/friends/friend-request.model';
 import {
   verifyAccessToken,
   verifyPendingSessionToken,
@@ -13,6 +14,32 @@ import {
 let io: Server | null = null;
 
 const pendingSessionRooms = new Map<string, string>();
+
+// Tracks how many active sockets each user has. A user is "online" while the
+// count is > 0, which tolerates multiple devices/tabs gracefully.
+const onlineCounts = new Map<string, number>();
+
+export function isUserOnline(userId: string): boolean {
+  return (onlineCounts.get(userId) ?? 0) > 0;
+}
+
+async function getFriendIds(userId: string): Promise<string[]> {
+  const accepted = await FriendRequest.find({
+    status: 'accepted',
+    $or: [{ from: userId }, { to: userId }],
+  }).select('from to');
+
+  return accepted.map((req) =>
+    req.from.toString() === userId ? req.to.toString() : req.from.toString(),
+  );
+}
+
+async function broadcastPresence(userId: string, online: boolean): Promise<void> {
+  const friendIds = await getFriendIds(userId);
+  for (const friendId of friendIds) {
+    io?.to(`user:${friendId}`).emit('presence:update', { userId, online });
+  }
+}
 
 export function initializeSocket(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
@@ -59,15 +86,38 @@ export function initializeSocket(httpServer: HttpServer): Server {
 
     socket.join(`user:${userId}`);
 
+    const isFullSession = tokenType !== 'pending';
+
     if (tokenType === 'pending') {
       pendingSessionRooms.set(userId, socket.id);
       socket.join(`pending:${userId}`);
+    }
+
+    if (isFullSession) {
+      const previous = onlineCounts.get(userId) ?? 0;
+      onlineCounts.set(userId, previous + 1);
+      // Only announce the transition offline -> online to avoid noise from
+      // additional devices/reconnects.
+      if (previous === 0) {
+        void broadcastPresence(userId, true);
+      }
+      // Send this client the set of friends that are currently online.
+      void getFriendIds(userId).then((friendIds) => {
+        socket.emit('presence:list', { online: friendIds.filter(isUserOnline) });
+      });
     }
 
     socket.emit('connection:ready', {
       userId,
       tokenType,
       message: 'Connected to WhereAbout realtime service',
+    });
+
+    // A client can ask for the current online set (e.g. after a screen mounts).
+    socket.on('presence:request', () => {
+      void getFriendIds(userId).then((friendIds) => {
+        socket.emit('presence:list', { online: friendIds.filter(isUserOnline) });
+      });
     });
 
     // Relay lightweight typing indicators directly to the other participant.
@@ -132,6 +182,16 @@ export function initializeSocket(httpServer: HttpServer): Server {
     socket.on('disconnect', () => {
       if (pendingSessionRooms.get(userId) === socket.id) {
         pendingSessionRooms.delete(userId);
+      }
+
+      if (isFullSession) {
+        const previous = onlineCounts.get(userId) ?? 0;
+        if (previous <= 1) {
+          onlineCounts.delete(userId);
+          void broadcastPresence(userId, false);
+        } else {
+          onlineCounts.set(userId, previous - 1);
+        }
       }
     });
   });

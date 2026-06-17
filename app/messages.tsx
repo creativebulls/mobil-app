@@ -19,10 +19,12 @@ import { FeedHeader } from '../src/components/FeedHeader';
 import { MainScreenLayout } from '../src/components/MainScreenLayout';
 import { Avatar } from '../src/components/Avatar';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
+import { usePresence } from '../src/realtime/PresenceProvider';
 import { colors } from '../src/theme/colors';
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const presence = usePresence();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -31,12 +33,17 @@ export default function MessagesScreen() {
     try {
       const result = await fetchConversations();
       setConversations(result.conversations);
+      presence.seed(
+        result.conversations
+          .filter((item) => item.isOnline && item.user?.id)
+          .map((item) => item.user!.id),
+      );
     } catch {
       // Keep whatever we have; the empty state covers the first-load failure.
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [presence]);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,9 +69,10 @@ export default function MessagesScreen() {
       pathname: '/chat',
       params: {
         conversationId: item.id,
+        isGroup: item.isGroup ? '1' : '',
         userId: item.user?.id ?? '',
-        name: item.user?.name ?? 'Chat',
-        avatarUri: item.user?.avatarUri ?? '',
+        name: item.isGroup ? item.name : item.user?.name ?? 'Chat',
+        avatarUri: item.avatarUri ?? '',
       },
     });
   }
@@ -73,7 +81,7 @@ export default function MessagesScreen() {
     <MainScreenLayout activeTab="messages">
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <FeedHeader title="Messages" />
+        <FeedHeader title="Messages" onAddPress={() => router.push('/new-group')} />
 
         {isLoading ? (
           <ActivityIndicator color={colors.brand} style={styles.loader} />
@@ -98,10 +106,24 @@ export default function MessagesScreen() {
                   onPress={() => openConversation(item)}
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                 >
-                  <Avatar uri={item.user?.avatarUri} name={item.user?.name} size={56} />
+                  {item.isGroup ? (
+                    <View style={styles.groupGlyph}>
+                      <Ionicons name="people" size={26} color={colors.white} />
+                    </View>
+                  ) : (
+                    <Avatar
+                      uri={item.user?.avatarUri}
+                      name={item.user?.name}
+                      size={56}
+                      online={presence.isOnline(item.user?.id)}
+                    />
+                  )}
                   <View style={styles.rowText}>
                     <Text style={styles.name} numberOfLines={1}>
-                      {item.user?.name ?? 'Unknown'}
+                      {item.isGroup ? item.name : item.user?.name ?? 'Unknown'}
+                      {item.isGroup ? (
+                        <Text style={styles.memberCount}> · {item.memberCount}</Text>
+                      ) : null}
                     </Text>
                     <Text
                       style={[styles.preview, unread && styles.previewUnread]}
@@ -177,6 +199,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
+  },
+  groupGlyph: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.labelGray,
   },
   preview: {
     fontSize: 14,

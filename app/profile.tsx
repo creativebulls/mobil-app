@@ -245,10 +245,10 @@ export default function ProfileScreen() {
                 <Text style={styles.statLabel}>Points</Text>
               </View>
               <View style={styles.statDivider} />
-              <View style={styles.statItem}>
+              <Pressable style={styles.statItem} onPress={() => router.push('/friends')}>
                 <Text style={styles.statValue}>{stats?.friendsCount ?? 0}</Text>
                 <Text style={styles.statLabel}>Friends</Text>
-              </View>
+              </Pressable>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{stats?.postsCount ?? 0}</Text>

@@ -35,3 +35,17 @@ export const sharePlaceSchema = z.object({
   recipientIds: z.array(z.string().min(1)).min(1).max(30),
   note: z.string().trim().max(2000).optional(),
 });
+
+export const createGroupSchema = z.object({
+  name: z.string().trim().min(1, 'Group name is required').max(80),
+  memberIds: z.array(z.string().min(1)).min(1, 'Select at least one member').max(50),
+});
+
+export const sharePlaceInConversationSchema = z.object({
+  conversationId: z.string().min(1).optional(),
+  recipientId: z.string().min(1).optional(),
+  placeId: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
+  imageUrl: z.string().trim().max(1000).optional(),
+  note: z.string().trim().max(2000).optional(),
+});

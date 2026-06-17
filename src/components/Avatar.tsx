@@ -8,6 +8,7 @@ type AvatarProps = {
   name?: string | null;
   size?: number;
   style?: ViewStyle;
+  online?: boolean;
 };
 
 function getInitials(name?: string | null): string {
@@ -23,23 +24,50 @@ function getInitials(name?: string | null): string {
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
-export function Avatar({ uri, name, size = 44, style }: AvatarProps) {
+export function Avatar({ uri, name, size = 44, style, online = false }: AvatarProps) {
   const dimensions = { width: size, height: size, borderRadius: size / 2 };
   const resolvedUri = useMediaUrl(uri);
 
-  if (resolvedUri) {
+  if (!online) {
+    if (resolvedUri) {
+      return (
+        <Image
+          source={{ uri: resolvedUri }}
+          style={[dimensions, styles.image, style as ImageStyle]}
+          resizeMode="cover"
+        />
+      );
+    }
+
     return (
-      <Image
-        source={{ uri: resolvedUri }}
-        style={[dimensions, styles.image, style as ImageStyle]}
-        resizeMode="cover"
-      />
+      <View style={[dimensions, styles.placeholder, style]}>
+        <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{getInitials(name)}</Text>
+      </View>
     );
   }
 
+  const dotSize = Math.max(10, Math.round(size * 0.26));
+
   return (
-    <View style={[dimensions, styles.placeholder, style]}>
-      <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{getInitials(name)}</Text>
+    <View style={[{ width: size, height: size }, style]}>
+      {resolvedUri ? (
+        <Image source={{ uri: resolvedUri }} style={[dimensions, styles.image]} resizeMode="cover" />
+      ) : (
+        <View style={[dimensions, styles.placeholder]}>
+          <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{getInitials(name)}</Text>
+        </View>
+      )}
+      <View
+        style={[
+          styles.onlineDot,
+          {
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            borderWidth: Math.max(1.5, dotSize * 0.16),
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -56,5 +84,12 @@ const styles = StyleSheet.create({
   initials: {
     fontWeight: '800',
     color: colors.brand,
+  },
+  onlineDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#22C55E',
+    borderColor: colors.white,
   },
 });

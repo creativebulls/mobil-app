@@ -19,6 +19,12 @@ export async function fetchFeed(cursor?: string | null, limit = 20): Promise<Fee
   return apiRequest<FeedResponse>(`/posts?${params.toString()}`);
 }
 
+export async function searchPosts(query: string): Promise<{ posts: Post[] }> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  return apiRequest<{ posts: Post[] }>(`/posts/search?${params.toString()}`);
+}
+
 export async function createPost(input: {
   text?: string;
   imageUris?: string[];

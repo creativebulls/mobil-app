@@ -18,12 +18,16 @@ export interface IMessageMedia {
 export interface IMessage {
   conversation: Types.ObjectId;
   sender: Types.ObjectId;
-  recipient: Types.ObjectId;
+  // Single recipient for 1:1 chats; undefined for group conversations.
+  recipient?: Types.ObjectId;
   text: string;
   sharedPlace?: ISharedPlace;
   media?: IMessageMedia;
+  // 1:1 read flag (drives delivery/read ticks).
   read: boolean;
   readAt?: Date;
+  // Per-user read tracking used for group conversations (and includes the sender).
+  readBy: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,13 +57,14 @@ const messageSchema = new Schema<MessageDocument>(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
     sender: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    recipient: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recipient: { type: Schema.Types.ObjectId, ref: 'User' },
     // Text is optional when a place is attached, but a message must carry one or the other.
     text: { type: String, default: '', trim: true, maxlength: 2000 },
     sharedPlace: { type: sharedPlaceSchema, default: undefined },
     media: { type: mediaSchema, default: undefined },
     read: { type: Boolean, default: false },
     readAt: { type: Date },
+    readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true },
 );

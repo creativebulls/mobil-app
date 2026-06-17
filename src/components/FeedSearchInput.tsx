@@ -9,6 +9,7 @@ type FeedSearchInputProps = {
   onChangeText?: (text: string) => void;
   placeholder?: string;
   onSubmit?: (text: string) => void;
+  autoFocus?: boolean;
 };
 
 export function FeedSearchInput({
@@ -16,6 +17,7 @@ export function FeedSearchInput({
   onChangeText,
   placeholder = 'Search places, people…',
   onSubmit,
+  autoFocus = false,
 }: FeedSearchInputProps) {
   const [internalValue, setInternalValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -47,6 +49,7 @@ export function FeedSearchInput({
         <TextInput
           value={query}
           onChangeText={handleChangeText}
+          autoFocus={autoFocus}
           placeholder={placeholder}
           placeholderTextColor={colors.labelGray}
           style={styles.input}
