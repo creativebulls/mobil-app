@@ -11,6 +11,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { updateProfileNames } from '../src/api/authApi';
+import { getErrorMessage } from '../src/api/types';
+import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
+import { BrandButton } from '../src/components/BrandButton';
 import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { updateStoredUser } from '../src/storage/authSession';
@@ -71,7 +75,7 @@ export default function YourNameScreen() {
 
         <KeyboardAvoidingView
           style={styles.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
             contentContainerStyle={styles.content}

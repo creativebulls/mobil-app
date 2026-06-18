@@ -27,7 +27,7 @@ export async function searchPosts(query: string): Promise<{ posts: Post[] }> {
 
 export async function createPost(input: {
   text?: string;
-  imageUris?: string[];
+  media?: { uri: string; type: 'image' | 'video' }[];
   reaction?: PostReaction | null;
   placeName?: string;
   placeDistanceKm?: number;
@@ -50,11 +50,12 @@ export async function createPost(input: {
     formData.append('placeDistanceKm', String(input.placeDistanceKm));
   }
 
-  (input.imageUris ?? []).forEach((uri, index) => {
+  (input.media ?? []).forEach((item, index) => {
+    const isVideo = item.type === 'video';
     formData.append('images', {
-      uri,
-      name: `post-${index}.jpg`,
-      type: 'image/jpeg',
+      uri: item.uri,
+      name: `post-${index}.${isVideo ? 'mp4' : 'jpg'}`,
+      type: isVideo ? 'video/mp4' : 'image/jpeg',
     } as unknown as Blob);
   });
 

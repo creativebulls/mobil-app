@@ -23,9 +23,13 @@ export const sendMediaMessageSchema = z.object({
   conversationId: z.string().min(1).optional(),
   recipientId: z.string().min(1).optional(),
   text: z.string().trim().max(2000).optional(),
-  mediaType: z.enum(['image', 'video']),
+  mediaType: z.enum(['image', 'video', 'audio', 'file']),
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional(),
+  fileName: z.string().trim().max(255).optional(),
+  fileSize: z.coerce.number().int().nonnegative().optional(),
+  mimeType: z.string().trim().max(150).optional(),
+  durationMs: z.coerce.number().int().nonnegative().optional(),
 });
 
 export const sharePlaceSchema = z.object({

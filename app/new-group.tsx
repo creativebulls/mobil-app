@@ -156,7 +156,7 @@ export default function NewGroupScreen() {
 
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.nameRow}>
             <Pressable

@@ -17,6 +17,7 @@ import { toggleLike as toggleLikeRequest, deletePost as deletePostRequest } from
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
 import { PostImageViewer } from './PostImageViewer';
+import { PostVideoModal, PostVideoTile, isVideoUrl } from './PostVideo';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
 import { colors } from '../theme/colors';
@@ -72,6 +73,7 @@ export function FeedPostCard({
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [videoViewerUri, setVideoViewerUri] = useState<string | null>(null);
 
   const menuButtonRef = useRef<View>(null);
   const dialog = useDialog();
@@ -85,6 +87,8 @@ export function FeedPostCard({
       : post.imageUri
         ? [post.imageUri]
         : [];
+  // The fullscreen swipe viewer only handles photos; videos open a player.
+  const imageOnly = postImages.filter((uri) => !isVideoUrl(uri));
 
   async function handleLikePress() {
     if (isLiking) {
@@ -194,6 +198,17 @@ export function FeedPostCard({
     setViewerVisible(true);
   }
 
+  // Maps a post-media item to either the photo viewer (by its index among
+  // photos) or the fullscreen video player.
+  function openMedia(uri: string) {
+    if (isVideoUrl(uri)) {
+      setVideoViewerUri(uri);
+      return;
+    }
+    const imageIndex = imageOnly.indexOf(uri);
+    openViewer(imageIndex < 0 ? 0 : imageIndex);
+  }
+
   const menuOptions: PostMenuOption[] = [
     { key: 'hide', label: 'Hide post from timeline', icon: 'eye-off-outline', onPress: handleHide },
     { key: 'report', label: 'Report', icon: 'flag-outline', onPress: handleReport },
@@ -292,9 +307,17 @@ export function FeedPostCard({
         ) : null}
 
         {postImages.length === 1 ? (
-          <Pressable onPress={() => openViewer(0)} accessibilityRole="imagebutton">
-            <MediaImage uri={postImages[0]} style={styles.postImage} resizeMode="cover" />
-          </Pressable>
+          isVideoUrl(postImages[0]) ? (
+            <PostVideoTile
+              uri={postImages[0]}
+              style={styles.postImage}
+              onPress={() => openMedia(postImages[0])}
+            />
+          ) : (
+            <Pressable onPress={() => openMedia(postImages[0])} accessibilityRole="imagebutton">
+              <MediaImage uri={postImages[0]} style={styles.postImage} resizeMode="cover" />
+            </Pressable>
+          )
         ) : postImages.length > 1 ? (
           <View style={styles.carouselWrap}>
             <FlatList
@@ -314,11 +337,19 @@ export function FeedPostCard({
                 offset: CAROUSEL_WIDTH * index,
                 index,
               })}
-              renderItem={({ item, index }) => (
-                <Pressable onPress={() => openViewer(index)} accessibilityRole="imagebutton">
-                  <MediaImage uri={item} style={styles.carouselImage} resizeMode="cover" />
-                </Pressable>
-              )}
+              renderItem={({ item }) =>
+                isVideoUrl(item) ? (
+                  <PostVideoTile
+                    uri={item}
+                    style={styles.carouselImage}
+                    onPress={() => openMedia(item)}
+                  />
+                ) : (
+                  <Pressable onPress={() => openMedia(item)} accessibilityRole="imagebutton">
+                    <MediaImage uri={item} style={styles.carouselImage} resizeMode="cover" />
+                  </Pressable>
+                )
+              }
             />
 
             <View style={styles.carouselDots}>
@@ -384,7 +415,7 @@ export function FeedPostCard({
       {viewerVisible ? (
         <PostImageViewer
           visible={viewerVisible}
-          images={postImages}
+          images={imageOnly}
           initialIndex={viewerIndex}
           post={post}
           likedByMe={likedByMe}
@@ -396,6 +427,8 @@ export function FeedPostCard({
           onClose={() => setViewerVisible(false)}
         />
       ) : null}
+
+      <PostVideoModal uri={videoViewerUri} onClose={() => setVideoViewerUri(null)} />
     </View>
   );
 }

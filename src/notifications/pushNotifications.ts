@@ -5,30 +5,29 @@ import { AppState, Platform } from 'react-native';
 
 import { registerPushToken, removePushToken } from '../api/notificationsApi';
 import { getAccessToken } from '../storage/authSession';
-import { presentRichNotification } from './displayNotification';
 
 const PUSH_TOKEN_KEY = '@whereabout/fcm_push_token';
+
+// Notification types that the in-app heads-up banner renders with a richer UI
+// (rounded avatar + name + message). For these we suppress the OS notification
+// while the app is in the foreground to avoid showing it twice.
+const IN_APP_BANNER_TYPES = new Set([
+  'message',
+  'like',
+  'comment',
+  'reply',
+  'comment_like',
+  'friend_request',
+  'friend_request_accepted',
+]);
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const content = notification.request.content;
     const data = (content.data ?? {}) as Record<string, string>;
-    const imageUrl = data.imageUrl ?? null;
-    const channelId = data.type === 'message' ? 'messages' : 'default';
-    const subtitle = content.subtitle ?? data.subtitle ?? null;
 
-    // In the foreground, re-present with avatar attachment so message/social
-    // pushes look like proper chat notifications (profile pic + subtitle).
-    if (AppState.currentState === 'active' && (imageUrl || subtitle)) {
-      await presentRichNotification({
-        title: content.title ?? '',
-        body: content.body ?? '',
-        subtitle,
-        imageUrl,
-        data,
-        channelId,
-      });
-
+    if (AppState.currentState === 'active' && IN_APP_BANNER_TYPES.has(data.type)) {
+      // The themed in-app banner handles this; just play the sound + badge.
       return {
         shouldPlaySound: true,
         shouldSetBadge: true,

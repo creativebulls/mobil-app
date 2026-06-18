@@ -35,6 +35,8 @@ const REACTIONS: {
   { key: 'love', label: 'I love it', icon: 'heart-outline', activeIcon: 'heart' },
 ];
 
+type PostMediaItem = { uri: string; type: 'image' | 'video' };
+
 export default function CreatePostScreen() {
   const router = useRouter();
   const dialog = useDialog();
@@ -42,7 +44,7 @@ export default function CreatePostScreen() {
   const isPlaceMode = Boolean(params.placeName);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [text, setText] = useState('');
-  const [imageUris, setImageUris] = useState<string[]>([]);
+  const [media, setMedia] = useState<PostMediaItem[]>([]);
   const [placeName, setPlaceName] = useState(params.placeName ?? '');
   const [reaction, setReaction] = useState<PostReaction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,13 +64,13 @@ export default function CreatePostScreen() {
         : user?.email?.split('@')[0] ?? 'You';
 
   const MAX_IMAGES = 6;
-  const canPost = (text.trim().length > 0 || imageUris.length > 0) && !isSubmitting;
+  const canPost = (text.trim().length > 0 || media.length > 0) && !isSubmitting;
 
   async function handlePickImage() {
-    if (imageUris.length >= MAX_IMAGES) {
+    if (media.length >= MAX_IMAGES) {
       await dialog.alert({
         title: 'Limit reached',
-        message: `You can add up to ${MAX_IMAGES} images.`,
+        message: `You can add up to ${MAX_IMAGES} items.`,
       });
       return;
     }
@@ -77,26 +79,67 @@ export default function CreatePostScreen() {
     if (!permission.granted) {
       await dialog.alert({
         title: 'Permission required',
-        message: 'Please allow photo access to add an image.',
+        message: 'Please allow photo access to add photos or videos.',
       });
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ['images', 'videos'],
       allowsMultipleSelection: true,
-      selectionLimit: MAX_IMAGES - imageUris.length,
+      selectionLimit: MAX_IMAGES - media.length,
       quality: 0.85,
+      videoMaxDuration: 60,
+      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
     });
 
     if (!result.canceled) {
-      const picked = result.assets.map((asset) => asset.uri);
-      setImageUris((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
+      const picked: PostMediaItem[] = result.assets.map((asset) => ({
+        uri: asset.uri,
+        type: asset.type === 'video' ? 'video' : 'image',
+      }));
+      setMedia((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
     }
   }
 
-  function removeImage(uri: string) {
-    setImageUris((prev) => prev.filter((item) => item !== uri));
+  async function handleCaptureMedia() {
+    if (media.length >= MAX_IMAGES) {
+      await dialog.alert({
+        title: 'Limit reached',
+        message: `You can add up to ${MAX_IMAGES} items.`,
+      });
+      return;
+    }
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      await dialog.alert({
+        title: 'Camera access',
+        message: 'Allow camera access to capture photos and videos.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.85,
+      videoMaxDuration: 60,
+      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+    });
+
+    if (!result.canceled && result.assets?.length) {
+      const asset = result.assets[0];
+      setMedia((prev) =>
+        [...prev, { uri: asset.uri, type: asset.type === 'video' ? 'video' : 'image' }].slice(
+          0,
+          MAX_IMAGES,
+        ) as PostMediaItem[],
+      );
+    }
+  }
+
+  function removeMedia(uri: string) {
+    setMedia((prev) => prev.filter((item) => item.uri !== uri));
   }
 
   async function handleSubmit() {
@@ -110,7 +153,7 @@ export default function CreatePostScreen() {
     try {
       await createPost({
         text: text.trim() || undefined,
-        imageUris,
+        media,
         reaction: isPlaceMode ? reaction : null,
         placeName: placeName.trim() || undefined,
       });
@@ -146,7 +189,7 @@ export default function CreatePostScreen() {
 
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <View style={styles.authorRow}>
@@ -175,26 +218,44 @@ export default function CreatePostScreen() {
                   maxLength={2000}
                 />
 
-                <Text style={styles.sectionLabel}>Add photos to post</Text>
-                {imageUris.length === 0 ? (
-                  <Pressable
-                    onPress={handlePickImage}
-                    style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add photos"
-                  >
-                    <Ionicons name="camera-outline" size={32} color={colors.brand} />
-                    <Text style={styles.addTileText}>Add photos</Text>
-                  </Pressable>
+                <Text style={styles.sectionLabel}>Add photos or videos</Text>
+                {media.length === 0 ? (
+                  <View style={styles.emptyMediaRow}>
+                    <Pressable
+                      onPress={() => void handleCaptureMedia()}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Capture photo or video"
+                    >
+                      <Ionicons name="camera" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Camera</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handlePickImage}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add from gallery"
+                    >
+                      <Ionicons name="images" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Gallery</Text>
+                    </Pressable>
+                  </View>
                 ) : (
                   <View style={styles.tilesGrid}>
-                    {imageUris.map((uri) => (
-                      <View key={uri} style={styles.tileWrap}>
-                        <Image source={{ uri }} style={styles.tileImage} resizeMode="cover" />
+                    {media.map((item) => (
+                      <View key={item.uri} style={styles.tileWrap}>
+                        {item.type === 'video' ? (
+                          <View style={[styles.tileImage, styles.videoTile]}>
+                            <Ionicons name="play-circle" size={34} color={colors.white} />
+                            <Text style={styles.videoTileLabel}>Video</Text>
+                          </View>
+                        ) : (
+                          <Image source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+                        )}
                         <Pressable
-                          onPress={() => removeImage(uri)}
+                          onPress={() => removeMedia(item.uri)}
                           style={styles.removeImageButton}
-                          accessibilityLabel="Remove image"
+                          accessibilityLabel="Remove"
                           hitSlop={8}
                         >
                           <Ionicons name="close-circle" size={24} color={colors.white} />
@@ -202,15 +263,26 @@ export default function CreatePostScreen() {
                       </View>
                     ))}
 
-                    {imageUris.length < MAX_IMAGES ? (
+                    {media.length < MAX_IMAGES ? (
+                      <Pressable
+                        onPress={() => void handleCaptureMedia()}
+                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Capture photo or video"
+                      >
+                        <Ionicons name="camera" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Camera</Text>
+                      </Pressable>
+                    ) : null}
+                    {media.length < MAX_IMAGES ? (
                       <Pressable
                         onPress={handlePickImage}
                         style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
                         accessibilityRole="button"
-                        accessibilityLabel="Add photos"
+                        accessibilityLabel="Add from gallery"
                       >
-                        <Ionicons name="camera-outline" size={26} color={colors.brand} />
-                        <Text style={styles.addTileText}>Add</Text>
+                        <Ionicons name="images" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Gallery</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -255,15 +327,22 @@ export default function CreatePostScreen() {
                   maxLength={2000}
                 />
 
-                {imageUris.length > 0 ? (
+                {media.length > 0 ? (
                   <View style={styles.tilesGrid}>
-                    {imageUris.map((uri) => (
-                      <View key={uri} style={styles.tileWrap}>
-                        <Image source={{ uri }} style={styles.tileImage} resizeMode="cover" />
+                    {media.map((item) => (
+                      <View key={item.uri} style={styles.tileWrap}>
+                        {item.type === 'video' ? (
+                          <View style={[styles.tileImage, styles.videoTile]}>
+                            <Ionicons name="play-circle" size={34} color={colors.white} />
+                            <Text style={styles.videoTileLabel}>Video</Text>
+                          </View>
+                        ) : (
+                          <Image source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+                        )}
                         <Pressable
-                          onPress={() => removeImage(uri)}
+                          onPress={() => removeMedia(item.uri)}
                           style={styles.removeImageButton}
-                          accessibilityLabel="Remove image"
+                          accessibilityLabel="Remove"
                           hitSlop={8}
                         >
                           <Ionicons name="close-circle" size={24} color={colors.white} />
@@ -294,15 +373,26 @@ export default function CreatePostScreen() {
             {isPlaceMode ? (
               <View />
             ) : (
-              <Pressable
-                onPress={handlePickImage}
-                style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Add photo"
-              >
-                <Ionicons name="image-outline" size={24} color={colors.brand} />
-                <Text style={styles.toolbarLabel}>Photo</Text>
-              </Pressable>
+              <View style={styles.toolbarButtons}>
+                <Pressable
+                  onPress={() => void handleCaptureMedia()}
+                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Capture photo or video"
+                >
+                  <Ionicons name="camera-outline" size={24} color={colors.brand} />
+                  <Text style={styles.toolbarLabel}>Camera</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handlePickImage}
+                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add photo or video"
+                >
+                  <Ionicons name="image-outline" size={24} color={colors.brand} />
+                  <Text style={styles.toolbarLabel}>Gallery</Text>
+                </Pressable>
+              </View>
             )}
 
             {isSubmitting ? <ActivityIndicator color={colors.brand} /> : null}
@@ -400,9 +490,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
   },
+  emptyMediaRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   addPhotoBox: {
-    width: '100%',
-    minHeight: 120,
+    flex: 1,
+    minHeight: 110,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -474,6 +568,17 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.inputGray,
   },
+  videoTile: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: '#1f2530',
+  },
+  videoTileLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.white,
+  },
   removeImageButton: {
     position: 'absolute',
     top: 4,
@@ -509,6 +614,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  toolbarButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
   },
   toolbarButton: {
     flexDirection: 'row',

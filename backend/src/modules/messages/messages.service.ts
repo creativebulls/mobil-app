@@ -60,6 +60,10 @@ function serializeMessage(message: MessageDocument) {
           mediaType: message.media.mediaType,
           width: message.media.width ?? null,
           height: message.media.height ?? null,
+          fileName: message.media.fileName ?? null,
+          fileSize: message.media.fileSize ?? null,
+          mimeType: message.media.mimeType ?? null,
+          durationMs: message.media.durationMs ?? null,
         }
       : null,
     read: message.read,
@@ -80,8 +84,60 @@ function resolveGroupPhotoUrl(filename: string): string {
   return `/uploads/group-photos/${filename}`;
 }
 
-function mediaPreview(type: MessageMediaType): string {
-  return type === 'video' ? '🎥 Video' : '📷 Photo';
+function mediaPreview(type: MessageMediaType, fileName?: string): string {
+  switch (type) {
+    case 'video':
+      return '🎥 Video';
+    case 'audio':
+      return '🎤 Voice message';
+    case 'file':
+      return fileName ? `📎 ${fileName}` : '📎 Attachment';
+    default:
+      return '📷 Photo';
+  }
+}
+
+/**
+ * Human-friendly wording for push notifications, e.g. "shared a photo with you".
+ * `direct` is used in 1:1 chats (the sender's name is already the title); `group`
+ * is prefixed with the sender's name for group chats.
+ */
+function mediaNotificationPhrase(
+  type: MessageMediaType,
+  fileName?: string,
+): { direct: string; group: string } {
+  switch (type) {
+    case 'video':
+      return { direct: 'Shared a video with you', group: 'shared a video' };
+    case 'audio':
+      return { direct: 'Sent you a voice message', group: 'sent a voice message' };
+    case 'file':
+      return fileName
+        ? { direct: `Shared a file with you: ${fileName}`, group: `shared a file: ${fileName}` }
+        : { direct: 'Shared a file with you', group: 'shared a file' };
+    default:
+      return { direct: 'Shared a photo with you', group: 'shared a photo' };
+  }
+}
+
+/** Builds the push-notification body shown to a recipient (not the chat-list preview). */
+function notificationBody(
+  fields: { text?: string; media?: { mediaType: MessageMediaType; fileName?: string }; sharedPlace?: unknown; preview: string },
+  senderName: string,
+  isGroup: boolean,
+): string {
+  const caption = fields.text?.trim();
+  if (caption) {
+    return isGroup ? `${senderName}: ${caption}` : caption;
+  }
+  if (fields.media) {
+    const phrase = mediaNotificationPhrase(fields.media.mediaType, fields.media.fileName);
+    return isGroup ? `${senderName} ${phrase.group}` : phrase.direct;
+  }
+  if (fields.sharedPlace) {
+    return isGroup ? `${senderName} shared a location` : 'Shared a location with you';
+  }
+  return isGroup ? `${senderName}: ${fields.preview}` : fields.preview;
 }
 
 async function isMessagePushEnabled(userId: string): Promise<boolean> {
@@ -141,7 +197,16 @@ async function deliverToConversation(
   senderId: string,
   fields: {
     text?: string;
-    media?: { url: string; mediaType: MessageMediaType; width?: number; height?: number };
+    media?: {
+      url: string;
+      mediaType: MessageMediaType;
+      width?: number;
+      height?: number;
+      fileName?: string;
+      fileSize?: number;
+      mimeType?: string;
+      durationMs?: number;
+    };
     sharedPlace?: { placeId: string; name: string; imageUrl?: string };
     preview: string;
   },
@@ -175,7 +240,7 @@ async function deliverToConversation(
 
   const senderName = serialized.senderName ?? 'Someone';
   const title = conversation.isGroup ? conversation.name ?? 'Group chat' : senderName;
-  const body = conversation.isGroup ? `${senderName}: ${fields.preview}` : fields.preview;
+  const body = notificationBody(fields, senderName, conversation.isGroup);
 
   for (const other of others) {
     if (await isBlockedBetween(senderId, other)) {
@@ -627,7 +692,16 @@ export async function sendMediaMessage(
   senderId: string,
   conversationId: string | null,
   recipientId: string | null,
-  media: { filename: string; mediaType: MessageMediaType; width?: number; height?: number },
+  media: {
+    filename: string;
+    mediaType: MessageMediaType;
+    width?: number;
+    height?: number;
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+    durationMs?: number;
+  },
   text: string,
 ) {
   const trimmed = text.trim();
@@ -638,9 +712,8 @@ export async function sendMediaMessage(
     await assertNotBlocked(senderId, otherParticipantId(conversation, senderId));
   }
 
-  const preview = trimmed
-    ? `${mediaPreview(media.mediaType)} ${trimmed}`
-    : mediaPreview(media.mediaType);
+  const label = mediaPreview(media.mediaType, media.fileName);
+  const preview = trimmed ? `${label} ${trimmed}` : label;
 
   return deliverToConversation(conversation, senderId, {
     text: trimmed,
@@ -649,6 +722,10 @@ export async function sendMediaMessage(
       mediaType: media.mediaType,
       width: media.width,
       height: media.height,
+      fileName: media.fileName,
+      fileSize: media.fileSize,
+      mimeType: media.mimeType,
+      durationMs: media.durationMs,
     },
     preview,
   });

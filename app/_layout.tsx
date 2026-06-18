@@ -7,9 +7,11 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { StyleSheet } from 'react-native';
 
 import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
+import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { CallProvider } from '../src/calls/CallProvider';
 import { LiveAudioProvider } from '../src/calls/LiveAudioProvider';
 import { DialogProvider } from '../src/components/dialog/DialogProvider';
+import { InAppNotificationBanner } from '../src/notifications/InAppNotificationBanner';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
 import { PresenceProvider } from '../src/realtime/PresenceProvider';
 import { resolveBackendHost } from '../src/config/api';
@@ -82,6 +84,7 @@ export default function RootLayout() {
             <CallProvider>
               <LiveAudioProvider>
               <SessionGuard />
+              <AppErrorBoundary>
               <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="welcome" options={{ gestureEnabled: false }} />
@@ -115,6 +118,8 @@ export default function RootLayout() {
               <Stack.Screen name="places" />
               <Stack.Screen name="place-detail" />
               </Stack>
+              </AppErrorBoundary>
+              <InAppNotificationBanner />
               </LiveAudioProvider>
             </CallProvider>
             </PresenceProvider>

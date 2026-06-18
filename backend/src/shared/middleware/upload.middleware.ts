@@ -60,13 +60,7 @@ export const profilePhotoUpload = multer({
 
 export const MAX_POST_IMAGES = 6;
 
-export const postImageUpload = multer({
-  storage: createDiskStorage(postImageDir),
-  fileFilter,
-  limits: { fileSize: 8 * 1024 * 1024, files: MAX_POST_IMAGES },
-});
-
-function mediaFileFilter(
+function postMediaFilter(
   _req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
@@ -79,11 +73,59 @@ function mediaFileFilter(
   cb(new Error('Only image or video uploads are allowed'));
 }
 
-// Clients compress before uploading, but allow headroom for short videos.
+// Posts accept photos and short videos. Videos need more headroom than photos.
+export const postImageUpload = multer({
+  storage: createDiskStorage(postImageDir),
+  fileFilter: postMediaFilter,
+  limits: { fileSize: 50 * 1024 * 1024, files: MAX_POST_IMAGES },
+});
+
+// Common document/file types allowed as chat attachments (in addition to
+// image/video/audio which are matched by mime prefix below).
+const ALLOWED_FILE_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/rtf',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-7z-compressed',
+  'application/x-rar-compressed',
+  'application/gzip',
+  'application/json',
+  'text/plain',
+  'text/csv',
+  'application/octet-stream',
+]);
+
+function mediaFileFilter(
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) {
+  if (
+    file.mimetype.startsWith('image/') ||
+    file.mimetype.startsWith('video/') ||
+    file.mimetype.startsWith('audio/') ||
+    ALLOWED_FILE_MIME_TYPES.has(file.mimetype)
+  ) {
+    cb(null, true);
+    return;
+  }
+
+  cb(new Error('This file type is not supported'));
+}
+
+// Clients compress media before uploading, but allow headroom for short videos
+// and document attachments.
 export const messageMediaUpload = multer({
   storage: createDiskStorage(messageMediaDir),
   fileFilter: mediaFileFilter,
-  limits: { fileSize: 40 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
 });
 
 export const groupPhotoUpload = multer({

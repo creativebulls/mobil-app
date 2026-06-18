@@ -1,4 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from 'expo-audio';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +13,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -33,6 +40,7 @@ import type { ChatMessage } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
 import { useCall } from '../src/calls/CallProvider';
 import { Avatar } from '../src/components/Avatar';
+import { CameraCaptureModal, type CapturedMedia } from '../src/components/CameraCaptureModal';
 import { ChatMediaBubble, MediaViewerModal, type OpenableMedia } from '../src/components/ChatMedia';
 import { PlacePickerModal } from '../src/components/PlacePickerModal';
 import { TAB_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
@@ -46,7 +54,6 @@ import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 const TICK_READ = '#34B7F1';
-const INPUT_BAR_HEIGHT = 58;
 
 const REPORT_OTHER = 'Something else';
 const REPORT_REASONS = [
@@ -69,6 +76,13 @@ function formatClock(iso: string): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDuration(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 type ChatRow = {
   message: ChatMessage;
   mine: boolean;
@@ -81,7 +95,6 @@ export default function ChatScreen() {
   const dialog = useDialog();
   const call = useCall();
   const insets = useSafeAreaInsets();
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const params = useLocalSearchParams<{
     conversationId?: string;
     userId?: string;
@@ -116,6 +129,12 @@ export default function ChatScreen() {
   const [reportText, setReportText] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [cameraVisible, setCameraVisible] = useState(false);
 
   const headerName = (isGroup ? groupName : params.name) || (isGroup ? 'Group' : 'Chat');
   const headerAvatar = isGroup ? groupAvatar : params.avatarUri || null;
@@ -166,23 +185,16 @@ export default function ChatScreen() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      if (recordTimerRef.current) {
+        clearInterval(recordTimerRef.current);
+      }
+    },
+    [],
+  );
 
-  const inputBottomInset = keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 8);
-  const listBottomInset = INPUT_BAR_HEIGHT + inputBottomInset;
+  const inputBottomInset = Math.max(insets.bottom, 8);
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -465,6 +477,141 @@ export default function ChatScreen() {
     });
   }
 
+  function stopRecordTimer() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  }
+
+  async function startRecording() {
+    if (isSending || isRecording) {
+      return;
+    }
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        await dialog.alert({
+          title: 'Microphone access',
+          message: 'Allow microphone access to record voice messages.',
+        });
+        return;
+      }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecordSeconds(0);
+      setIsRecording(true);
+      stopRecordTimer();
+      recordTimerRef.current = setInterval(() => setRecordSeconds((value) => value + 1), 1000);
+    } catch {
+      setIsRecording(false);
+      stopRecordTimer();
+      await dialog.alert({
+        title: 'Could not start recording',
+        message: 'Please try again.',
+      });
+    }
+  }
+
+  async function cancelRecording() {
+    stopRecordTimer();
+    setIsRecording(false);
+    try {
+      await audioRecorder.stop();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function stopAndSendRecording() {
+    stopRecordTimer();
+    setIsRecording(false);
+    const durationMs = recordSeconds * 1000;
+    try {
+      await audioRecorder.stop();
+    } catch {
+      // ignore
+    }
+    const uri = audioRecorder.uri;
+    if (!uri || durationMs < 500) {
+      return;
+    }
+    await uploadVoiceNote(uri, durationMs);
+  }
+
+  async function uploadVoiceNote(uri: string, durationMs: number) {
+    setIsSending(true);
+    try {
+      const result = await sendMediaMessage({
+        conversationId: conversationId ?? undefined,
+        recipientId: conversationId ? undefined : otherUserId ?? undefined,
+        uri,
+        mediaType: 'audio',
+        mimeType: 'audio/m4a',
+        fileName: `voice-${Date.now()}.m4a`,
+        durationMs,
+      });
+      setConversationId(result.conversationId);
+      setMessages((current) =>
+        current.some((message) => message.id === result.message.id)
+          ? current
+          : [...current, result.message],
+      );
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not send voice message',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function handlePickFile() {
+    if (isSending) {
+      return;
+    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+      const asset = result.assets[0];
+      setIsSending(true);
+      try {
+        const sent = await sendMediaMessage({
+          conversationId: conversationId ?? undefined,
+          recipientId: conversationId ? undefined : otherUserId ?? undefined,
+          uri: asset.uri,
+          mediaType: 'file',
+          fileName: asset.name ?? undefined,
+          mimeType: asset.mimeType ?? undefined,
+          fileSize: asset.size ?? undefined,
+        });
+        setConversationId(sent.conversationId);
+        setMessages((current) =>
+          current.some((message) => message.id === sent.message.id)
+            ? current
+            : [...current, sent.message],
+        );
+      } catch (error) {
+        await dialog.alert({
+          title: 'Could not send file',
+          message: getErrorMessage(error, 'Try again later'),
+        });
+      } finally {
+        setIsSending(false);
+      }
+    } catch {
+      // Picker dismissed / unavailable — nothing to do.
+    }
+  }
+
   async function handleSharePlace(place: { placeId: string; name: string; imageUrl: string | null }) {
     setPlacePickerVisible(false);
     setIsSending(true);
@@ -629,7 +776,10 @@ export default function ChatScreen() {
           )}
         </View>
 
-        <View style={styles.flex}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           {isLoading ? (
             <ActivityIndicator color={colors.brand} style={styles.loader} />
           ) : (
@@ -637,7 +787,7 @@ export default function ChatScreen() {
               data={rows}
               keyExtractor={(item) => item.message.id}
               style={styles.flex}
-              contentContainerStyle={[styles.list, { paddingTop: listBottomInset }]}
+              contentContainerStyle={styles.list}
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.3}
               inverted
@@ -652,74 +802,141 @@ export default function ChatScreen() {
           )}
 
           {otherTyping ? (
-            <Text
-              style={[
-                styles.typing,
-                styles.typingDocked,
-                { bottom: keyboardHeight + INPUT_BAR_HEIGHT + inputBottomInset },
-              ]}
-            >
-              {headerName} is typing…
-            </Text>
+            <Text style={styles.typing}>{headerName} is typing…</Text>
           ) : null}
 
-          <View
-            style={[
-              styles.inputBar,
-              styles.inputBarDocked,
-              {
-                bottom: keyboardHeight,
-                paddingBottom: inputBottomInset,
-              },
-            ]}
-          >
-            <Pressable
-              onPress={handlePickMedia}
-              disabled={isSending}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Attach photo or video"
-              style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="image" size={24} color={colors.brand} />
-            </Pressable>
-            <Pressable
-              onPress={() => setPlacePickerVisible(true)}
-              disabled={isSending}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Share a place"
-              style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="location" size={24} color={colors.brand} />
-            </Pressable>
-            <TextInput
-              style={styles.input}
-              placeholder="Message…"
-              placeholderTextColor={colors.labelGray}
-              value={draft}
-              onChangeText={handleChangeText}
-              multiline
-            />
-            <Pressable
-              onPress={handleSend}
-              disabled={!draft.trim() || isSending}
-              style={({ pressed }) => [
-                styles.sendButton,
-                (!draft.trim() || isSending) && styles.sendButtonDisabled,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons name="send" size={20} color={colors.white} />
-            </Pressable>
+          <View style={[styles.inputBar, { paddingBottom: inputBottomInset }]}>
+            {isRecording ? (
+              <>
+                <Pressable
+                  onPress={() => void cancelRecording()}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel recording"
+                  style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="trash-outline" size={24} color={colors.danger} />
+                </Pressable>
+                <View style={styles.recordingInfo}>
+                  <View style={styles.recordingDot} />
+                  <Text style={styles.recordingText}>Recording {formatDuration(recordSeconds)}</Text>
+                </View>
+                <Pressable
+                  onPress={() => void stopAndSendRecording()}
+                  disabled={isSending}
+                  style={({ pressed }) => [
+                    styles.sendButton,
+                    isSending && styles.sendButtonDisabled,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send voice message"
+                >
+                  <Ionicons name="send" size={20} color={colors.white} />
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  onPress={() => setCameraVisible(true)}
+                  disabled={isSending}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Take a photo or video"
+                  style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="camera" size={24} color={colors.brand} />
+                </Pressable>
+                <Pressable
+                  onPress={handlePickMedia}
+                  disabled={isSending}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach photo or video"
+                  style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="image" size={23} color={colors.brand} />
+                </Pressable>
+                <Pressable
+                  onPress={() => void handlePickFile()}
+                  disabled={isSending}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach a file"
+                  style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="attach" size={25} color={colors.brand} />
+                </Pressable>
+                <Pressable
+                  onPress={() => setPlacePickerVisible(true)}
+                  disabled={isSending}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share a place"
+                  style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}
+                >
+                  <Ionicons name="location" size={23} color={colors.brand} />
+                </Pressable>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Message…"
+                  placeholderTextColor={colors.labelGray}
+                  value={draft}
+                  onChangeText={handleChangeText}
+                  multiline
+                />
+                {draft.trim() ? (
+                  <Pressable
+                    onPress={handleSend}
+                    disabled={isSending}
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      isSending && styles.sendButtonDisabled,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send message"
+                  >
+                    <Ionicons name="send" size={20} color={colors.white} />
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => void startRecording()}
+                    disabled={isSending}
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      isSending && styles.sendButtonDisabled,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Record voice message"
+                  >
+                    <Ionicons name="mic" size={22} color={colors.white} />
+                  </Pressable>
+                )}
+              </>
+            )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </StackScreenLayout>
       <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
       <PlacePickerModal
         visible={placePickerVisible}
         onClose={() => setPlacePickerVisible(false)}
         onSelect={handleSharePlace}
+      />
+      <CameraCaptureModal
+        visible={cameraVisible}
+        onClose={() => setCameraVisible(false)}
+        onCapture={(media: CapturedMedia) => {
+          setCameraVisible(false);
+          void uploadMedia({
+            uri: media.uri,
+            mediaType: media.mediaType,
+            width: media.width,
+            height: media.height,
+          });
+        }}
       />
 
       <Modal
@@ -1226,46 +1443,38 @@ const styles = StyleSheet.create({
   },
   typing: {
     paddingHorizontal: 16,
+    paddingVertical: 4,
     fontSize: 12,
     color: colors.labelGray,
     fontStyle: 'italic',
   },
-  typingDocked: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-  },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 8,
-    gap: 8,
+    gap: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-  },
-  inputBarDocked: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
     backgroundColor: colors.white,
   },
   input: {
     flex: 1,
     maxHeight: 120,
     minHeight: 42,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
+    marginHorizontal: 4,
     borderRadius: 21,
     backgroundColor: colors.inputGray,
     fontSize: 15,
     color: colors.text,
   },
   attachButton: {
-    width: 42,
+    width: 36,
     height: 42,
-    borderRadius: 21,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1279,6 +1488,27 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.buttonDisabled,
+  },
+  recordingInfo: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    borderRadius: 21,
+    backgroundColor: colors.inputGray,
+  },
+  recordingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.danger,
+  },
+  recordingText: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: '600',
   },
   pressed: {
     opacity: 0.7,

@@ -17,7 +17,7 @@ export const authStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 8,

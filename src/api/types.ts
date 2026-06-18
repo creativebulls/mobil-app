@@ -201,11 +201,17 @@ export type SharedPlace = {
   imageUrl: string | null;
 };
 
+export type MessageMediaType = 'image' | 'video' | 'audio' | 'file';
+
 export type MessageMedia = {
   url: string;
-  mediaType: 'image' | 'video';
+  mediaType: MessageMediaType;
   width: number | null;
   height: number | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  durationMs?: number | null;
 };
 
 export type ChatMessage = {

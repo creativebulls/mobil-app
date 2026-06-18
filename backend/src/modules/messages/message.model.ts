@@ -6,13 +6,18 @@ export interface ISharedPlace {
   imageUrl?: string;
 }
 
-export type MessageMediaType = 'image' | 'video';
+export type MessageMediaType = 'image' | 'video' | 'audio' | 'file';
 
 export interface IMessageMedia {
   url: string;
   mediaType: MessageMediaType;
   width?: number;
   height?: number;
+  // Set for audio voice notes and generic file attachments.
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  durationMs?: number;
 }
 
 export interface IMessage {
@@ -46,9 +51,13 @@ const sharedPlaceSchema = new Schema<ISharedPlace>(
 const mediaSchema = new Schema<IMessageMedia>(
   {
     url: { type: String, required: true },
-    mediaType: { type: String, enum: ['image', 'video'], required: true },
+    mediaType: { type: String, enum: ['image', 'video', 'audio', 'file'], required: true },
     width: { type: Number },
     height: { type: Number },
+    fileName: { type: String },
+    fileSize: { type: Number },
+    mimeType: { type: String },
+    durationMs: { type: Number },
   },
   { _id: false },
 );

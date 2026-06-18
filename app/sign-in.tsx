@@ -158,7 +158,7 @@ export default function SignInScreen() {
 
         <KeyboardAvoidingView
           style={styles.content}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.form}>
             <AnimatedFormInput
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 8,

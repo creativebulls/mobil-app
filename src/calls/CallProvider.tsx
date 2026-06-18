@@ -47,7 +47,19 @@ type CallContextValue = {
 
 const CallContext = createContext<CallContextValue | undefined>(undefined);
 
-const DEFAULT_ICE_SERVERS: IceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
+const DEFAULT_ICE_SERVERS: IceServer[] = [
+  {
+    urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+    ],
+  },
+];
+
+// If the call never reaches the connected state within this window, give up so
+// the UI doesn't hang forever on "Connecting…".
+const CONNECT_TIMEOUT_MS = 35000;
 
 function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -74,13 +86,22 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // Holds the incoming SDP offer until the user accepts the call.
   const pendingOfferRef = useRef<unknown>(null);
   const iceServersRef = useRef<IceServer[]>(DEFAULT_ICE_SERVERS);
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const emit = useCallback(async (event: string, payload: Record<string, unknown>) => {
     const socket = await getRealtimeSocket();
     socket?.emit(event, payload);
   }, []);
 
+  const clearConnectTimer = useCallback(() => {
+    if (connectTimerRef.current) {
+      clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = null;
+    }
+  }, []);
+
   const cleanup = useCallback(() => {
+    clearConnectTimer();
     if (pcRef.current) {
       try {
         pcRef.current.close();
@@ -100,7 +121,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setMuted(false);
     setPeer(null);
     setStatus('idle');
-  }, []);
+  }, [clearConnectTimer]);
 
   const ensureIceServers = useCallback(async () => {
     try {
@@ -134,7 +155,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const createPeerConnection = useCallback(
     (peerUserId: string, callId: string): RTCPeerConnection => {
-      const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
+      const pc = new RTCPeerConnection({
+        iceServers: iceServersRef.current,
+        // Pre-gather candidates and force a single bundled transport for faster,
+        // more reliable connection establishment on mobile networks.
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+      } as never);
 
       // Forward locally-gathered ICE candidates to the remote peer.
       (pc as unknown as { addEventListener: (e: string, cb: (event: unknown) => void) => void }).addEventListener(
@@ -155,8 +183,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
         addEventListener: (e: string, cb: (event: unknown) => void) => void;
       }).addEventListener;
 
-      const markConnected = () =>
+      const markConnected = () => {
+        clearConnectTimer();
         setStatus((current) => (current === 'active' ? current : 'active'));
+      };
 
       // react-native-webrtc reliably advances `iceConnectionState`, while
       // `connectionState` sometimes lags and never reaches "connected" — which
@@ -175,13 +205,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
         if (state === 'connected' || state === 'completed') {
           markConnected();
         } else if (state === 'failed') {
-          cleanup();
+          // A brief blip can recover via ICE restart; a hard failure cannot.
+          const restart = (pc as unknown as { restartIce?: () => void }).restartIce;
+          if (typeof restart === 'function') {
+            try {
+              restart.call(pc);
+            } catch {
+              cleanup();
+            }
+          } else {
+            cleanup();
+          }
         }
+        // Note: 'disconnected' is transient (e.g. network handover) — keep the
+        // call alive and let it recover rather than tearing down immediately.
       });
 
       return pc;
     },
-    [cleanup, emit],
+    [cleanup, clearConnectTimer, emit],
   );
 
   const flushPendingCandidates = useCallback(async () => {
@@ -431,6 +473,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [emit, cleanup, flushPendingCandidates]);
 
   // Call duration timer lives in CallOverlay so the rest of the app does not re-render every second.
+
+  // Once both sides have agreed to connect, fail the call if media never flows
+  // within the timeout (most commonly because no TURN relay is reachable).
+  useEffect(() => {
+    if (status !== 'connecting') {
+      return;
+    }
+    clearConnectTimer();
+    connectTimerRef.current = setTimeout(() => {
+      cleanup();
+    }, CONNECT_TIMEOUT_MS);
+    return () => clearConnectTimer();
+  }, [status, cleanup, clearConnectTimer]);
 
   // Ring while the call is being established (outgoing ringback / incoming ring),
   // then stop once it connects or ends.

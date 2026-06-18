@@ -77,6 +77,10 @@ export const sendMediaMessage = asyncHandler(async (req: AuthenticatedRequest, r
       mediaType: body.mediaType,
       width: body.width,
       height: body.height,
+      fileName: body.fileName ?? file.originalname,
+      fileSize: body.fileSize ?? file.size,
+      mimeType: body.mimeType ?? file.mimetype,
+      durationMs: body.durationMs,
     },
     body.text ?? '',
   );

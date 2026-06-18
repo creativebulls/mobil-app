@@ -50,18 +50,38 @@ export async function sendMediaMessage(input: {
   recipientId?: string;
   text?: string;
   uri: string;
-  mediaType: 'image' | 'video';
+  mediaType: 'image' | 'video' | 'audio' | 'file';
   width?: number;
   height?: number;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  durationMs?: number;
 }): Promise<SendMessageResponse> {
   const formData = new FormData();
-  const extension = input.mediaType === 'video' ? 'mp4' : 'jpg';
-  const mimeType = input.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+
+  const defaultName =
+    input.mediaType === 'video'
+      ? `message-${Date.now()}.mp4`
+      : input.mediaType === 'audio'
+        ? `voice-${Date.now()}.m4a`
+        : input.mediaType === 'file'
+          ? input.fileName || `file-${Date.now()}`
+          : `message-${Date.now()}.jpg`;
+
+  const defaultMime =
+    input.mediaType === 'video'
+      ? 'video/mp4'
+      : input.mediaType === 'audio'
+        ? 'audio/m4a'
+        : input.mediaType === 'file'
+          ? input.mimeType || 'application/octet-stream'
+          : 'image/jpeg';
 
   formData.append('file', {
     uri: input.uri,
-    name: `message-${Date.now()}.${extension}`,
-    type: mimeType,
+    name: input.fileName || defaultName,
+    type: input.mimeType || defaultMime,
   } as unknown as Blob);
 
   formData.append('mediaType', input.mediaType);
@@ -79,6 +99,18 @@ export async function sendMediaMessage(input: {
   }
   if (typeof input.height === 'number') {
     formData.append('height', String(Math.round(input.height)));
+  }
+  if (input.fileName) {
+    formData.append('fileName', input.fileName);
+  }
+  if (typeof input.fileSize === 'number') {
+    formData.append('fileSize', String(Math.round(input.fileSize)));
+  }
+  if (input.mimeType) {
+    formData.append('mimeType', input.mimeType);
+  }
+  if (typeof input.durationMs === 'number') {
+    formData.append('durationMs', String(Math.round(input.durationMs)));
   }
 
   return apiRequest<SendMessageResponse>('/messages/media', {

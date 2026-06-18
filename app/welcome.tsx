@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   container: {
     flex: 1,

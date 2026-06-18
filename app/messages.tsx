@@ -30,7 +30,16 @@ function messagePreview(message: ChatMessage): string {
     return message.sharedPlace.name;
   }
   if (message.media) {
-    return message.media.mediaType === 'video' ? 'Video' : 'Photo';
+    switch (message.media.mediaType) {
+      case 'video':
+        return 'Video';
+      case 'audio':
+        return 'Voice message';
+      case 'file':
+        return message.media.fileName ?? 'Attachment';
+      default:
+        return 'Photo';
+    }
   }
   return '';
 }
