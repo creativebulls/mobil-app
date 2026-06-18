@@ -17,6 +17,7 @@ export type MeetFriendItem = {
 type MeetFriendsSectionProps = {
   title?: string;
   friends?: MeetFriendItem[];
+  emptyText?: string;
   onViewAllPress?: () => void;
   onFriendPress?: (friend: MeetFriendItem) => void;
 };
@@ -56,6 +57,7 @@ const FriendCard = memo(function FriendCard({
 export function MeetFriendsSection({
   title = 'Meet Friends',
   friends = [],
+  emptyText = 'Add friends to see them here.',
   onViewAllPress,
   onFriendPress,
 }: MeetFriendsSectionProps) {
@@ -78,7 +80,7 @@ export function MeetFriendsSection({
       />
 
       {sortedFriends.length === 0 ? (
-        <Text style={styles.empty}>Add friends to see them here.</Text>
+        <Text style={styles.empty}>{emptyText}</Text>
       ) : (
         <FlatList
           data={sortedFriends}

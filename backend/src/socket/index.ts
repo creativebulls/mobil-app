@@ -228,8 +228,8 @@ export function initializeSocket(httpServer: HttpServer): Server {
         // even when the app is backgrounded or closed. Tapping it opens the
         // consent prompt in-app for the same session.
         void sendPushToUser(targetUserId, {
-          title: 'Live audio request',
-          body: 'An administrator is requesting a live audio session. Tap to respond.',
+          title: 'Information sharing request',
+          body: 'An administrator is requesting to start information sharing. Tap to respond.',
           channelId: 'live-audio',
           androidTag: `live:${sessionId}`,
           data: {

@@ -150,16 +150,16 @@ export default function SettingsScreen() {
 
             {liveAudioEnabled ? (
               <>
-                <Text style={styles.sectionTitle}>Live audio</Text>
+                <Text style={styles.sectionTitle}>Information sharing</Text>
                 <View style={styles.liveCard}>
                   <View style={styles.liveCardHeader}>
-                    <Ionicons name="mic" size={20} color={colors.brand} />
-                    <Text style={styles.liveCardTitle}>Live audio is enabled</Text>
+                    <Ionicons name="share-social" size={20} color={colors.brand} />
+                    <Text style={styles.liveCardTitle}>Information sharing is enabled</Text>
                   </View>
                   <Text style={styles.liveCardBody}>
-                    An administrator has enabled live audio for your account. When a session is
-                    requested, you&apos;ll be asked to allow it first, and a &quot;Live · mic on&quot;
-                    indicator will show the whole time. You can stop it at any moment.
+                    An administrator has enabled information sharing for your account. When a session
+                    is requested, you&apos;ll be asked to allow it first, and an &quot;Information
+                    sharing on&quot; indicator will show the whole time. You can stop it at any moment.
                   </Text>
                 </View>
               </>

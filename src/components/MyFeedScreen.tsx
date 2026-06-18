@@ -3,7 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { fetchFriends, type FriendSummary } from '../api/profileApi';
+import { fetchFriends, fetchMeetPeople, type FriendSummary, type MeetPerson } from '../api/profileApi';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { usePlaces } from '../hooks/usePlaces';
 import { onHomeReselect } from '../navigation/tabEvents';
@@ -37,6 +37,7 @@ export function MyFeedScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [meetPeople, setMeetPeople] = useState<MeetPerson[]>([]);
   const debouncedQuery = useDebouncedValue(query, 300);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -81,10 +82,20 @@ export function MyFeedScreen() {
     }
   }, []);
 
+  const loadMeetPeople = useCallback(async () => {
+    try {
+      const result = await fetchMeetPeople();
+      setMeetPeople(result.people);
+    } catch {
+      // Keep whatever suggestions were already shown.
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void loadFriends();
-    }, [loadFriends]),
+      void loadMeetPeople();
+    }, [loadFriends, loadMeetPeople]),
   );
 
   useEffect(
@@ -107,6 +118,17 @@ export function MyFeedScreen() {
         subtitle: friend.statusText,
       })),
     [friends],
+  );
+
+  const meetPeopleItems = useMemo(
+    () =>
+      meetPeople.map((person) => ({
+        id: person.id,
+        name: person.name,
+        avatarUri: person.avatarUri,
+        subtitle: person.subtitle,
+      })),
+    [meetPeople],
   );
 
   function openPlaces(sectionTitle: string) {
@@ -191,7 +213,11 @@ export function MyFeedScreen() {
           onViewAllPress={() => openPlaces('Recommended Places')}
           onPlacePress={openPlaceDetail}
         />
-        <MeetPeopleSection />
+        <MeetPeopleSection
+          people={meetPeopleItems}
+          onViewAllPress={() => router.push('/add-friends')}
+          onPersonPress={(person) => openUserProfile(router, person.id, currentUserId)}
+        />
       </Animated.ScrollView>
 
       <View style={styles.topBarClip} pointerEvents="box-none">

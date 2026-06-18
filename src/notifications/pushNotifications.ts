@@ -74,8 +74,8 @@ async function ensureAndroidChannel(): Promise<void> {
   });
 
   await Notifications.setNotificationChannelAsync('live-audio', {
-    name: 'Live audio',
-    description: 'Live audio session requests and active sessions',
+    name: 'Information sharing',
+    description: 'Information sharing requests and active sessions',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F36464',

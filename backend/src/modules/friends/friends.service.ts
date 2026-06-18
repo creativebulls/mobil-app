@@ -5,7 +5,8 @@ import { randomBytes } from 'crypto';
 import { AppError } from '../../shared/errors/AppError';
 import { isUserOnline } from '../../socket/index';
 import { createNotification } from '../notifications/notification.service';
-import { assertNotBlocked, isBlockedBetween } from '../relations/relations.service';
+import { PlaceVisit } from '../places/place-engagement.model';
+import { assertNotBlocked, getBlockedUserIds, isBlockedBetween } from '../relations/relations.service';
 import { User, getUserDisplayName, serializeAuthor } from '../users/user.model';
 import { FriendRequest } from './friend-request.model';
 
@@ -166,6 +167,106 @@ export async function listFriends(userId: string, limit = 50) {
   });
 
   return { friends };
+}
+
+/**
+ * Suggests people to connect with, ranked by relevance:
+ *  - mutual friends (friends-of-friends who aren't already friends)
+ *  - people who have visited the same places as the viewer
+ * Already-friends, the viewer, and blocked users are excluded.
+ */
+export async function getMeetPeople(userId: string, limit = 20) {
+  const friendIds = await getFriendUserIds(userId);
+  const blockedIds = await getBlockedUserIds(userId);
+  const excluded = (id: string) => id === userId || friendIds.has(id) || blockedIds.has(id);
+
+  // --- Mutual friends (friends-of-friends) ---------------------------------
+  const mutualCount = new Map<string, number>();
+  const friendArr = [...friendIds];
+  if (friendArr.length > 0) {
+    const fof = await FriendRequest.find({
+      status: 'accepted',
+      $or: [{ from: { $in: friendArr } }, { to: { $in: friendArr } }],
+    }).select('from to');
+
+    for (const req of fof) {
+      const a = req.from.toString();
+      const b = req.to.toString();
+      // For each accepted edge, the endpoint that is one of my friends links me
+      // to the other endpoint (a candidate), unless that candidate is excluded.
+      for (const [maybeFriend, candidate] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        if (friendIds.has(maybeFriend) && !excluded(candidate)) {
+          mutualCount.set(candidate, (mutualCount.get(candidate) ?? 0) + 1);
+        }
+      }
+    }
+  }
+
+  // --- Same-place visitors -------------------------------------------------
+  const sharedPlaces = new Map<string, Set<string>>();
+  const myVisits = await PlaceVisit.find({ user: userId }).select('placeId');
+  const myPlaceIds = [...new Set(myVisits.map((visit) => visit.placeId))];
+  if (myPlaceIds.length > 0) {
+    const others = await PlaceVisit.find({
+      placeId: { $in: myPlaceIds },
+      user: { $ne: userId },
+    }).select('placeId user');
+
+    for (const visit of others) {
+      const candidate = visit.user.toString();
+      if (excluded(candidate)) {
+        continue;
+      }
+      const places = sharedPlaces.get(candidate) ?? new Set<string>();
+      places.add(visit.placeId);
+      sharedPlaces.set(candidate, places);
+    }
+  }
+
+  const candidateIds = new Set<string>([...mutualCount.keys(), ...sharedPlaces.keys()]);
+  if (candidateIds.size === 0) {
+    return { people: [] as Array<ReturnType<typeof serializeFriendUser> & {
+      subtitle: string | null;
+      mutualFriends: number;
+      sharedPlaces: number;
+    }> };
+  }
+
+  const users = await User.find({
+    _id: { $in: [...candidateIds] },
+    registrationCompleted: true,
+  }).select(AUTHOR_FIELDS);
+
+  const people = users
+    .map((user) => {
+      const id = user._id.toString();
+      const mutualFriends = mutualCount.get(id) ?? 0;
+      const placesInCommon = sharedPlaces.get(id)?.size ?? 0;
+
+      let subtitle: string | null = null;
+      if (mutualFriends > 0) {
+        subtitle = `${mutualFriends} mutual friend${mutualFriends === 1 ? '' : 's'}`;
+      } else if (placesInCommon > 0) {
+        subtitle =
+          placesInCommon === 1 ? 'Visited a place you’ve been' : `${placesInCommon} places in common`;
+      }
+
+      return {
+        ...serializeFriendUser(user),
+        subtitle,
+        mutualFriends,
+        sharedPlaces: placesInCommon,
+        score: mutualFriends * 3 + placesInCommon,
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ score, ...rest }) => rest);
+
+  return { people };
 }
 
 export async function sendFriendRequest(fromUserId: string, toUserId: string) {

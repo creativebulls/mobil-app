@@ -1,4 +1,3 @@
-import { MEET_PEOPLE_DUMMY } from '../constants/meetPeople';
 import type { MeetFriendItem } from './MeetFriendsSection';
 import { MeetFriendsSection } from './MeetFriendsSection';
 
@@ -11,7 +10,7 @@ type MeetPeopleSectionProps = {
 
 export function MeetPeopleSection({
   title = 'Meet People',
-  people = MEET_PEOPLE_DUMMY,
+  people = [],
   onViewAllPress,
   onPersonPress,
 }: MeetPeopleSectionProps) {
@@ -19,6 +18,7 @@ export function MeetPeopleSection({
     <MeetFriendsSection
       title={title}
       friends={people}
+      emptyText="No suggestions yet — add friends and visit places to meet people."
       onViewAllPress={onViewAllPress}
       onFriendPress={onPersonPress}
     />

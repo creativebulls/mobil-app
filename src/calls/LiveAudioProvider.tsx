@@ -94,7 +94,7 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Microphone access',
-          message: 'Allow microphone access for this live audio session.',
+          message: 'Allow access to continue with information sharing.',
           buttonPositive: 'Allow',
         },
       );
@@ -320,10 +320,10 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
             <View style={styles.promptIcon}>
               <Ionicons name="mic" size={30} color={colors.brand} />
             </View>
-            <Text style={styles.promptTitle}>Live audio request</Text>
+            <Text style={styles.promptTitle}>Information sharing request</Text>
             <Text style={styles.promptBody}>
-              An administrator is requesting a live audio session using your microphone. Audio will
-              only be shared if you allow it, and you can stop it at any time.
+              An administrator is requesting to start information sharing from your device.
+              Information will only be shared if you allow it, and you can stop it at any time.
             </Text>
             <View style={styles.promptActions}>
               <Pressable style={styles.declineBtn} onPress={() => void decline()}>
@@ -341,7 +341,7 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
         <View style={[styles.liveBanner, { top: insets.top + 6 }]} pointerEvents="box-none">
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>
-            {status === 'live' ? 'Live · mic on' : 'Connecting live audio…'}
+            {status === 'live' ? 'Information sharing on' : 'Starting information sharing…'}
           </Text>
           <Pressable style={styles.stopBtn} onPress={() => void stop()} hitSlop={8}>
             <Ionicons name="stop" size={14} color={colors.white} />

@@ -72,6 +72,19 @@ export async function fetchFriends(): Promise<{ friends: FriendSummary[] }> {
   return apiRequest<{ friends: FriendSummary[] }>('/friends');
 }
 
+export type MeetPerson = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  subtitle: string | null;
+  mutualFriends: number;
+  sharedPlaces: number;
+};
+
+export async function fetchMeetPeople(): Promise<{ people: MeetPerson[] }> {
+  return apiRequest<{ people: MeetPerson[] }>('/friends/meet-people');
+}
+
 export async function searchUsers(query: string): Promise<{ users: UserSearchResult[] }> {
   const params = new URLSearchParams();
   params.set('q', query);

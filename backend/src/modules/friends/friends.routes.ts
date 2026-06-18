@@ -7,6 +7,7 @@ export const friendsRouter = Router();
 friendsRouter.use(...friendsController.friendsGuards);
 
 friendsRouter.get('/search', friendsController.searchUsers);
+friendsRouter.get('/meet-people', friendsController.getMeetPeople);
 friendsRouter.get('/connect-code', friendsController.getMyConnectCode);
 friendsRouter.get('/connect/:code', friendsController.resolveConnectCode);
 friendsRouter.get('/', friendsController.listFriends);

@@ -18,7 +18,9 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+        {title}
+      </Text>
 
       <Pressable
         onPress={onViewAllPress}
@@ -39,15 +41,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    gap: 12,
   },
   title: {
-    fontSize: 20,
+    flexShrink: 1,
+    fontSize: 17,
     fontWeight: '800',
     color: colors.text,
   },
   viewAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 2,
   },
   viewAllButtonPressed: {
