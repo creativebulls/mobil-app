@@ -35,6 +35,7 @@ export type UserProfile = {
   points: number;
   suspended: boolean;
   suspensionReason: string | null;
+  liveAudioEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 };

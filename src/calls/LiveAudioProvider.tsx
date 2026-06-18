@@ -21,6 +21,12 @@ import {
 import { fetchIceServers, type IceServer } from '../api/callsApi';
 import { getRealtimeSocket } from '../realtime/socket';
 import { colors } from '../theme/colors';
+import { onLiveRequest } from './liveAudioBus';
+import {
+  registerLiveForegroundService,
+  startLiveForegroundService,
+  stopLiveForegroundService,
+} from './liveAudioForegroundService';
 
 /**
  * Consent-based live audio. An administrator can request a live audio session
@@ -64,6 +70,7 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
     }
     pendingCandidatesRef.current = [];
     sessionIdRef.current = null;
+    void stopLiveForegroundService();
     setStatus('idle');
   }, []);
 
@@ -152,6 +159,9 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
       const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
 
+      // Keep the mic + connection alive while the app is backgrounded/minimized.
+      await startLiveForegroundService();
+
       const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
       pcRef.current = pc;
 
@@ -200,6 +210,25 @@ export function LiveAudioProvider({ children }: { children: ReactNode }) {
       cleanup();
     }
   }, [requestMicPermission, ensureIceServers, emit, cleanup]);
+
+  // Register the Android foreground service task once, as early as possible.
+  useEffect(() => {
+    registerLiveForegroundService();
+  }, []);
+
+  // A push-notification tap (app backgrounded/closed) hands the pending request
+  // here so we can show the consent prompt even if the socket missed it.
+  useEffect(
+    () =>
+      onLiveRequest((request) => {
+        if (sessionIdRef.current || !request.sessionId) {
+          return;
+        }
+        sessionIdRef.current = request.sessionId;
+        setStatus('prompt');
+      }),
+    [],
+  );
 
   // Signaling subscription. Handlers read refs so they always act on the
   // current session.

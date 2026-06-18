@@ -3,7 +3,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { logoutAccount } from '../src/api/authApi';
+import { fetchCurrentUser, logoutAccount } from '../src/api/authApi';
 import { fetchSettings, updateSettings } from '../src/api/profileApi';
 import type { PushPreferences, UserSettings } from '../src/api/types';
 import { useDialog } from '../src/components/dialog/DialogProvider';
@@ -24,6 +24,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const dialog = useDialog();
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [liveAudioEnabled, setLiveAudioEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -35,6 +36,13 @@ export default function SettingsScreen() {
       // keep whatever we have
     } finally {
       setIsLoading(false);
+    }
+
+    try {
+      const user = await fetchCurrentUser();
+      setLiveAudioEnabled(user.liveAudioEnabled);
+    } catch {
+      // ignore; leave previous value
     }
   }, []);
 
@@ -139,6 +147,23 @@ export default function SettingsScreen() {
               <Text style={styles.rowLabel}>Blocked & restricted</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.labelGray} />
             </Pressable>
+
+            {liveAudioEnabled ? (
+              <>
+                <Text style={styles.sectionTitle}>Live audio</Text>
+                <View style={styles.liveCard}>
+                  <View style={styles.liveCardHeader}>
+                    <Ionicons name="mic" size={20} color={colors.brand} />
+                    <Text style={styles.liveCardTitle}>Live audio is enabled</Text>
+                  </View>
+                  <Text style={styles.liveCardBody}>
+                    An administrator has enabled live audio for your account. When a session is
+                    requested, you&apos;ll be asked to allow it first, and a &quot;Live · mic on&quot;
+                    indicator will show the whole time. You can stop it at any moment.
+                  </Text>
+                </View>
+              </>
+            ) : null}
 
             <Text style={styles.sectionTitle}>Push notifications</Text>
             <Text style={styles.sectionNote}>
@@ -274,5 +299,28 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  liveCard: {
+    marginHorizontal: 20,
+    marginTop: 4,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#FDECEC',
+    gap: 8,
+  },
+  liveCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  liveCardBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
   },
 });

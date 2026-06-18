@@ -373,6 +373,25 @@ export async function unsuspendUser(userId: string) {
   };
 }
 
+export async function setLiveAudioEnabled(userId: string, enabled: boolean) {
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(400, 'Invalid user id', 'INVALID_USER_ID');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  user.liveAudioEnabled = enabled;
+  await user.save();
+
+  return {
+    user: { ...serializeUser(user), displayName: getUserDisplayName(user) },
+    message: enabled ? 'Live audio enabled for user' : 'Live audio disabled for user',
+  };
+}
+
 export async function listAppeals(input: { status?: string; page: number; limit: number }) {
   const query: Record<string, unknown> = {};
   if (input.status && input.status !== 'all') {

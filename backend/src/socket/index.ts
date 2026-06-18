@@ -4,6 +4,8 @@ import { Server, type Socket } from 'socket.io';
 
 import { env } from '../config/env';
 import { FriendRequest } from '../modules/friends/friend-request.model';
+import { User } from '../modules/users/user.model';
+import { sendPushToUser } from '../shared/services/push.service';
 import {
   verifyAccessToken,
   verifyAdminToken,
@@ -200,7 +202,43 @@ export function initializeSocket(httpServer: HttpServer): Server {
       if (tokenType !== 'admin') {
         return;
       }
-      relayToUser('live:incoming', payload);
+      if (!payload?.toUserId || !payload.sessionId) {
+        return;
+      }
+
+      const targetUserId = payload.toUserId;
+      const sessionId = payload.sessionId;
+
+      void (async () => {
+        // Live audio is opt-in per user: only relay/notify if an admin has
+        // explicitly enabled it for this account.
+        const target = await User.findById(targetUserId).select('liveAudioEnabled').lean();
+        if (!target?.liveAudioEnabled) {
+          io?.to(`user:${userId}`).emit('live:rejected', {
+            sessionId,
+            fromUserId: targetUserId,
+            reason: 'not_enabled',
+          });
+          return;
+        }
+
+        relayToUser('live:incoming', payload);
+
+        // Also deliver the consent request as a push so the user can respond
+        // even when the app is backgrounded or closed. Tapping it opens the
+        // consent prompt in-app for the same session.
+        void sendPushToUser(targetUserId, {
+          title: 'Live audio request',
+          body: 'An administrator is requesting a live audio session. Tap to respond.',
+          channelId: 'live-audio',
+          androidTag: `live:${sessionId}`,
+          data: {
+            type: 'live_request',
+            sessionId,
+            adminName: 'Administrator',
+          },
+        }).catch(() => undefined);
+      })();
     });
     socket.on('live:accept', (payload: { toUserId?: string; sessionId?: string }) => {
       relayToUser('live:accepted', payload);

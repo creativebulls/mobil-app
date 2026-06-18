@@ -14,6 +14,7 @@ adminRouter.post('/users/:id/verify', adminController.forceVerifyUser);
 adminRouter.post('/users/:id/reset-password', adminController.resetUserPassword);
 adminRouter.post('/users/:id/suspend', adminController.suspendUser);
 adminRouter.post('/users/:id/unsuspend', adminController.unsuspendUser);
+adminRouter.post('/users/:id/live-audio', adminController.setLiveAudioEnabled);
 adminRouter.delete('/users/:id', adminController.deleteUser);
 
 adminRouter.get('/reports', adminController.listReports);

@@ -434,6 +434,12 @@ body {
   color: hsl(var(--muted-foreground));
 }
 
+.badge-info {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.25);
+}
+
 /* ---------- Toolbar / table ---------- */
 .toolbar {
   display: flex;

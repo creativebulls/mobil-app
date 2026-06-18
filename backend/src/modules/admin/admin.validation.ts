@@ -46,3 +46,7 @@ export const adminAppealsQuerySchema = z.object({
 export const adminAppealReviewSchema = z.object({
   decision: z.enum(['approve', 'reject']),
 });
+
+export const adminLiveAudioSchema = z.object({
+  enabled: z.boolean(),
+});

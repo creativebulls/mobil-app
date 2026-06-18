@@ -7,6 +7,7 @@ import * as adminService from './admin.service';
 import {
   adminAppealReviewSchema,
   adminAppealsQuerySchema,
+  adminLiveAudioSchema,
   adminLoginSchema,
   adminReportStatusSchema,
   adminReportsQuerySchema,
@@ -99,6 +100,12 @@ export const listAppeals = asyncHandler(async (req: AdminRequest, res: Response)
 export const reviewAppeal = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = adminAppealReviewSchema.parse(req.body);
   const result = await adminService.reviewAppeal(String(req.params.id), body.decision);
+  sendSuccess(res, result);
+});
+
+export const setLiveAudioEnabled = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = adminLiveAudioSchema.parse(req.body);
+  const result = await adminService.setLiveAudioEnabled(String(req.params.id), body.enabled);
   sendSuccess(res, result);
 });
 

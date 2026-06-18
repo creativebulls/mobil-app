@@ -30,6 +30,7 @@ export interface IUser {
   suspended: boolean;
   suspendedAt?: Date;
   suspensionReason?: string;
+  liveAudioEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +97,7 @@ const userSchema = new Schema<UserDocument>(
     suspended: { type: Boolean, default: false, index: true },
     suspendedAt: { type: Date },
     suspensionReason: { type: String, trim: true, maxlength: 500 },
+    liveAudioEnabled: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
@@ -149,6 +151,7 @@ export function serializeUser(user: UserDocument) {
     pushPreferences: { ...DEFAULT_PUSH_PREFERENCES, ...(user.pushPreferences ?? {}) },
     suspended: user.suspended ?? false,
     suspensionReason: user.suspensionReason ?? null,
+    liveAudioEnabled: user.liveAudioEnabled ?? false,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

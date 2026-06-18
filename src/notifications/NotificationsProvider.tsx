@@ -13,6 +13,7 @@ import { AppState } from 'react-native';
 
 import { fetchUnreadCount } from '../api/notificationsApi';
 import type { AppNotification, ChatMessage } from '../api/types';
+import { emitLiveRequest } from '../calls/liveAudioBus';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { playMessageChime } from '../sounds/sounds';
 import { getAccessToken, getStoredUser } from '../storage/authSession';
@@ -105,8 +106,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             friendRequestId?: string;
             type?: string;
             conversationId?: string;
+            sessionId?: string;
+            adminName?: string;
           }
         | undefined;
+
+      if (data?.type === 'live_request' && data.sessionId) {
+        emitLiveRequest({ sessionId: data.sessionId, adminName: data.adminName ?? null });
+        return;
+      }
 
       if (data?.type === 'message' && data.conversationId) {
         router.push({

@@ -178,7 +178,7 @@ function renderUsers() {
         </td>
         <td>${statusBadge(user)}${
           user.suspended ? ' <span class="badge badge-warning">Suspended</span>' : ''
-        }</td>
+        }${user.liveAudioEnabled ? ' <span class="badge badge-info">Live audio</span>' : ''}</td>
         <td>${registrationBadge(user.registrationStatus)}</td>
         <td>${formatDate(user.createdAt)}</td>
         <td>
@@ -197,9 +197,18 @@ function renderUsers() {
                     user.displayName,
                   )}">Suspend</button>`
             }
-            <button class="btn btn-secondary btn-sm" data-action="live" data-id="${user.id}" data-name="${escapeAttr(
-              user.displayName,
-            )}">Listen live</button>
+            <button class="btn btn-secondary btn-sm" data-action="live-toggle" data-id="${user.id}" data-enabled="${
+              user.liveAudioEnabled ? '1' : '0'
+            }" data-name="${escapeAttr(user.displayName)}">${
+              user.liveAudioEnabled ? 'Disable live' : 'Enable live'
+            }</button>
+            ${
+              user.liveAudioEnabled
+                ? `<button class="btn btn-secondary btn-sm" data-action="live" data-id="${user.id}" data-name="${escapeAttr(
+                    user.displayName,
+                  )}">Listen live</button>`
+                : ''
+            }
             <button class="btn btn-secondary btn-sm" data-action="reset" data-id="${user.id}" data-name="${escapeAttr(
               user.displayName,
             )}">Reset password</button>
@@ -541,6 +550,19 @@ async function unsuspendUser(userId) {
   }
 }
 
+async function toggleLiveAudio(userId, enable) {
+  try {
+    await api(`/users/${userId}/live-audio`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled: enable }),
+    });
+    toast(enable ? 'Live audio enabled for user' : 'Live audio disabled for user');
+    await loadUsers();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 /* ---------- Live audio (consent-based) ---------- */
 const live = {
   socket: null,
@@ -599,7 +621,12 @@ function bindLiveSocket(socket) {
 
   socket.on('live:rejected', (payload) => {
     if (payload.sessionId === live.sessionId) {
-      toast('User declined the live audio request', 'error');
+      toast(
+        payload.reason === 'not_enabled'
+          ? 'Live audio is not enabled for this user'
+          : 'User declined the live audio request',
+        'error',
+      );
       stopLive(false);
     }
   });
@@ -854,6 +881,12 @@ function bindEvents() {
 
     if (action === 'unsuspend') {
       void unsuspendUser(id);
+      return;
+    }
+
+    if (action === 'live-toggle') {
+      const enable = button.dataset.enabled !== '1';
+      void toggleLiveAudio(id, enable);
       return;
     }
 

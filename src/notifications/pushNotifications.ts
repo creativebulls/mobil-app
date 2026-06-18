@@ -72,6 +72,17 @@ async function ensureAndroidChannel(): Promise<void> {
     enableVibrate: true,
     showBadge: true,
   });
+
+  await Notifications.setNotificationChannelAsync('live-audio', {
+    name: 'Live audio',
+    description: 'Live audio session requests and active sessions',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#F36464',
+    sound: 'default',
+    enableVibrate: true,
+    showBadge: true,
+  });
 }
 
 export async function ensureNotificationChannels(): Promise<void> {
