@@ -1,3 +1,5 @@
+import { sendPushToUser } from '../../shared/services/push.service';
+import { resolveAbsoluteMediaUrl } from '../../shared/utils/mediaUrl';
 import { formatRelativeTime } from '../../shared/utils/time';
 import { getUserDisplayName, User } from '../users/user.model';
 import { Call, type CallStatus } from './call.model';
@@ -122,6 +124,24 @@ export async function finalizeCall(
   doc.endedAt = now;
   doc.durationSeconds = durationSeconds;
   await doc.save();
+
+  // Let the callee know they missed a call (incoming call that was never
+  // answered), so it surfaces even if their app was backgrounded or closed.
+  if (status === 'missed' || status === 'cancelled') {
+    void sendPushToUser(participants.calleeId, {
+      title: 'Missed call',
+      body: `You missed a call from ${doc.callerName}`,
+      imageUrl: resolveAbsoluteMediaUrl(doc.callerAvatar ?? null),
+      channelId: 'calls',
+      androidTag: `call-${doc.callId}`,
+      data: {
+        type: 'missed_call',
+        callId: doc.callId,
+        callerId: participants.callerId,
+        callerName: doc.callerName,
+      },
+    }).catch(() => undefined);
+  }
 
   return participants;
 }

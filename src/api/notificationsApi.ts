@@ -22,6 +22,10 @@ export async function markNotificationsRead(ids?: string[]): Promise<{ unreadCou
   });
 }
 
+export async function clearNotifications(): Promise<{ cleared: boolean }> {
+  return apiRequest<{ cleared: boolean }>('/notifications', { method: 'DELETE' });
+}
+
 export async function registerPushToken(token: string): Promise<{ registered: boolean }> {
   return apiRequest<{ registered: boolean }>('/notifications/push-token', {
     method: 'POST',

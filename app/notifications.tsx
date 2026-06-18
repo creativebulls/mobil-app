@@ -11,11 +11,16 @@ import {
   View,
 } from 'react-native';
 
-import { fetchNotifications, markNotificationsRead } from '../src/api/notificationsApi';
+import {
+  clearNotifications,
+  fetchNotifications,
+  markNotificationsRead,
+} from '../src/api/notificationsApi';
 import { acceptFriendRequest, rejectFriendRequest } from '../src/api/profileApi';
 import type { AppNotification, NotificationType } from '../src/api/types';
 import { Avatar } from '../src/components/Avatar';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
+import { useDialog } from '../src/components/dialog/DialogProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { useNotifications } from '../src/notifications/NotificationsProvider';
 import { openUserProfile } from '../src/utils/openUserProfile';
@@ -51,6 +56,7 @@ function notificationBadgeColor(type: NotificationType): string {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const dialog = useDialog();
   const { setUnreadCount, refreshUnreadCount } = useNotifications();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,6 +99,25 @@ export default function NotificationsScreen() {
     setIsRefreshing(true);
     await load();
     setIsRefreshing(false);
+  }
+
+  async function handleClearAll() {
+    const confirmed = await dialog.confirm({
+      title: 'Clear all notifications?',
+      message: 'This removes all of your notifications.',
+      confirmText: 'Clear all',
+      destructive: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      await clearNotifications();
+    } catch {
+      void load();
+    }
   }
 
   function handlePress(notification: AppNotification) {
@@ -193,7 +218,18 @@ export default function NotificationsScreen() {
             <Ionicons name="chevron-back" size={26} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>Notifications</Text>
-          <View style={styles.headerSpacer} />
+          {notifications.length > 0 ? (
+            <Pressable
+              onPress={() => void handleClearAll()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all notifications"
+            >
+              <Text style={styles.clearAll}>Clear</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.headerSpacer} />
+          )}
         </View>
 
         {isLoading ? (
@@ -298,6 +334,11 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 26,
+  },
+  clearAll: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.brand,
   },
   loader: {
     paddingVertical: 32,

@@ -116,6 +116,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (data?.type === 'missed_call') {
+        router.push('/call-history');
+        return;
+      }
+
       if (data?.type === 'message' && data.conversationId) {
         router.push({
           pathname: '/chat',

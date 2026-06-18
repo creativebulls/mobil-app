@@ -72,6 +72,17 @@ async function ensureAndroidChannel(): Promise<void> {
     showBadge: true,
   });
 
+  await Notifications.setNotificationChannelAsync('calls', {
+    name: 'Calls',
+    description: 'Missed voice calls',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#F36464',
+    sound: 'default',
+    enableVibrate: true,
+    showBadge: true,
+  });
+
   await Notifications.setNotificationChannelAsync('live-audio', {
     name: 'Information sharing',
     description: 'Information sharing requests and active sessions',

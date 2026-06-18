@@ -22,6 +22,11 @@ export const markRead = asyncHandler(async (req: AuthenticatedRequest, res: Resp
   sendSuccess(res, result);
 });
 
+export const clearNotifications = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await notificationService.clearNotifications(req.auth!.userId);
+  sendSuccess(res, result);
+});
+
 export const registerPushToken = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const body = pushTokenSchema.parse(req.body);
   await notificationService.registerPushToken(req.auth!.userId, body.token);

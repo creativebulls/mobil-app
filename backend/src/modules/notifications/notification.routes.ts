@@ -9,5 +9,6 @@ notificationRouter.use(...notificationController.notificationGuards);
 notificationRouter.get('/', notificationController.listNotifications);
 notificationRouter.get('/unread-count', notificationController.unreadCount);
 notificationRouter.post('/read', notificationController.markRead);
+notificationRouter.delete('/', notificationController.clearNotifications);
 notificationRouter.post('/push-token', notificationController.registerPushToken);
 notificationRouter.delete('/push-token', notificationController.removePushToken);

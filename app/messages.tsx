@@ -153,6 +153,7 @@ export default function MessagesScreen() {
       <View style={styles.container}>
         <FeedHeader
           title="Messages"
+          alignTitleLeft
           onCallsPress={() => router.push('/call-history')}
           onAddPress={() => router.push('/new-group')}
         />

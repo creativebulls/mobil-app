@@ -213,6 +213,12 @@ export async function markNotificationsRead(userId: string, ids?: string[]): Pro
   return { unreadCount };
 }
 
+export async function clearNotifications(userId: string): Promise<{ cleared: boolean }> {
+  await Notification.deleteMany({ recipient: userId });
+  emitToUser(userId, 'notification:read', { unreadCount: 0 });
+  return { cleared: true };
+}
+
 export async function registerPushToken(userId: string, token: string): Promise<void> {
   await User.updateOne({ _id: userId }, { $addToSet: { expoPushTokens: token } });
 }

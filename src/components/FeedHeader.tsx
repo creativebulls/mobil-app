@@ -10,9 +10,17 @@ type FeedHeaderProps = {
   onNotificationsPress?: () => void;
   onAddPress?: () => void;
   onCallsPress?: () => void;
+  /** Render the title left-aligned beside the logo instead of centered. */
+  alignTitleLeft?: boolean;
 };
 
-export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress, onCallsPress }: FeedHeaderProps) {
+export function FeedHeader({
+  title = 'My Feed',
+  onNotificationsPress,
+  onAddPress,
+  onCallsPress,
+  alignTitleLeft = false,
+}: FeedHeaderProps) {
   const router = useRouter();
   const { unreadCount } = useNotifications();
 
@@ -41,9 +49,15 @@ export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress
         accessibilityLabel="WhereAbout logo"
       />
 
-      <Text style={styles.title} numberOfLines={1} pointerEvents="none">
-        {title}
-      </Text>
+      {alignTitleLeft ? (
+        <Text style={styles.titleLeft} numberOfLines={1}>
+          {title}
+        </Text>
+      ) : (
+        <Text style={styles.title} numberOfLines={1} pointerEvents="none">
+          {title}
+        </Text>
+      )}
 
       <View style={styles.actions}>
         {onCallsPress ? (
@@ -102,6 +116,14 @@ const styles = StyleSheet.create({
     left: 72,
     right: 72,
     textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  titleLeft: {
+    flex: 1,
+    marginLeft: 12,
+    textAlign: 'left',
     fontSize: 18,
     fontWeight: '800',
     color: colors.text,
