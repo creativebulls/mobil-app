@@ -55,7 +55,44 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
       'stun:stun2.l.google.com:19302',
     ],
   },
+  // Free public TURN relay so calls connect on cellular / symmetric-NAT
+  // networks even before the backend ICE config loads. The TCP/443 entry
+  // helps when UDP is blocked.
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
 ];
+
+/**
+ * Rewrites the Opus codec parameters to a low, mobile-friendly bitrate with
+ * forward error correction and discontinuous transmission. This keeps voice
+ * calls "lite" so they hold up on weak/low-bandwidth connections.
+ */
+function applyLowBandwidthAudio(sdp?: string): string | undefined {
+  if (!sdp) {
+    return sdp;
+  }
+  const opus = sdp.match(/a=rtpmap:(\d+) opus\/48000/i);
+  if (!opus) {
+    return sdp;
+  }
+  const pt = opus[1];
+  const params = 'maxaveragebitrate=24000;maxplaybackrate=16000;stereo=0;useinbandfec=1;usedtx=1';
+  const fmtpRegex = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+  if (fmtpRegex.test(sdp)) {
+    return sdp.replace(fmtpRegex, (_m, existing) => `a=fmtp:${pt} ${existing};${params}`);
+  }
+  return sdp.replace(
+    new RegExp(`(a=rtpmap:${pt} opus/48000[^\\r\\n]*)(\\r?\\n)`),
+    `$1$2a=fmtp:${pt} ${params}$2`,
+  );
+}
 
 // If the call never reaches the connected state within this window, give up so
 // the UI doesn't hang forever on "Connecting…".
@@ -270,7 +307,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
         pcRef.current = pc;
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-        const offer = await pc.createOffer({});
+        const rawOffer = await pc.createOffer({});
+        const offer = new RTCSessionDescription({
+          type: rawOffer.type,
+          sdp: applyLowBandwidthAudio(rawOffer.sdp),
+        } as never);
         await pc.setLocalDescription(offer);
 
         const me = await getStoredUser();
@@ -323,7 +364,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await pc.setRemoteDescription(new RTCSessionDescription(offer as never));
       await flushPendingCandidates();
 
-      const answer = await pc.createAnswer();
+      const rawAnswer = await pc.createAnswer();
+      const answer = new RTCSessionDescription({
+        type: rawAnswer.type,
+        sdp: applyLowBandwidthAudio(rawAnswer.sdp),
+      } as never);
       await pc.setLocalDescription(answer);
 
       await emit('call:accept', { toUserId: peerUserId, callId });

@@ -20,6 +20,17 @@ export interface IMessageMedia {
   durationMs?: number;
 }
 
+export type CallLogStatus = 'completed' | 'missed' | 'rejected' | 'cancelled';
+
+// A WhatsApp-style call entry rendered inline in the conversation. The message
+// `sender` is always the caller, so each client derives direction by comparing
+// to its own id.
+export interface ICallLog {
+  callId: string;
+  status: CallLogStatus;
+  durationSeconds: number;
+}
+
 export interface IMessage {
   conversation: Types.ObjectId;
   sender: Types.ObjectId;

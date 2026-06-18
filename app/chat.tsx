@@ -195,28 +195,25 @@ export default function ChatScreen() {
     [],
   );
 
-  // Edge-to-edge Android does not resize the window for the keyboard, so we
-  // track the keyboard height ourselves and lift the input bar accordingly.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // The native MainActivity applies the keyboard (IME) inset as padding on
+  // Android 15 edge-to-edge, so the input bar floats above the keyboard. We
+  // still track keyboard visibility to drop the safe-area padding (which the
+  // keyboard now covers) for a snug fit.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates?.height ?? 0);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  const keyboardOpen = keyboardHeight > 0;
   // When the keyboard covers the navigation bar, drop the safe-area padding.
   const inputBottomInset = keyboardOpen ? 8 : Math.max(insets.bottom, 8);
-  // The keyboard height spans from the screen bottom, so lift the column by it.
-  const contentBottomLift = keyboardOpen ? keyboardHeight : 0;
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -834,7 +831,7 @@ export default function ChatScreen() {
           )}
         </View>
 
-        <View style={[styles.flex, { paddingBottom: contentBottomLift }]}>
+        <View style={styles.flex}>
           {isLoading ? (
             <ActivityIndicator color={colors.brand} style={styles.loader} />
           ) : (

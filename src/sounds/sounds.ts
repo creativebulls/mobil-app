@@ -1,7 +1,6 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
 // Static requires so Metro bundles the audio assets into the app.
-const ringbackSource = require('../../assets/sounds/callingring.mp3');
 const incomingRingSource = require('../../assets/sounds/incomingring.mp3');
 const messageSource = require('../../assets/sounds/msgrecived.mp3');
 
@@ -23,12 +22,15 @@ async function ensureAudioMode(): Promise<void> {
   }
 }
 
-/** Outgoing ringback tone the caller hears while the other side rings. */
+/**
+ * Outgoing ring the caller hears while the other side rings. Uses the same ring
+ * tone as the recipient so both sides hear an identical ring.
+ */
 export function playRingback(): void {
   void ensureAudioMode();
   try {
     if (!ringbackPlayer) {
-      ringbackPlayer = createAudioPlayer(ringbackSource);
+      ringbackPlayer = createAudioPlayer(incomingRingSource);
       ringbackPlayer.loop = true;
     }
     void ringbackPlayer.seekTo(0).catch(() => undefined);
