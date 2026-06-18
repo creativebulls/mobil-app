@@ -238,6 +238,16 @@ export async function deleteConversationHistory(
   });
 }
 
+export async function deleteMessage(
+  conversationId: string,
+  messageId: string,
+): Promise<{ conversationId: string; messageId: string; deleted: boolean }> {
+  return apiRequest<{ conversationId: string; messageId: string; deleted: boolean }>(
+    `/messages/${conversationId}/message/${messageId}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function blockUser(userId: string): Promise<{ blocked: boolean }> {
   return apiRequest<{ blocked: boolean }>(`/relations/${userId}/block`, { method: 'POST' });
 }

@@ -3,6 +3,11 @@ import jwt from 'jsonwebtoken';
 import { Server, type Socket } from 'socket.io';
 
 import { env } from '../config/env';
+import {
+  finalizeCall,
+  markCallAnswered,
+  recordCallInvite,
+} from '../modules/calls/call-history.service';
 import { FriendRequest } from '../modules/friends/friend-request.model';
 import { User } from '../modules/users/user.model';
 import { sendPushToUser } from '../shared/services/push.service';
@@ -156,28 +161,49 @@ export function initializeSocket(httpServer: HttpServer): Server {
       io?.to(`user:${toUserId}`).emit(event, { ...rest, fromUserId: userId });
     };
 
+    // Notifies both participants that a call record changed so any open call
+    // history screens can refresh.
+    const notifyHistoryUpdated = (participants: { callerId: string; calleeId: string } | null) => {
+      if (!participants) {
+        return;
+      }
+      io?.to(`user:${participants.callerId}`).emit('call:history:updated', {});
+      io?.to(`user:${participants.calleeId}`).emit('call:history:updated', {});
+    };
+
     // Caller -> callee: incoming call invitation.
     socket.on('call:invite', (payload: { toUserId?: string; callId?: string; conversationId?: string; caller?: unknown }) => {
       relayToUser('call:incoming', payload);
+      void recordCallInvite({
+        callId: payload.callId,
+        callerId: userId,
+        calleeId: payload.toUserId,
+        conversationId: payload.conversationId ?? null,
+      });
     });
 
     // Callee -> caller: accepted / rejected / busy.
     socket.on('call:accept', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:accepted', payload);
+      void markCallAnswered(payload.callId);
     });
     socket.on('call:reject', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:rejected', payload);
+      void finalizeCall(payload.callId, 'rejected').then(notifyHistoryUpdated);
     });
     socket.on('call:busy', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:busy', payload);
+      void finalizeCall(payload.callId, 'busy').then(notifyHistoryUpdated);
     });
 
     // Either party: cancel a ringing call or hang up an active one.
     socket.on('call:cancel', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:cancelled', payload);
+      void finalizeCall(payload.callId, 'cancelled').then(notifyHistoryUpdated);
     });
     socket.on('call:end', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:ended', payload);
+      void finalizeCall(payload.callId, 'end').then(notifyHistoryUpdated);
     });
 
     // WebRTC handshake: SDP offer/answer and ICE candidates.

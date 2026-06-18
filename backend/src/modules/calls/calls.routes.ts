@@ -8,3 +8,4 @@ export const callsRouter = Router();
 callsRouter.use(requireAuth, requireVerifiedEmail, requireNotSuspended);
 
 callsRouter.get('/ice-servers', callsController.iceServers);
+callsRouter.get('/history', callsController.callHistory);

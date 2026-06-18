@@ -272,6 +272,64 @@ async function deliverToConversation(
   return { message: serialized, conversationId: conversation._id.toString() };
 }
 
+function previewForMessage(message: MessageDocument): string {
+  if (message.text?.trim()) {
+    return message.text.trim();
+  }
+  if (message.media) {
+    return mediaPreview(message.media.mediaType, message.media.fileName);
+  }
+  if (message.sharedPlace?.name) {
+    return `📍 ${message.sharedPlace.name}`;
+  }
+  return '';
+}
+
+export async function deleteMessage(userId: string, conversationId: string, messageId: string) {
+  const conversation = await Conversation.findById(conversationId);
+
+  if (!conversation || !conversation.participants.some((id) => id.toString() === userId)) {
+    throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
+  }
+
+  const message = await Message.findOne({ _id: messageId, conversation: conversationId });
+  if (!message) {
+    throw new AppError(404, 'Message not found', 'MESSAGE_NOT_FOUND');
+  }
+
+  // Only the author can delete their own message (delete for everyone).
+  if (message.sender.toString() !== userId) {
+    throw new AppError(403, 'You can only delete your own messages', 'MESSAGE_DELETE_FORBIDDEN');
+  }
+
+  const wasLast =
+    conversation.lastMessageAt != null &&
+    message.createdAt.getTime() === conversation.lastMessageAt.getTime();
+
+  await message.deleteOne();
+
+  // If we removed the most recent message, recompute the conversation preview.
+  if (wasLast) {
+    const latest = await Message.findOne({ conversation: conversationId }).sort({ createdAt: -1 });
+    if (latest) {
+      conversation.lastMessage = previewForMessage(latest);
+      conversation.lastMessageAt = latest.createdAt;
+      conversation.lastMessageSender = latest.sender as Types.ObjectId;
+    } else {
+      conversation.lastMessage = '';
+    }
+    await conversation.save();
+  }
+
+  const participantIds = conversation.participants.map((id) => id.toString());
+  for (const participantId of participantIds) {
+    emitToUser(participantId, 'message:deleted', { conversationId, messageId });
+    emitToUser(participantId, 'conversation:updated', { conversationId });
+  }
+
+  return { conversationId, messageId, deleted: true };
+}
+
 export async function deleteConversationHistory(userId: string, conversationId: string) {
   const conversation = await Conversation.findById(conversationId);
 

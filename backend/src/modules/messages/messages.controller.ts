@@ -7,6 +7,7 @@ import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
   conversationIdParamSchema,
   createGroupSchema,
+  messageIdParamSchema,
   messagesQuerySchema,
   renameGroupSchema,
   sendMediaMessageSchema,
@@ -160,6 +161,16 @@ export const sharePlace = asyncHandler(async (req: AuthenticatedRequest, res: Re
 export const markRead = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const params = conversationIdParamSchema.parse(req.params);
   const result = await messagesService.markConversationRead(req.auth!.userId, params.conversationId);
+  sendSuccess(res, result);
+});
+
+export const deleteMessage = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = messageIdParamSchema.parse(req.params);
+  const result = await messagesService.deleteMessage(
+    req.auth!.userId,
+    params.conversationId,
+    params.messageId,
+  );
   sendSuccess(res, result);
 });
 

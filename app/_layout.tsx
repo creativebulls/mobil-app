@@ -103,6 +103,7 @@ export default function RootLayout() {
               <Stack.Screen name="messages" />
               <Stack.Screen name="new-group" />
               <Stack.Screen name="chat" />
+              <Stack.Screen name="call-history" />
               <Stack.Screen name="group-info" />
               <Stack.Screen name="account-suspended" />
               <Stack.Screen name="profile" />

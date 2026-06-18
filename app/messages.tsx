@@ -151,7 +151,11 @@ export default function MessagesScreen() {
   return (
     <MainScreenLayout activeTab="messages">
       <View style={styles.container}>
-        <FeedHeader title="Messages" onAddPress={() => router.push('/new-group')} />
+        <FeedHeader
+          title="Messages"
+          onCallsPress={() => router.push('/call-history')}
+          onAddPress={() => router.push('/new-group')}
+        />
 
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={18} color={colors.labelGray} />

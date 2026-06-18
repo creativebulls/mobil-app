@@ -9,9 +9,10 @@ type FeedHeaderProps = {
   title?: string;
   onNotificationsPress?: () => void;
   onAddPress?: () => void;
+  onCallsPress?: () => void;
 };
 
-export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress }: FeedHeaderProps) {
+export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress, onCallsPress }: FeedHeaderProps) {
   const router = useRouter();
   const { unreadCount } = useNotifications();
 
@@ -45,6 +46,17 @@ export function FeedHeader({ title = 'My Feed', onNotificationsPress, onAddPress
       </Text>
 
       <View style={styles.actions}>
+        {onCallsPress ? (
+          <Pressable
+            onPress={onCallsPress}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Call history"
+          >
+            <Ionicons name="call-outline" size={19} color={colors.text} />
+          </Pressable>
+        ) : null}
+
         <Pressable
           onPress={handleNotificationsPress}
           style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}

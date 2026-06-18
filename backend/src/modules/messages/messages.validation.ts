@@ -8,6 +8,11 @@ export const userIdParamSchema = z.object({
   userId: z.string().min(1),
 });
 
+export const messageIdParamSchema = z.object({
+  conversationId: z.string().min(1),
+  messageId: z.string().min(1),
+});
+
 export const messagesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
   before: z.string().datetime().optional(),

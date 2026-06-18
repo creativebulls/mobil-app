@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   blockUser,
   deleteConversationHistory,
+  deleteMessage,
   fetchMessages,
   markConversationRead,
   openConversationWith,
@@ -194,7 +195,28 @@ export default function ChatScreen() {
     [],
   );
 
-  const inputBottomInset = Math.max(insets.bottom, 8);
+  // Edge-to-edge Android does not resize the window for the keyboard, so we
+  // track the keyboard height ourselves and lift the input bar accordingly.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const keyboardOpen = keyboardHeight > 0;
+  // When the keyboard covers the navigation bar, drop the safe-area padding.
+  const inputBottomInset = keyboardOpen ? 8 : Math.max(insets.bottom, 8);
+  // The keyboard height spans from the screen bottom, so lift the column by it.
+  const contentBottomLift = keyboardOpen ? keyboardHeight : 0;
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -210,6 +232,13 @@ export default function ChatScreen() {
     if (incoming.senderId !== currentUserId) {
       void markConversationRead(conversationId).catch(() => undefined);
     }
+  });
+
+  useRealtimeEvent<{ conversationId: string; messageId: string }>('message:deleted', (payload) => {
+    if (!conversationId || payload.conversationId !== conversationId) {
+      return;
+    }
+    setMessages((current) => current.filter((message) => message.id !== payload.messageId));
   });
 
   useRealtimeEvent<{ conversationId: string | null; userId: string; typing: boolean }>(
@@ -668,6 +697,34 @@ export default function ChatScreen() {
     [router],
   );
 
+  const handleDeleteMessage = useCallback(
+    async (message: ChatMessage) => {
+      if (!conversationId) {
+        return;
+      }
+      const confirmed = await dialog.confirm({
+        title: 'Delete message?',
+        message: 'This message will be removed for everyone.',
+        confirmText: 'Delete',
+        destructive: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      setMessages((current) => current.filter((item) => item.id !== message.id));
+      try {
+        await deleteMessage(conversationId, message.id);
+      } catch (error) {
+        await dialog.alert({
+          title: 'Could not delete message',
+          message: getErrorMessage(error, 'Try again later'),
+        });
+        void load();
+      }
+    },
+    [conversationId, dialog, load],
+  );
+
   const renderRow = useCallback(
     ({ item }: { item: ChatRow }) => (
       <MessageRow
@@ -677,9 +734,10 @@ export default function ChatScreen() {
         otherName={headerName}
         onOpenMedia={setViewerMedia}
         onPlacePress={handlePlacePress}
+        onDelete={handleDeleteMessage}
       />
     ),
-    [headerAvatar, headerName, handlePlacePress, isGroup],
+    [headerAvatar, headerName, handlePlacePress, handleDeleteMessage, isGroup],
   );
 
   return (
@@ -776,10 +834,7 @@ export default function ChatScreen() {
           )}
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <View style={[styles.flex, { paddingBottom: contentBottomLift }]}>
           {isLoading ? (
             <ActivityIndicator color={colors.brand} style={styles.loader} />
           ) : (
@@ -917,7 +972,7 @@ export default function ChatScreen() {
               </>
             )}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </StackScreenLayout>
       <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
       <PlacePickerModal
@@ -1049,6 +1104,7 @@ type MessageRowProps = {
   otherName: string;
   onOpenMedia: (media: OpenableMedia) => void;
   onPlacePress: (place: { placeId: string; name: string; imageUrl: string | null }) => void;
+  onDelete: (message: ChatMessage) => void;
 };
 
 const MessageRow = memo(function MessageRow({
@@ -1058,12 +1114,15 @@ const MessageRow = memo(function MessageRow({
   otherName,
   onOpenMedia,
   onPlacePress,
+  onDelete,
 }: MessageRowProps) {
   const { message, mine, isFirstInGroup, isLastInGroup } = row;
   const time = formatClock(message.createdAt);
   // In group chats each message carries its own sender identity.
   const avatarUri = isGroup ? message.senderAvatar : otherAvatar;
   const displayName = isGroup ? message.senderName ?? 'Member' : otherName;
+  // Long-press your own message to delete it for everyone.
+  const handleLongPress = mine ? () => onDelete(message) : undefined;
 
   return (
     <View
@@ -1096,6 +1155,7 @@ const MessageRow = memo(function MessageRow({
                 imageUrl: message.sharedPlace!.imageUrl,
               })
             }
+            onLongPress={handleLongPress}
             style={({ pressed }) => [styles.placeCard, pressed && styles.pressed]}
           >
             {message.sharedPlace.imageUrl ? (
@@ -1118,10 +1178,14 @@ const MessageRow = memo(function MessageRow({
           </Pressable>
         ) : null}
 
-        {message.media ? <ChatMediaBubble media={message.media} onOpen={onOpenMedia} /> : null}
+        {message.media ? (
+          <ChatMediaBubble media={message.media} onOpen={onOpenMedia} onLongPress={handleLongPress} />
+        ) : null}
 
         {message.text ? (
-          <View
+          <Pressable
+            onLongPress={handleLongPress}
+            delayLongPress={300}
             style={[
               styles.bubble,
               mine ? styles.bubbleMine : styles.bubbleTheirs,
@@ -1129,7 +1193,7 @@ const MessageRow = memo(function MessageRow({
             ]}
           >
             <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.text}</Text>
-          </View>
+          </Pressable>
         ) : null}
 
         {isLastInGroup ? (

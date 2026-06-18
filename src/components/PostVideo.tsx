@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { FullscreenVideoPlayer } from './FullscreenVideoPlayer';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { colors } from '../theme/colors';
 
@@ -50,23 +51,14 @@ export function PostVideoTile({
   );
 }
 
-function FullscreenVideo({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (instance) => {
-    instance.loop = false;
-    instance.play();
-  });
-
-  return <VideoView player={player} style={styles.viewerVideo} nativeControls contentFit="contain" />;
-}
-
 export function PostVideoModal({ uri, onClose }: { uri: string | null; onClose: () => void }) {
   return (
-    <Modal visible={uri !== null} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={uri !== null} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.viewerRoot}>
+        {uri ? <FullscreenVideoPlayer uri={uri} /> : null}
         <Pressable style={styles.viewerClose} onPress={onClose} hitSlop={12}>
           <Ionicons name="close" size={30} color={colors.white} />
         </Pressable>
-        {uri ? <FullscreenVideo uri={uri} /> : null}
       </View>
     </Modal>
   );
@@ -118,9 +110,5 @@ const styles = StyleSheet.create({
     top: 48,
     right: 20,
     zIndex: 2,
-  },
-  viewerVideo: {
-    width: '100%',
-    height: '70%',
   },
 });

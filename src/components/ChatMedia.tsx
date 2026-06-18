@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import {
   ActivityIndicator,
   Image,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 
 import type { MessageMedia } from '../api/types';
+import { FullscreenVideoPlayer } from './FullscreenVideoPlayer';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { colors } from '../theme/colors';
 
@@ -67,7 +67,13 @@ function fileIconFor(media: MessageMedia): keyof typeof Ionicons.glyphMap {
   return 'document';
 }
 
-function AudioMessageBubble({ media }: { media: MessageMedia }) {
+function AudioMessageBubble({
+  media,
+  onLongPress,
+}: {
+  media: MessageMedia;
+  onLongPress?: () => void;
+}) {
   const resolved = useMediaUrl(media.url);
   const player = useAudioPlayer(resolved ?? undefined);
   const status = useAudioPlayerStatus(player);
@@ -92,7 +98,7 @@ function AudioMessageBubble({ media }: { media: MessageMedia }) {
   };
 
   return (
-    <View style={styles.audioBubble}>
+    <Pressable onLongPress={onLongPress} delayLongPress={300} style={styles.audioBubble}>
       <Pressable onPress={toggle} hitSlop={8} style={styles.audioPlayButton}>
         <Ionicons
           name={status.playing ? 'pause' : 'play'}
@@ -109,11 +115,17 @@ function AudioMessageBubble({ media }: { media: MessageMedia }) {
           {status.playing || elapsed > 0 ? formatClock(elapsed) : formatClock(remaining || totalSeconds)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-function FileMessageBubble({ media }: { media: MessageMedia }) {
+function FileMessageBubble({
+  media,
+  onLongPress,
+}: {
+  media: MessageMedia;
+  onLongPress?: () => void;
+}) {
   const resolved = useMediaUrl(media.url);
   const meta = formatBytes(media.fileSize);
 
@@ -124,6 +136,8 @@ function FileMessageBubble({ media }: { media: MessageMedia }) {
           void Linking.openURL(resolved);
         }
       }}
+      onLongPress={onLongPress}
+      delayLongPress={300}
       style={({ pressed }) => [styles.fileBubble, pressed && styles.pressed]}
     >
       <View style={styles.fileIcon}>
@@ -143,19 +157,21 @@ function FileMessageBubble({ media }: { media: MessageMedia }) {
 export function ChatMediaBubble({
   media,
   onOpen,
+  onLongPress,
 }: {
   media: MessageMedia;
   onOpen: (media: OpenableMedia) => void;
+  onLongPress?: () => void;
 }) {
   const resolved = useMediaUrl(media.url);
   const height = bubbleHeight(media);
 
   if (media.mediaType === 'audio') {
-    return <AudioMessageBubble media={media} />;
+    return <AudioMessageBubble media={media} onLongPress={onLongPress} />;
   }
 
   if (media.mediaType === 'file') {
-    return <FileMessageBubble media={media} />;
+    return <FileMessageBubble media={media} onLongPress={onLongPress} />;
   }
 
   return (
@@ -164,6 +180,8 @@ export function ChatMediaBubble({
         resolved &&
         onOpen({ uri: resolved, mediaType: media.mediaType === 'video' ? 'video' : 'image' })
       }
+      onLongPress={onLongPress}
+      delayLongPress={300}
       style={({ pressed }) => [styles.mediaBubble, { height }, pressed && styles.pressed]}
     >
       {resolved ? (
@@ -191,17 +209,6 @@ export function ChatMediaBubble({
   );
 }
 
-function FullscreenVideo({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = false;
-    p.play();
-  });
-
-  return (
-    <VideoView player={player} style={styles.viewerVideo} nativeControls contentFit="contain" />
-  );
-}
-
 export function MediaViewerModal({
   media,
   onClose,
@@ -209,17 +216,24 @@ export function MediaViewerModal({
   media: OpenableMedia | null;
   onClose: () => void;
 }) {
+  const isVideo = media?.mediaType === 'video';
   return (
-    <Modal visible={media !== null} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={media !== null}
+      transparent={!isVideo}
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <View style={styles.viewerRoot}>
-        <Pressable style={styles.viewerClose} onPress={onClose} hitSlop={12}>
-          <Ionicons name="close" size={30} color={colors.white} />
-        </Pressable>
-        {media?.mediaType === 'video' ? (
-          <FullscreenVideo uri={media.uri} />
+        {isVideo && media ? (
+          <FullscreenVideoPlayer uri={media.uri} />
         ) : media ? (
           <Image source={{ uri: media.uri }} style={styles.viewerImage} resizeMode="contain" />
         ) : null}
+        <Pressable style={styles.viewerClose} onPress={onClose} hitSlop={12}>
+          <Ionicons name="close" size={30} color={colors.white} />
+        </Pressable>
       </View>
     </Modal>
   );
@@ -294,10 +308,6 @@ const styles = StyleSheet.create({
   viewerImage: {
     width: '100%',
     height: '100%',
-  },
-  viewerVideo: {
-    width: '100%',
-    height: '70%',
   },
   audioBubble: {
     width: BUBBLE_WIDTH,
