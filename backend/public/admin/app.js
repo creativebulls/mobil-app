@@ -123,6 +123,15 @@ function showDashboard() {
 }
 
 function logout() {
+  try {
+    stopLive(true);
+  } catch {
+    // ignore
+  }
+  if (live.socket) {
+    live.socket.disconnect();
+    live.socket = null;
+  }
   setToken(null);
   showLogin();
 }
@@ -188,6 +197,9 @@ function renderUsers() {
                     user.displayName,
                   )}">Suspend</button>`
             }
+            <button class="btn btn-secondary btn-sm" data-action="live" data-id="${user.id}" data-name="${escapeAttr(
+              user.displayName,
+            )}">Listen live</button>
             <button class="btn btn-secondary btn-sm" data-action="reset" data-id="${user.id}" data-name="${escapeAttr(
               user.displayName,
             )}">Reset password</button>
@@ -529,6 +541,199 @@ async function unsuspendUser(userId) {
   }
 }
 
+/* ---------- Live audio (consent-based) ---------- */
+const live = {
+  socket: null,
+  pc: null,
+  sessionId: null,
+  userId: null,
+  pendingCandidates: [],
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  bound: false,
+};
+
+function randomId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function setLiveStatus(text) {
+  const el = $('live-status');
+  if (el) el.textContent = text;
+}
+
+async function loadIceServers() {
+  try {
+    const data = await api('/ice-servers');
+    if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+      live.iceServers = data.iceServers;
+    }
+  } catch {
+    // fall back to the default STUN server
+  }
+}
+
+function ensureLiveSocket() {
+  if (live.socket && live.socket.connected) {
+    return live.socket;
+  }
+  if (typeof io === 'undefined') {
+    toast('Realtime library failed to load', 'error');
+    return null;
+  }
+  if (!live.socket) {
+    live.socket = io({ path: '/socket.io', auth: { token: getToken() }, transports: ['websocket'] });
+    bindLiveSocket(live.socket);
+  } else {
+    live.socket.auth = { token: getToken() };
+    live.socket.connect();
+  }
+  return live.socket;
+}
+
+function bindLiveSocket(socket) {
+  socket.on('live:accepted', (payload) => {
+    if (payload.sessionId === live.sessionId) {
+      setLiveStatus('Accepted · connecting…');
+    }
+  });
+
+  socket.on('live:rejected', (payload) => {
+    if (payload.sessionId === live.sessionId) {
+      toast('User declined the live audio request', 'error');
+      stopLive(false);
+    }
+  });
+
+  socket.on('live:ended', (payload) => {
+    if (!payload.sessionId || payload.sessionId === live.sessionId) {
+      stopLive(false);
+    }
+  });
+
+  socket.on('webrtc:offer', async (payload) => {
+    if (payload.callId !== live.sessionId || !payload.sdp) {
+      return;
+    }
+    try {
+      const pc = new RTCPeerConnection({ iceServers: live.iceServers });
+      live.pc = pc;
+
+      pc.ontrack = (event) => {
+        const audio = $('live-audio');
+        if (audio && event.streams && event.streams[0]) {
+          audio.srcObject = event.streams[0];
+        }
+      };
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          live.socket.emit('webrtc:ice-candidate', {
+            toUserId: live.userId,
+            callId: live.sessionId,
+            candidate: event.candidate,
+          });
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          setLiveStatus('Live · listening');
+          $('live-meter-fill')?.classList.add('active');
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          stopLive(false);
+        }
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      for (const candidate of live.pendingCandidates) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch {
+          // ignore
+        }
+      }
+      live.pendingCandidates = [];
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      live.socket.emit('webrtc:answer', {
+        toUserId: live.userId,
+        callId: live.sessionId,
+        sdp: answer,
+      });
+    } catch {
+      toast('Failed to establish live audio', 'error');
+      stopLive(true);
+    }
+  });
+
+  socket.on('webrtc:ice-candidate', async (payload) => {
+    if (payload.callId !== live.sessionId || !payload.candidate) {
+      return;
+    }
+    if (live.pc && live.pc.remoteDescription) {
+      try {
+        await live.pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } catch {
+        // ignore
+      }
+    } else {
+      live.pendingCandidates.push(payload.candidate);
+    }
+  });
+}
+
+async function startLive(userId, name) {
+  if (live.sessionId) {
+    toast('Already in a live session', 'error');
+    return;
+  }
+  const socket = ensureLiveSocket();
+  if (!socket) {
+    return;
+  }
+  await loadIceServers();
+
+  live.sessionId = randomId();
+  live.userId = userId;
+  live.pendingCandidates = [];
+
+  $('live-user').textContent = name;
+  setLiveStatus('Requesting consent…');
+  $('live-meter-fill')?.classList.remove('active');
+  $('live-panel').classList.remove('hidden');
+
+  const sendRequest = () =>
+    socket.emit('live:request', { toUserId: userId, sessionId: live.sessionId, admin: { panel: true } });
+
+  if (socket.connected) {
+    sendRequest();
+  } else {
+    socket.once('connect', sendRequest);
+  }
+}
+
+function stopLive(notifyUser = true) {
+  if (notifyUser && live.socket && live.sessionId && live.userId) {
+    live.socket.emit('live:end', { toUserId: live.userId, sessionId: live.sessionId });
+  }
+  if (live.pc) {
+    try {
+      live.pc.close();
+    } catch {
+      // ignore
+    }
+    live.pc = null;
+  }
+  const audio = $('live-audio');
+  if (audio) {
+    audio.srcObject = null;
+  }
+  live.sessionId = null;
+  live.userId = null;
+  live.pendingCandidates = [];
+  $('live-panel').classList.add('hidden');
+  $('live-meter-fill')?.classList.remove('active');
+}
+
 function openModal(id) {
   $(id).classList.remove('hidden');
 }
@@ -600,6 +805,7 @@ function bindEvents() {
 
   $('sidebar-toggle')?.addEventListener('click', openSidebar);
   $('sidebar-scrim')?.addEventListener('click', closeSidebar);
+  $('live-close')?.addEventListener('click', () => stopLive(true));
 
   $('push-save-btn').addEventListener('click', () => void savePushConfig());
   $('push-clear-btn').addEventListener('click', () => void clearPushConfig());
@@ -648,6 +854,11 @@ function bindEvents() {
 
     if (action === 'unsuspend') {
       void unsuspendUser(id);
+      return;
+    }
+
+    if (action === 'live') {
+      void startLive(id, name);
       return;
     }
 

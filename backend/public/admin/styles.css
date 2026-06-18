@@ -683,6 +683,101 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
+/* ---------- Live audio panel ---------- */
+.live-panel {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  z-index: 90;
+  width: 17rem;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: slideUp 0.2s ease;
+}
+
+.live-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+  background: #1a1024;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.live-pulse {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.6);
+  animation: livePulse 1.4s infinite;
+}
+
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.6); }
+  70% { box-shadow: 0 0 0 0.5rem rgba(255, 59, 48, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+}
+
+.live-close {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex !important;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.live-panel-body {
+  padding: 0.875rem;
+}
+
+.live-user {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.125rem;
+}
+
+.live-status {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.75rem;
+}
+
+.live-meter {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  overflow: hidden;
+}
+
+.live-meter-fill {
+  height: 100%;
+  width: 30%;
+  border-radius: 999px;
+  background: hsl(var(--muted-foreground));
+  transition: width 0.3s;
+}
+
+.live-meter-fill.active {
+  width: 100%;
+  background: linear-gradient(90deg, hsl(var(--success)), hsl(142 70% 55%));
+}
+
 /* ---------- Sidebar scrim (mobile) ---------- */
 .sidebar-scrim {
   position: fixed;

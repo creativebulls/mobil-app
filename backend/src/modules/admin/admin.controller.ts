@@ -2,6 +2,7 @@ import { Response } from 'express';
 
 import type { AdminRequest } from '../../shared/middleware/admin.middleware';
 import { asyncHandler, sendSuccess } from '../../shared/utils/http';
+import { getIceServers } from '../calls/calls.service';
 import * as adminService from './admin.service';
 import {
   adminAppealReviewSchema,
@@ -99,4 +100,8 @@ export const reviewAppeal = asyncHandler(async (req: AdminRequest, res: Response
   const body = adminAppealReviewSchema.parse(req.body);
   const result = await adminService.reviewAppeal(String(req.params.id), body.decision);
   sendSuccess(res, result);
+});
+
+export const iceServers = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  sendSuccess(res, { iceServers: getIceServers() });
 });

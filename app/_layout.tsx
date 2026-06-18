@@ -8,6 +8,7 @@ import { StyleSheet } from 'react-native';
 
 import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
 import { CallProvider } from '../src/calls/CallProvider';
+import { LiveAudioProvider } from '../src/calls/LiveAudioProvider';
 import { DialogProvider } from '../src/components/dialog/DialogProvider';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
 import { PresenceProvider } from '../src/realtime/PresenceProvider';
@@ -79,6 +80,7 @@ export default function RootLayout() {
           <NotificationsProvider>
             <PresenceProvider>
             <CallProvider>
+              <LiveAudioProvider>
               <SessionGuard />
               <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
               <Stack.Screen name="index" />
@@ -113,6 +115,7 @@ export default function RootLayout() {
               <Stack.Screen name="places" />
               <Stack.Screen name="place-detail" />
               </Stack>
+              </LiveAudioProvider>
             </CallProvider>
             </PresenceProvider>
           </NotificationsProvider>

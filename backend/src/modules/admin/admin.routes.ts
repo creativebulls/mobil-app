@@ -22,6 +22,8 @@ adminRouter.post('/reports/:id/status', adminController.setReportStatus);
 adminRouter.get('/appeals', adminController.listAppeals);
 adminRouter.post('/appeals/:id/review', adminController.reviewAppeal);
 
+adminRouter.get('/ice-servers', adminController.iceServers);
+
 adminRouter.get('/push-config', adminController.getPushConfig);
 adminRouter.put('/push-config', adminController.setPushConfig);
 adminRouter.delete('/push-config', adminController.clearPushConfig);

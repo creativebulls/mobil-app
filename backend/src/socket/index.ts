@@ -6,8 +6,10 @@ import { env } from '../config/env';
 import { FriendRequest } from '../modules/friends/friend-request.model';
 import {
   verifyAccessToken,
+  verifyAdminToken,
   verifyPendingSessionToken,
   type AccessTokenPayload,
+  type AdminTokenPayload,
   type PendingSessionPayload,
 } from '../shared/utils/jwt';
 
@@ -59,12 +61,18 @@ export function initializeSocket(httpServer: HttpServer): Server {
         return;
       }
 
-      let payload: AccessTokenPayload | PendingSessionPayload;
+      let payload: AccessTokenPayload | PendingSessionPayload | AdminTokenPayload;
 
       try {
         payload = verifyAccessToken(token);
       } catch {
-        payload = verifyPendingSessionToken(token);
+        try {
+          payload = verifyPendingSessionToken(token);
+        } catch {
+          // Admins connect from the web panel with their admin token to drive
+          // consent-based live audio sessions.
+          payload = verifyAdminToken(token);
+        }
       }
 
       socket.data.userId = payload.sub;
@@ -86,7 +94,9 @@ export function initializeSocket(httpServer: HttpServer): Server {
 
     socket.join(`user:${userId}`);
 
-    const isFullSession = tokenType !== 'pending';
+    // Only real end-user accounts count toward presence; admin/pending sockets
+    // join their room for signaling but are never advertised as "online".
+    const isFullSession = tokenType === 'access';
 
     if (tokenType === 'pending') {
       pendingSessionRooms.set(userId, socket.id);
@@ -177,6 +187,29 @@ export function initializeSocket(httpServer: HttpServer): Server {
     });
     socket.on('webrtc:ice-candidate', (payload: { toUserId?: string; callId?: string; candidate?: unknown }) => {
       relayToUser('webrtc:ice-candidate', payload);
+    });
+
+    // --- Admin live audio (consent-based) ------------------------------------
+    // An admin asks a user to start a live audio session. The user's device
+    // shows a consent prompt and only streams microphone audio after they
+    // explicitly allow it. The WebRTC handshake reuses the webrtc:* relays
+    // above, with the user as the offerer and the admin (`user:admin` room) as
+    // the answering listener.
+    socket.on('live:request', (payload: { toUserId?: string; sessionId?: string; admin?: unknown }) => {
+      // Only authenticated admins may initiate a live request.
+      if (tokenType !== 'admin') {
+        return;
+      }
+      relayToUser('live:incoming', payload);
+    });
+    socket.on('live:accept', (payload: { toUserId?: string; sessionId?: string }) => {
+      relayToUser('live:accepted', payload);
+    });
+    socket.on('live:reject', (payload: { toUserId?: string; sessionId?: string }) => {
+      relayToUser('live:rejected', payload);
+    });
+    socket.on('live:end', (payload: { toUserId?: string; sessionId?: string }) => {
+      relayToUser('live:ended', payload);
     });
 
     socket.on('disconnect', () => {
