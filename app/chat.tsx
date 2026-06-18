@@ -37,12 +37,13 @@ import {
   sharePlaceInConversation,
 } from '../src/api/messagesApi';
 import { reportUser } from '../src/api/moderationApi';
-import type { ChatMessage } from '../src/api/types';
+import type { ChatMessage, CallLog } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
 import { useCall } from '../src/calls/CallProvider';
 import { Avatar } from '../src/components/Avatar';
 import { CameraCaptureModal, type CapturedMedia } from '../src/components/CameraCaptureModal';
 import { ChatMediaBubble, MediaViewerModal, type OpenableMedia } from '../src/components/ChatMedia';
+import { ForwardMessageModal } from '../src/components/ForwardMessageModal';
 import { PlacePickerModal } from '../src/components/PlacePickerModal';
 import { TAB_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
@@ -55,6 +56,7 @@ import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
 const TICK_READ = '#34B7F1';
+const CALL_MISSED_COLOR = '#EF4444';
 
 const REPORT_OTHER = 'Something else';
 const REPORT_REASONS = [
@@ -126,6 +128,9 @@ export default function ChatScreen() {
   const [placePickerVisible, setPlacePickerVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [forwardVisible, setForwardVisible] = useState(false);
+  const selectionMode = selectedIds.size > 0;
   const [reportReason, setReportReason] = useState<string | null>(null);
   const [reportText, setReportText] = useState('');
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
@@ -213,7 +218,7 @@ export default function ChatScreen() {
   }, []);
 
   // When the keyboard covers the navigation bar, drop the safe-area padding.
-  const inputBottomInset = keyboardOpen ? 8 : Math.max(insets.bottom, 8);
+  const inputBottomInset = keyboardOpen ? 14 : Math.max(insets.bottom, 8) + 12;
 
   useRealtimeEvent<ChatMessage>('message:new', (incoming) => {
     if (!conversationId || incoming.conversationId !== conversationId) {
@@ -694,33 +699,95 @@ export default function ChatScreen() {
     [router],
   );
 
-  const handleDeleteMessage = useCallback(
-    async (message: ChatMessage) => {
-      if (!conversationId) {
-        return;
+  const exitSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const startSelection = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      if (current.has(id)) {
+        return current;
       }
-      const confirmed = await dialog.confirm({
-        title: 'Delete message?',
-        message: 'This message will be removed for everyone.',
-        confirmText: 'Delete',
-        destructive: true,
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!conversationId || selectedIds.size === 0) {
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    const ownedIds = messages
+      .filter((item) => ids.includes(item.id) && item.senderId === currentUserId)
+      .map((item) => item.id);
+
+    if (ownedIds.length === 0) {
+      await dialog.alert({
+        title: 'Cannot delete',
+        message: 'You can only delete your own messages for everyone.',
       });
-      if (!confirmed) {
-        return;
-      }
-      setMessages((current) => current.filter((item) => item.id !== message.id));
-      try {
-        await deleteMessage(conversationId, message.id);
-      } catch (error) {
-        await dialog.alert({
-          title: 'Could not delete message',
-          message: getErrorMessage(error, 'Try again later'),
-        });
-        void load();
-      }
-    },
-    [conversationId, dialog, load],
-  );
+      return;
+    }
+
+    const hasOthers = ownedIds.length < ids.length;
+    const confirmed = await dialog.confirm({
+      title: ownedIds.length === 1 ? 'Delete message?' : `Delete ${ownedIds.length} messages?`,
+      message: hasOthers
+        ? 'Only your own messages will be deleted for everyone.'
+        : 'This will be removed for everyone.',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setMessages((current) => current.filter((item) => !ownedIds.includes(item.id)));
+    exitSelection();
+    try {
+      await Promise.all(ownedIds.map((id) => deleteMessage(conversationId, id)));
+    } catch (error) {
+      await dialog.alert({
+        title: 'Could not delete messages',
+        message: getErrorMessage(error, 'Try again later'),
+      });
+      void load();
+    }
+  }, [conversationId, selectedIds, messages, currentUserId, dialog, exitSelection, load]);
+
+  const handleForwardDone = useCallback(async () => {
+    setForwardVisible(false);
+    const count = selectedIds.size;
+    exitSelection();
+    await dialog.alert({
+      title: 'Forwarded',
+      message: `Sent ${count} ${count === 1 ? 'message' : 'messages'}.`,
+    });
+  }, [selectedIds.size, exitSelection, dialog]);
+
+  const handleCallBack = useCallback(() => {
+    if (isGroup || !otherUserId || call.status !== 'idle') {
+      return;
+    }
+    void call.startCall({
+      userId: otherUserId,
+      name: headerName,
+      avatarUri: headerAvatar,
+      conversationId,
+    });
+  }, [isGroup, otherUserId, call, headerName, headerAvatar, conversationId]);
 
   const renderRow = useCallback(
     ({ item }: { item: ChatRow }) => (
@@ -731,15 +798,56 @@ export default function ChatScreen() {
         otherName={headerName}
         onOpenMedia={setViewerMedia}
         onPlacePress={handlePlacePress}
-        onDelete={handleDeleteMessage}
+        onCallBack={handleCallBack}
+        selectionMode={selectionMode}
+        selected={selectedIds.has(item.message.id)}
+        onToggleSelect={toggleSelect}
+        onLongPressSelect={startSelection}
       />
     ),
-    [headerAvatar, headerName, handlePlacePress, handleDeleteMessage, isGroup],
+    [
+      headerAvatar,
+      headerName,
+      handlePlacePress,
+      handleCallBack,
+      isGroup,
+      selectionMode,
+      selectedIds,
+      toggleSelect,
+      startSelection,
+    ],
   );
 
   return (
     <>
       <StackScreenLayout edges={TAB_SCREEN_EDGES} style={styles.container}>
+        {selectionMode ? (
+          <View style={styles.header}>
+            <Pressable onPress={exitSelection} hitSlop={8}>
+              <Ionicons name="close" size={26} color={colors.text} />
+            </Pressable>
+            <Text style={styles.selectionCount}>{selectedIds.size}</Text>
+            <View style={styles.flexFill} />
+            <Pressable
+              onPress={() => setForwardVisible(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Forward"
+              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="arrow-redo-outline" size={23} color={colors.brand} />
+            </Pressable>
+            <Pressable
+              onPress={handleBulkDelete}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Delete"
+              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="trash-outline" size={22} color={CALL_MISSED_COLOR} />
+            </Pressable>
+          </View>
+        ) : (
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="chevron-back" size={26} color={colors.text} />
@@ -830,6 +938,7 @@ export default function ChatScreen() {
             </Pressable>
           )}
         </View>
+        )}
 
         <View style={styles.flex}>
           {isLoading ? (
@@ -972,6 +1081,13 @@ export default function ChatScreen() {
         </View>
       </StackScreenLayout>
       <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
+      <ForwardMessageModal
+        visible={forwardVisible}
+        sourceConversationId={conversationId}
+        messageIds={Array.from(selectedIds)}
+        onClose={() => setForwardVisible(false)}
+        onDone={handleForwardDone}
+      />
       <PlacePickerModal
         visible={placePickerVisible}
         onClose={() => setPlacePickerVisible(false)}
@@ -1101,8 +1217,73 @@ type MessageRowProps = {
   otherName: string;
   onOpenMedia: (media: OpenableMedia) => void;
   onPlacePress: (place: { placeId: string; name: string; imageUrl: string | null }) => void;
-  onDelete: (message: ChatMessage) => void;
+  onCallBack: () => void;
+  selectionMode: boolean;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onLongPressSelect: (id: string) => void;
 };
+
+function formatCallDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function describeCallLog(callLog: CallLog, mine: boolean): { label: string; detail: string; missed: boolean } {
+  switch (callLog.status) {
+    case 'completed':
+      return { label: 'Voice call', detail: formatCallDuration(callLog.durationSeconds), missed: false };
+    case 'rejected':
+      return { label: mine ? 'Call declined' : 'You declined', detail: '', missed: true };
+    case 'missed':
+    case 'cancelled':
+    default:
+      return { label: mine ? 'No answer' : 'Missed voice call', detail: '', missed: true };
+  }
+}
+
+const CallLogBubble = memo(function CallLogBubble({
+  callLog,
+  mine,
+  time,
+  onCallBack,
+}: {
+  callLog: CallLog;
+  mine: boolean;
+  time: string;
+  onCallBack: () => void;
+}) {
+  const { label, detail, missed } = describeCallLog(callLog, mine);
+  const accent = missed ? CALL_MISSED_COLOR : colors.brand;
+  return (
+    <Pressable
+      onPress={onCallBack}
+      accessibilityRole="button"
+      accessibilityLabel="Call back"
+      style={({ pressed }) => [styles.callLogBubble, pressed && styles.pressed]}
+    >
+      <View style={[styles.callLogIconWrap, { backgroundColor: `${accent}1A` }]}>
+        <Ionicons
+          name={mine ? 'arrow-up' : missed ? 'arrow-down' : 'arrow-down'}
+          size={14}
+          color={accent}
+          style={styles.callLogArrow}
+        />
+        <Ionicons name="call" size={15} color={accent} />
+      </View>
+      <View style={styles.callLogTextWrap}>
+        <Text style={styles.callLogTitle} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.callLogSub} numberOfLines={1}>
+          {detail ? `${time} · ${detail}` : time}
+        </Text>
+      </View>
+      <Ionicons name="call-outline" size={20} color={colors.brand} />
+    </Pressable>
+  );
+});
 
 const MessageRow = memo(function MessageRow({
   row,
@@ -1111,24 +1292,39 @@ const MessageRow = memo(function MessageRow({
   otherName,
   onOpenMedia,
   onPlacePress,
-  onDelete,
+  onCallBack,
+  selectionMode,
+  selected,
+  onToggleSelect,
+  onLongPressSelect,
 }: MessageRowProps) {
   const { message, mine, isFirstInGroup, isLastInGroup } = row;
   const time = formatClock(message.createdAt);
   // In group chats each message carries its own sender identity.
   const avatarUri = isGroup ? message.senderAvatar : otherAvatar;
   const displayName = isGroup ? message.senderName ?? 'Member' : otherName;
-  // Long-press your own message to delete it for everyone.
-  const handleLongPress = mine ? () => onDelete(message) : undefined;
+  // Long-press any message to enter multi-select mode.
+  const handleLongPress = () => onLongPressSelect(message.id);
+  // While selecting, the whole row toggles selection (inner controls pause).
+  const rowOnPress = selectionMode ? () => onToggleSelect(message.id) : undefined;
 
   return (
-    <View
+    <Pressable
+      onPress={rowOnPress}
+      onLongPress={handleLongPress}
+      delayLongPress={300}
       style={[
         styles.bubbleRow,
         mine ? styles.bubbleRowMine : styles.bubbleRowTheirs,
         isFirstInGroup && styles.bubbleRowGroupStart,
+        selected && styles.bubbleRowSelected,
       ]}
     >
+      {selectionMode ? (
+        <View style={[styles.selectCircle, selected && styles.selectCircleOn]}>
+          {selected ? <Ionicons name="checkmark" size={14} color={colors.white} /> : null}
+        </View>
+      ) : null}
       {!mine ? (
         isLastInGroup ? (
           <Avatar uri={avatarUri} name={displayName} size={28} />
@@ -1143,14 +1339,25 @@ const MessageRow = memo(function MessageRow({
             {displayName}
           </Text>
         ) : null}
+        {message.callLog ? (
+          <CallLogBubble callLog={message.callLog} mine={mine} time={time} onCallBack={onCallBack} />
+        ) : null}
+        {message.forwarded && !message.callLog ? (
+          <View style={[styles.forwardedRow, mine ? styles.forwardedRowMine : null]}>
+            <Ionicons name="arrow-redo-outline" size={13} color={colors.labelGray} />
+            <Text style={styles.forwardedText}>Forwarded</Text>
+          </View>
+        ) : null}
         {message.sharedPlace ? (
           <Pressable
             onPress={() =>
-              onPlacePress({
-                placeId: message.sharedPlace!.placeId,
-                name: message.sharedPlace!.name,
-                imageUrl: message.sharedPlace!.imageUrl,
-              })
+              selectionMode
+                ? onToggleSelect(message.id)
+                : onPlacePress({
+                    placeId: message.sharedPlace!.placeId,
+                    name: message.sharedPlace!.name,
+                    imageUrl: message.sharedPlace!.imageUrl,
+                  })
             }
             onLongPress={handleLongPress}
             style={({ pressed }) => [styles.placeCard, pressed && styles.pressed]}
@@ -1176,11 +1383,16 @@ const MessageRow = memo(function MessageRow({
         ) : null}
 
         {message.media ? (
-          <ChatMediaBubble media={message.media} onOpen={onOpenMedia} onLongPress={handleLongPress} />
+          <ChatMediaBubble
+            media={message.media}
+            onOpen={selectionMode ? () => onToggleSelect(message.id) : onOpenMedia}
+            onLongPress={handleLongPress}
+          />
         ) : null}
 
         {message.text ? (
           <Pressable
+            onPress={selectionMode ? () => onToggleSelect(message.id) : undefined}
             onLongPress={handleLongPress}
             delayLongPress={300}
             style={[
@@ -1193,7 +1405,7 @@ const MessageRow = memo(function MessageRow({
           </Pressable>
         ) : null}
 
-        {isLastInGroup ? (
+        {isLastInGroup && !message.callLog ? (
           <View style={[styles.metaRow, mine ? styles.metaRowMine : styles.metaRowTheirs]}>
             <Text style={styles.metaTime}>{time}</Text>
             {mine && !isGroup ? (
@@ -1206,7 +1418,7 @@ const MessageRow = memo(function MessageRow({
           </View>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -1238,6 +1450,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerTitleWrap: {
+    flex: 1,
+  },
+  selectionCount: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  flexFill: {
     flex: 1,
   },
   headerTitle: {
@@ -1397,6 +1617,36 @@ const styles = StyleSheet.create({
   },
   bubbleRowGroupStart: {
     marginTop: 10,
+  },
+  bubbleRowSelected: {
+    backgroundColor: 'rgba(216, 70, 158, 0.10)',
+  },
+  selectCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.labelGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  selectCircleOn: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  forwardedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  forwardedRowMine: {
+    justifyContent: 'flex-end',
+  },
+  forwardedText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: colors.labelGray,
   },
   bubbleRowMine: {
     justifyContent: 'flex-end',
@@ -1573,5 +1823,40 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  callLogBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#F2F3F5',
+    minWidth: 180,
+  },
+  callLogIconWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  callLogArrow: {
+    marginRight: -2,
+  },
+  callLogTextWrap: {
+    flex: 1,
+  },
+  callLogTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  callLogSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginTop: 1,
   },
 });

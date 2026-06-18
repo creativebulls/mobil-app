@@ -55,18 +55,6 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
       'stun:stun2.l.google.com:19302',
     ],
   },
-  // Free public TURN relay so calls connect on cellular / symmetric-NAT
-  // networks even before the backend ICE config loads. The TCP/443 entry
-  // helps when UDP is blocked.
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp',
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
 ];
 
 /**
@@ -207,11 +195,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
         (event: unknown) => {
           const candidate = (event as { candidate?: RTCIceCandidate | null }).candidate;
           if (candidate) {
+            if (__DEV__) {
+              const c = (candidate as unknown as { candidate?: string }).candidate ?? '';
+              const type = c.split(' ')[7] ?? 'unknown';
+              console.log(`[call] local ICE candidate (${type})`);
+            }
             void emit('webrtc:ice-candidate', {
               toUserId: peerUserId,
               callId,
               candidate,
             });
+          } else if (__DEV__) {
+            console.log('[call] ICE gathering complete');
           }
         },
       );
@@ -230,6 +225,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       // left the call stuck on "Connecting…". Treat either signal as connected.
       addPcListener.call(pc, 'connectionstatechange', () => {
         const state = (pc as unknown as { connectionState?: string }).connectionState;
+        if (__DEV__) {
+          console.log(`[call] connectionState → ${state}`);
+        }
         if (state === 'connected') {
           markConnected();
         } else if (state === 'failed' || state === 'closed') {
@@ -239,6 +237,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       addPcListener.call(pc, 'iceconnectionstatechange', () => {
         const state = (pc as unknown as { iceConnectionState?: string }).iceConnectionState;
+        if (__DEV__) {
+          console.log(`[call] iceConnectionState → ${state}`);
+        }
         if (state === 'connected' || state === 'completed') {
           markConnected();
         } else if (state === 'failed') {

@@ -138,6 +138,23 @@ export async function sharePlaceWithContacts(input: {
   });
 }
 
+export async function forwardMessages(input: {
+  sourceConversationId: string;
+  messageIds: string[];
+  conversationIds?: string[];
+  recipientIds?: string[];
+}): Promise<{ delivered: number; conversations: number }> {
+  return apiRequest<{ delivered: number; conversations: number }>('/messages/forward', {
+    method: 'POST',
+    body: {
+      sourceConversationId: input.sourceConversationId,
+      messageIds: input.messageIds,
+      conversationIds: input.conversationIds?.length ? input.conversationIds : undefined,
+      recipientIds: input.recipientIds?.length ? input.recipientIds : undefined,
+    },
+  });
+}
+
 export async function createGroup(input: {
   name: string;
   memberIds: string[];

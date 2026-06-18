@@ -39,6 +39,9 @@ export interface IMessage {
   text: string;
   sharedPlace?: ISharedPlace;
   media?: IMessageMedia;
+  callLog?: ICallLog;
+  // True when this message was forwarded from another chat.
+  forwarded?: boolean;
   // 1:1 read flag (drives delivery/read ticks).
   read: boolean;
   readAt?: Date;
@@ -73,6 +76,19 @@ const mediaSchema = new Schema<IMessageMedia>(
   { _id: false },
 );
 
+const callLogSchema = new Schema<ICallLog>(
+  {
+    callId: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ['completed', 'missed', 'rejected', 'cancelled'],
+      required: true,
+    },
+    durationSeconds: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
 const messageSchema = new Schema<MessageDocument>(
   {
     conversation: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
@@ -82,6 +98,8 @@ const messageSchema = new Schema<MessageDocument>(
     text: { type: String, default: '', trim: true, maxlength: 2000 },
     sharedPlace: { type: sharedPlaceSchema, default: undefined },
     media: { type: mediaSchema, default: undefined },
+    callLog: { type: callLogSchema, default: undefined },
+    forwarded: { type: Boolean, default: false },
     read: { type: Boolean, default: false },
     readAt: { type: Date },
     readBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],

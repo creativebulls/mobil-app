@@ -54,6 +54,18 @@ export const renameGroupSchema = z.object({
   name: z.string().trim().min(1, 'Group name is required').max(80),
 });
 
+export const forwardMessagesSchema = z
+  .object({
+    sourceConversationId: z.string().min(1),
+    messageIds: z.array(z.string().min(1)).min(1).max(30),
+    conversationIds: z.array(z.string().min(1)).max(30).optional(),
+    recipientIds: z.array(z.string().min(1)).max(30).optional(),
+  })
+  .refine(
+    (data) => (data.conversationIds?.length ?? 0) + (data.recipientIds?.length ?? 0) > 0,
+    { message: 'Select where to forward', path: ['conversationIds'] },
+  );
+
 export const sharePlaceInConversationSchema = z.object({
   conversationId: z.string().min(1).optional(),
   recipientId: z.string().min(1).optional(),

@@ -1,6 +1,10 @@
 import { sendPushToUser } from '../../shared/services/push.service';
 import { resolveAbsoluteMediaUrl } from '../../shared/utils/mediaUrl';
 import { formatRelativeTime } from '../../shared/utils/time';
+import {
+  getOrCreateOneToOneConversationId,
+  postCallLog,
+} from '../messages/messages.service';
 import { getUserDisplayName, User } from '../users/user.model';
 import { Call, type CallStatus } from './call.model';
 
@@ -142,6 +146,24 @@ export async function finalizeCall(
       },
     }).catch(() => undefined);
   }
+
+  // Drop a WhatsApp-style call log into the conversation thread for both sides.
+  void (async () => {
+    try {
+      const conversationId =
+        doc.conversationId?.toString() ??
+        (await getOrCreateOneToOneConversationId(participants.callerId, participants.calleeId));
+      await postCallLog({
+        conversationId,
+        callerId: participants.callerId,
+        callId: doc.callId,
+        status: status as 'completed' | 'missed' | 'rejected' | 'cancelled',
+        durationSeconds,
+      });
+    } catch {
+      // Logging a call should never break call finalization.
+    }
+  })();
 
   return participants;
 }

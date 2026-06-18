@@ -7,6 +7,7 @@ import { asyncHandler, sendSuccess } from '../../shared/utils/http';
 import {
   conversationIdParamSchema,
   createGroupSchema,
+  forwardMessagesSchema,
   messageIdParamSchema,
   messagesQuerySchema,
   renameGroupSchema,
@@ -154,6 +155,17 @@ export const sharePlace = asyncHandler(async (req: AuthenticatedRequest, res: Re
     { placeId: body.placeId, name: body.name, imageUrl: body.imageUrl ?? null },
     body.recipientIds,
     body.note,
+  );
+  sendSuccess(res, result, 201);
+});
+
+export const forwardMessages = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = forwardMessagesSchema.parse(req.body);
+  const result = await messagesService.forwardMessages(
+    req.auth!.userId,
+    body.sourceConversationId,
+    body.messageIds,
+    { conversationIds: body.conversationIds, recipientIds: body.recipientIds },
   );
   sendSuccess(res, result, 201);
 });

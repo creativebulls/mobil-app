@@ -20,6 +20,7 @@ messagesRouter.post(
 );
 messagesRouter.post('/with/:userId', messagesController.openConversation);
 messagesRouter.post('/share-place', messagesController.sharePlace);
+messagesRouter.post('/forward', messagesController.forwardMessages);
 messagesRouter.post('/conversation-place', messagesController.sharePlaceInConversation);
 messagesRouter.post(
   '/media',

@@ -8,7 +8,12 @@ import { emitToUser, isUserOnline } from '../../socket/index';
 import { DEFAULT_PUSH_PREFERENCES, getUserDisplayName, User } from '../users/user.model';
 import { assertNotBlocked, isBlockedBetween, isRestricted } from '../relations/relations.service';
 import { Conversation, type ConversationDocument } from './conversation.model';
-import { Message, type MessageDocument, type MessageMediaType } from './message.model';
+import {
+  Message,
+  type CallLogStatus,
+  type MessageDocument,
+  type MessageMediaType,
+} from './message.model';
 
 const PARTICIPANT_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl';
 
@@ -66,6 +71,14 @@ function serializeMessage(message: MessageDocument) {
           durationMs: message.media.durationMs ?? null,
         }
       : null,
+    callLog: message.callLog
+      ? {
+          callId: message.callLog.callId,
+          status: message.callLog.status,
+          durationSeconds: message.callLog.durationSeconds ?? 0,
+        }
+      : null,
+    forwarded: message.forwarded ?? false,
     read: message.read,
     createdAt: message.createdAt.toISOString(),
     timeAgo: formatRelativeTime(message.createdAt),
@@ -74,6 +87,25 @@ function serializeMessage(message: MessageDocument) {
 
 function placePreview(name: string): string {
   return `📍 ${name}`;
+}
+
+function formatCallDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function callLogPreview(status: CallLogStatus, durationSeconds: number): string {
+  switch (status) {
+    case 'completed':
+      return `📞 Voice call · ${formatCallDuration(durationSeconds)}`;
+    case 'rejected':
+      return '📞 Voice call declined';
+    case 'missed':
+    case 'cancelled':
+    default:
+      return '📞 Missed voice call';
+  }
 }
 
 function resolveMessageMediaUrl(filename: string): string {
@@ -208,6 +240,7 @@ async function deliverToConversation(
       durationMs?: number;
     };
     sharedPlace?: { placeId: string; name: string; imageUrl?: string };
+    forwarded?: boolean;
     preview: string;
   },
 ) {
@@ -223,6 +256,7 @@ async function deliverToConversation(
     text: fields.text?.trim() ?? '',
     media: fields.media,
     sharedPlace: fields.sharedPlace,
+    forwarded: fields.forwarded ?? false,
   });
 
   conversation.lastMessage = fields.preview;
@@ -282,7 +316,80 @@ function previewForMessage(message: MessageDocument): string {
   if (message.sharedPlace?.name) {
     return `📍 ${message.sharedPlace.name}`;
   }
+  if (message.callLog) {
+    return callLogPreview(message.callLog.status, message.callLog.durationSeconds ?? 0);
+  }
   return '';
+}
+
+/**
+ * Returns the id of the 1:1 conversation between two users, creating it if it
+ * doesn't exist yet. Used to attach call logs even when a call was started
+ * outside an existing chat (e.g. from a profile screen).
+ */
+export async function getOrCreateOneToOneConversationId(
+  userA: string,
+  userB: string,
+): Promise<string> {
+  const conversation = await findOrCreateConversation(userA, userB);
+  return conversation._id.toString();
+}
+
+/**
+ * Appends a WhatsApp-style call log entry to a conversation and notifies both
+ * participants in realtime. The caller is the message sender; clients derive
+ * call direction from that. Call logs don't raise the unread badge.
+ */
+export async function postCallLog(input: {
+  conversationId: string;
+  callerId: string;
+  callId: string;
+  status: CallLogStatus;
+  durationSeconds: number;
+}): Promise<void> {
+  const conversation = await Conversation.findById(input.conversationId);
+  if (!conversation) {
+    return;
+  }
+
+  const participantIds = conversation.participants.map((id) => id.toString());
+  if (!participantIds.includes(input.callerId)) {
+    return;
+  }
+
+  const others = participantIds.filter((id) => id !== input.callerId);
+  const recipientId = conversation.isGroup ? undefined : others[0];
+
+  const message = await Message.create({
+    conversation: conversation._id,
+    sender: input.callerId,
+    recipient: recipientId,
+    // Mark read for everyone so call logs never inflate the unread count.
+    read: true,
+    readBy: participantIds.map((id) => new Types.ObjectId(id)),
+    text: '',
+    callLog: {
+      callId: input.callId,
+      status: input.status,
+      durationSeconds: input.durationSeconds,
+    },
+  });
+
+  const preview = callLogPreview(input.status, input.durationSeconds);
+  conversation.lastMessage = preview;
+  conversation.lastMessageAt = message.createdAt;
+  conversation.lastMessageSender = new Types.ObjectId(input.callerId);
+  await conversation.save();
+
+  await message.populate('sender', PARTICIPANT_FIELDS);
+  const serialized = serializeMessage(message);
+
+  for (const participantId of participantIds) {
+    emitToUser(participantId, 'message:new', serialized);
+    emitToUser(participantId, 'conversation:updated', {
+      conversationId: conversation._id.toString(),
+    });
+  }
 }
 
 export async function deleteMessage(userId: string, conversationId: string, messageId: string) {
@@ -856,6 +963,106 @@ export async function sharePlaceWithContacts(
   }
 
   return { delivered: delivered.length, recipientIds: delivered };
+}
+
+/**
+ * Forwards one or more messages from a source conversation into any number of
+ * target conversations and/or recipients (WhatsApp-style). Media is referenced
+ * by its existing stored URL, so nothing is re-uploaded. Call logs are skipped.
+ */
+export async function forwardMessages(
+  senderId: string,
+  sourceConversationId: string,
+  messageIds: string[],
+  targets: { conversationIds?: string[]; recipientIds?: string[] },
+) {
+  const source = await Conversation.findById(sourceConversationId);
+  if (!source || !source.participants.some((id) => id.toString() === senderId)) {
+    throw new AppError(404, 'Conversation not found', 'CONVERSATION_NOT_FOUND');
+  }
+
+  const messages = await Message.find({
+    _id: { $in: messageIds },
+    conversation: sourceConversationId,
+  }).sort({ createdAt: 1 });
+
+  if (messages.length === 0) {
+    throw new AppError(404, 'No messages to forward', 'MESSAGES_NOT_FOUND');
+  }
+
+  const targetConversations: ConversationDocument[] = [];
+  const seen = new Set<string>();
+
+  for (const conversationId of targets.conversationIds ?? []) {
+    if (seen.has(conversationId)) {
+      continue;
+    }
+    const convo = await Conversation.findById(conversationId);
+    if (convo && convo.participants.some((id) => id.toString() === senderId)) {
+      seen.add(convo._id.toString());
+      targetConversations.push(convo);
+    }
+  }
+
+  for (const recipientId of targets.recipientIds ?? []) {
+    if (recipientId === senderId || (await isBlockedBetween(senderId, recipientId))) {
+      continue;
+    }
+    const recipient = await User.findById(recipientId);
+    if (!recipient || !recipient.registrationCompleted) {
+      continue;
+    }
+    const convo = await findOrCreateConversation(senderId, recipientId);
+    const key = convo._id.toString();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    targetConversations.push(convo);
+  }
+
+  if (targetConversations.length === 0) {
+    throw new AppError(422, 'Select where to forward', 'FORWARD_TARGET_REQUIRED');
+  }
+
+  let delivered = 0;
+  for (const convo of targetConversations) {
+    if (!convo.isGroup && (await isBlockedBetween(senderId, otherParticipantId(convo, senderId)))) {
+      continue;
+    }
+    for (const msg of messages) {
+      if (msg.callLog) {
+        continue;
+      }
+      await deliverToConversation(convo, senderId, {
+        text: msg.text ?? '',
+        media: msg.media
+          ? {
+              url: msg.media.url,
+              mediaType: msg.media.mediaType,
+              width: msg.media.width,
+              height: msg.media.height,
+              fileName: msg.media.fileName,
+              fileSize: msg.media.fileSize,
+              mimeType: msg.media.mimeType,
+              durationMs: msg.media.durationMs,
+            }
+          : undefined,
+        sharedPlace: msg.sharedPlace
+          ? {
+              placeId: msg.sharedPlace.placeId,
+              name: msg.sharedPlace.name,
+              imageUrl: msg.sharedPlace.imageUrl,
+            }
+          : undefined,
+        forwarded: true,
+        preview: previewForMessage(msg),
+      });
+      delivered += 1;
+    }
+  }
+
+  return { delivered, conversations: targetConversations.length };
 }
 
 export async function markConversationRead(userId: string, conversationId: string) {

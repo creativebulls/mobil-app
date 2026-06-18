@@ -214,6 +214,14 @@ export type MessageMedia = {
   durationMs?: number | null;
 };
 
+export type CallLogStatus = 'completed' | 'missed' | 'rejected' | 'cancelled';
+
+export type CallLog = {
+  callId: string;
+  status: CallLogStatus;
+  durationSeconds: number;
+};
+
 export type ChatMessage = {
   id: string;
   conversationId: string;
@@ -224,6 +232,8 @@ export type ChatMessage = {
   text: string;
   sharedPlace: SharedPlace | null;
   media: MessageMedia | null;
+  callLog: CallLog | null;
+  forwarded: boolean;
   read: boolean;
   createdAt: string;
   timeAgo: string;
