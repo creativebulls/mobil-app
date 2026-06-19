@@ -23,6 +23,10 @@ export const pushTestSchema = z.object({
   email: z.string().email(),
 });
 
+export const placesConfigSchema = z.object({
+  apiKey: z.string().trim().min(1, 'Foursquare API key is required').max(256),
+});
+
 export const adminReportsQuerySchema = z.object({
   status: z.enum(['all', 'open', 'reviewed', 'dismissed']).optional(),
   page: z.coerce.number().int().min(1).default(1),

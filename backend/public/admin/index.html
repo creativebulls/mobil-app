@@ -411,6 +411,38 @@
                 </div>
               </div>
             </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Places (Foursquare)</h2>
+                <p class="card-description">
+                  Set the Foursquare Places API key used to power nearby places, top-rated, and
+                  search. The key is stored securely on the server and takes effect immediately.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="places-status-badge" class="badge badge-muted">Loading…</span>
+                  <span id="places-status-detail" class="user-email"></span>
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="places-api-key">Foursquare API key (Service Key)</label>
+                  <input
+                    id="places-api-key"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Paste your Foursquare service key…"
+                    style="font-family: monospace"
+                  />
+                  <p id="places-config-error" class="error-text"></p>
+                </div>
+                <div class="actions">
+                  <button id="places-save-btn" type="button" class="btn btn-primary btn-sm">Save key</button>
+                  <button id="places-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove key</button>
+                </div>
+              </div>
+            </div>
           </section>
         </main>
       </div>

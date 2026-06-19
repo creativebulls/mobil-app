@@ -8,6 +8,10 @@ import { initializeSocket } from './socket/index';
 async function bootstrap() {
   await connectDatabase();
 
+  // Load the admin-managed Foursquare key (if any) before serving requests.
+  const { loadPlacesConfig } = await import('./modules/admin/admin.service');
+  await loadPlacesConfig();
+
   const app = createApp();
   const server = http.createServer(app);
   initializeSocket(server);

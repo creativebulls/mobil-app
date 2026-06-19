@@ -26,6 +26,13 @@ import {
   resetFirebaseMessaging,
 } from '../../shared/services/firebase';
 import { sendPushToUser } from '../../shared/services/push.service';
+import {
+  getEffectiveFoursquareKey,
+  getFoursquareKeySource,
+  getPlacesProvider,
+  setFoursquareKeyOverride,
+} from '../places/places.provider';
+import { clearPlacesCache } from '../places/places.service';
 import { AppSetting } from './app-setting.model';
 
 const SALT_ROUNDS = 12;
@@ -96,6 +103,58 @@ export async function clearPushConfig() {
   await AppSetting.deleteOne({ key: FIREBASE_SERVICE_ACCOUNT_KEY });
   await resetFirebaseMessaging();
   return { configured: false };
+}
+
+const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
+
+function maskKey(key: string): string {
+  return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
+}
+
+/** Loads the admin-managed Foursquare key from the DB into the provider. */
+export async function loadPlacesConfig(): Promise<void> {
+  const doc = await AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING });
+  setFoursquareKeyOverride(doc?.value ?? null);
+}
+
+export async function getPlacesConfig() {
+  const doc = await AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING });
+  const key = getEffectiveFoursquareKey();
+  return {
+    configured: Boolean(key),
+    source: getFoursquareKeySource(),
+    provider: getPlacesProvider().name,
+    maskedKey: key ? maskKey(key) : null,
+    apiVersion: env.FOURSQUARE_API_VERSION,
+    proFields: env.FOURSQUARE_ENABLE_PRO_FIELDS === 'true',
+    updatedAt: doc?.updatedAt ?? null,
+  };
+}
+
+export async function setPlacesConfig(apiKey: string) {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    throw new AppError(400, 'Foursquare API key is required', 'INVALID_PLACES_KEY');
+  }
+
+  await AppSetting.findOneAndUpdate(
+    { key: FOURSQUARE_API_KEY_SETTING },
+    { value: trimmed },
+    { upsert: true, new: true },
+  );
+
+  setFoursquareKeyOverride(trimmed);
+  clearPlacesCache();
+
+  return getPlacesConfig();
+}
+
+export async function clearPlacesConfig() {
+  await AppSetting.deleteOne({ key: FOURSQUARE_API_KEY_SETTING });
+  setFoursquareKeyOverride(null);
+  clearPlacesCache();
+
+  return getPlacesConfig();
 }
 
 export async function sendTestPush(email: string) {

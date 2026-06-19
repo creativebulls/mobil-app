@@ -15,6 +15,7 @@ import {
   adminSuspendSchema,
   adminUsersQuerySchema,
   appConfigSchema,
+  placesConfigSchema,
   pushConfigSchema,
   pushTestSchema,
 } from './admin.validation';
@@ -66,6 +67,22 @@ export const clearPushConfig = asyncHandler(async (_req: AdminRequest, res: Resp
 export const sendTestPush = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = pushTestSchema.parse(req.body);
   const result = await adminService.sendTestPush(body.email);
+  sendSuccess(res, result);
+});
+
+export const getPlacesConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getPlacesConfig();
+  sendSuccess(res, result);
+});
+
+export const setPlacesConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = placesConfigSchema.parse(req.body);
+  const result = await adminService.setPlacesConfig(body.apiKey);
+  sendSuccess(res, result);
+});
+
+export const clearPlacesConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.clearPlacesConfig();
   sendSuccess(res, result);
 });
 

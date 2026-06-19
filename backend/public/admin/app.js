@@ -531,6 +531,75 @@ async function sendTestPush() {
   }
 }
 
+function renderPlacesStatus(config) {
+  const badge = $('places-status-badge');
+  const detail = $('places-status-detail');
+
+  if (config.configured) {
+    badge.className = 'badge badge-success';
+    badge.textContent = 'Configured';
+    const parts = [];
+    if (config.provider) parts.push(`provider: ${config.provider}`);
+    if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
+    if (config.source) parts.push(`source: ${config.source}`);
+    if (config.proFields === false) parts.push('photos/ratings off (free tier)');
+    if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
+    detail.textContent = parts.join(' · ');
+  } else {
+    badge.className = 'badge badge-warning';
+    badge.textContent = 'Not configured';
+    detail.textContent = 'Places use the sample provider until a Foursquare key is saved.';
+  }
+}
+
+async function loadPlacesConfig() {
+  try {
+    const config = await api('/places-config');
+    renderPlacesStatus(config);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function savePlacesConfig() {
+  const errorEl = $('places-config-error');
+  errorEl.textContent = '';
+  const apiKey = $('places-api-key').value.trim();
+
+  if (!apiKey) {
+    errorEl.textContent = 'Paste your Foursquare API key first.';
+    return;
+  }
+
+  $('places-save-btn').disabled = true;
+  try {
+    const config = await api('/places-config', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    });
+    renderPlacesStatus(config);
+    $('places-api-key').value = '';
+    toast('Foursquare key saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('places-save-btn').disabled = false;
+  }
+}
+
+async function clearPlacesConfig() {
+  $('places-clear-btn').disabled = true;
+  try {
+    const config = await api('/places-config', { method: 'DELETE' });
+    renderPlacesStatus(config);
+    toast('Foursquare key removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('places-clear-btn').disabled = false;
+  }
+}
+
 function reportStatusBadge(status) {
   const cls =
     status === 'open' ? 'badge-warning' : status === 'reviewed' ? 'badge-success' : 'badge-muted';
@@ -966,6 +1035,7 @@ async function handleLogin(event) {
     await loadStats();
     await loadUsers();
     await loadPushConfig();
+    await loadPlacesConfig();
     await loadReports();
     await loadAppeals();
   } catch (error) {
@@ -1025,6 +1095,9 @@ function bindEvents() {
   $('push-save-btn').addEventListener('click', () => void savePushConfig());
   $('push-clear-btn').addEventListener('click', () => void clearPushConfig());
   $('push-test-btn').addEventListener('click', () => void sendTestPush());
+
+  $('places-save-btn')?.addEventListener('click', () => void savePlacesConfig());
+  $('places-clear-btn')?.addEventListener('click', () => void clearPlacesConfig());
 
   $('config-add')?.addEventListener('click', () => {
     syncConfigFromInputs();
@@ -1241,6 +1314,7 @@ async function init() {
       await loadStats();
       await loadUsers();
       await loadPushConfig();
+      await loadPlacesConfig();
       await loadReports();
       await loadAppeals();
     } catch {

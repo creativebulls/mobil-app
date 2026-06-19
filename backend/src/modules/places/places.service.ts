@@ -114,3 +114,9 @@ export async function searchPlaces(params: {
 
   return { places, locationBased: false, provider: provider.name };
 }
+
+/** Drops all cached places/details so a provider/key change takes effect now. */
+export function clearPlacesCache(): void {
+  cache.clear();
+  detailsCache.clear();
+}

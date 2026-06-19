@@ -33,10 +33,17 @@ const envSchema = z.object({
   SMTP_FROM: z.string().default('WhereAbout <noreply@whereabout.app>'),
   UPLOAD_DIR: z.string().default('uploads'),
   MINIMUM_ACCOUNT_AGE: z.coerce.number().default(16),
-  // Places integration (swappable provider: opentripmap | sample | google)
-  PLACES_PROVIDER: z.enum(['opentripmap', 'sample', 'google']).default('opentripmap'),
+  // Places integration (swappable provider: foursquare | opentripmap | sample | google)
+  PLACES_PROVIDER: z.enum(['foursquare', 'opentripmap', 'sample', 'google']).default('opentripmap'),
   OPENTRIPMAP_API_KEY: z.string().optional(),
   GOOGLE_PLACES_API_KEY: z.string().optional(),
+  // Foursquare Places API (new service-key auth). The key is a "Service Key"
+  // from the Foursquare developer console, sent as `Authorization: Bearer`.
+  FOURSQUARE_API_KEY: z.string().optional(),
+  FOURSQUARE_API_VERSION: z.string().default('2025-06-17'),
+  // Photos & ratings are billed "Pro" fields on Foursquare. Leave 'false' on the
+  // free tier (no credits); set 'true' once the org has credits to fetch them.
+  FOURSQUARE_ENABLE_PRO_FIELDS: z.enum(['true', 'false']).default('false'),
   PLACES_DEFAULT_LAT: z.coerce.number().default(28.6139),
   PLACES_DEFAULT_LON: z.coerce.number().default(77.209),
   PLACES_USER_AGENT: z.string().default('WhereAboutApp/1.0 (support@whereabout.app)'),

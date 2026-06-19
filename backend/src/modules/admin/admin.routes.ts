@@ -35,3 +35,7 @@ adminRouter.get('/push-config', adminController.getPushConfig);
 adminRouter.put('/push-config', adminController.setPushConfig);
 adminRouter.delete('/push-config', adminController.clearPushConfig);
 adminRouter.post('/push-config/test', adminController.sendTestPush);
+
+adminRouter.get('/places-config', adminController.getPlacesConfig);
+adminRouter.put('/places-config', adminController.setPlacesConfig);
+adminRouter.delete('/places-config', adminController.clearPlacesConfig);
