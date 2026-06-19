@@ -35,7 +35,9 @@ import {
 import { CommentComposer } from '../src/components/CommentComposer';
 import { Avatar } from '../src/components/Avatar';
 import { FeedPostCard } from '../src/components/FeedPostCard';
+import { OfflineEmptyState } from '../src/components/OfflineEmptyState';
 import { SharePlaceModal } from '../src/components/SharePlaceModal';
+import { useIsOnline } from '../src/hooks/useIsOnline';
 import { getStoredUser } from '../src/storage/authSession';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
@@ -61,6 +63,7 @@ const EMPTY_ENGAGEMENT: PlaceEngagement = {
 
 export default function PlaceDetailScreen() {
   const router = useRouter();
+  const online = useIsOnline();
   const params = useLocalSearchParams<{ id: string; name?: string; imageUrl?: string }>();
   const placeId = String(params.id);
 
@@ -205,6 +208,28 @@ export default function PlaceDetailScreen() {
     } finally {
       setIsPosting(false);
     }
+  }
+
+  // Nothing cached for this place and no connectivity → show a clear offline
+  // screen rather than an empty/broken layout.
+  if (!isLoading && !detail && !online) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <SafeAreaView edges={['top']} style={styles.offlineBar}>
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </Pressable>
+        </SafeAreaView>
+        <OfflineEmptyState
+          onRetry={() => {
+            setError(null);
+            setIsLoading(true);
+            void load();
+          }}
+        />
+      </View>
+    );
   }
 
   return (
@@ -498,6 +523,10 @@ const styles = StyleSheet.create({
   },
   heroPlaceholder: {
     backgroundColor: colors.inputGray,
+  },
+  offlineBar: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
   },
   gallery: {
     marginTop: 12,

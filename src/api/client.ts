@@ -2,6 +2,7 @@ import { getApiBaseUrl, resetBackendHost } from '../config/api';
 import { ApiError, type ApiSuccessBody } from './types';
 import { getAccessToken, getRefreshToken, saveSession, clearSession } from '../storage/authSession';
 import { emitAccountSuspended } from '../auth/sessionEvents';
+import { setOnline } from './networkStatus';
 import type { AuthResponse } from './types';
 
 type HttpResponse = {
@@ -65,11 +66,22 @@ function rawFetch(url: string, init: RawInit): Promise<HttpResponse> {
 async function backendFetch(path: string, init: RawInit): Promise<HttpResponse> {
   try {
     const base = await getApiBaseUrl();
-    return await rawFetch(`${base}${path}`, init);
+    const response = await rawFetch(`${base}${path}`, init);
+    // The server responded (any status) → we have connectivity.
+    setOnline(true);
+    return response;
   } catch {
     resetBackendHost();
-    const base = await getApiBaseUrl();
-    return rawFetch(`${base}${path}`, init);
+    try {
+      const base = await getApiBaseUrl();
+      const response = await rawFetch(`${base}${path}`, init);
+      setOnline(true);
+      return response;
+    } catch (retryError) {
+      // Both attempts failed at the network level → we're offline.
+      setOnline(false);
+      throw retryError;
+    }
   }
 }
 

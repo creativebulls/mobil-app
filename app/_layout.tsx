@@ -12,6 +12,7 @@ import { CallProvider } from '../src/calls/CallProvider';
 import { LiveAudioProvider } from '../src/calls/LiveAudioProvider';
 import { DialogProvider } from '../src/components/dialog/DialogProvider';
 import { InAppNotificationBanner } from '../src/notifications/InAppNotificationBanner';
+import { OfflineBanner } from '../src/components/OfflineBanner';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
 import { PresenceProvider } from '../src/realtime/PresenceProvider';
 import { ConfigProvider } from '../src/config/ConfigProvider';
@@ -124,6 +125,7 @@ export default function RootLayout() {
               </Stack>
               </AppErrorBoundary>
               <InAppNotificationBanner />
+              <OfflineBanner />
               </LiveAudioProvider>
             </CallProvider>
             </PresenceProvider>
