@@ -414,16 +414,46 @@
 
             <div class="card">
               <div class="card-header">
-                <h2 class="card-title">Places (Foursquare)</h2>
+                <h2 class="card-title">Places provider</h2>
                 <p class="card-description">
-                  Set the Foursquare Places API key used to power nearby places, top-rated, and
-                  search. The key is stored securely on the server and takes effect immediately.
+                  Choose which provider powers nearby places, top-rated, and search. The selection is
+                  stored on the server and takes effect immediately. Each provider uses the key saved
+                  in its card below.
                 </p>
               </div>
               <div class="card-content">
                 <div class="push-status">
                   <span id="places-status-badge" class="badge badge-muted">Loading…</span>
                   <span id="places-status-detail" class="user-email"></span>
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="places-provider-select">Active provider</label>
+                  <select id="places-provider-select" class="input">
+                    <option value="foursquare">Foursquare</option>
+                    <option value="google">Google Places</option>
+                    <option value="opentripmap">OpenTripMap</option>
+                    <option value="sample">Sample (offline demo data)</option>
+                  </select>
+                  <p class="card-description" style="margin-top: 0.35rem">
+                    The chosen provider needs a valid key saved below, otherwise places fall back to
+                    sample data.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Foursquare</h2>
+                <p class="card-description">
+                  Set the Foursquare Places API key. The key is stored securely on the server and
+                  takes effect immediately.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="places-fsq-badge" class="badge badge-muted">Loading…</span>
+                  <span id="places-fsq-detail" class="user-email"></span>
                 </div>
                 <div class="field" style="margin-top: 0.75rem">
                   <label class="label" for="places-api-key">Foursquare API key (Service Key)</label>
@@ -452,6 +482,43 @@
                     with free data (placeholder images).
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Google Places</h2>
+                <p class="card-description">
+                  Set the Google Places API key (Places API enabled). Google returns real place
+                  photos out of the box. The key stays on the server — photos are resolved to
+                  key-less image URLs before being sent to the app.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="google-status-badge" class="badge badge-muted">Loading…</span>
+                  <span id="google-status-detail" class="user-email"></span>
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="google-api-key">Google Places API key</label>
+                  <input
+                    id="google-api-key"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Paste your Google Places API key…"
+                    style="font-family: monospace"
+                  />
+                  <p id="google-config-error" class="error-text"></p>
+                </div>
+                <div class="actions">
+                  <button id="google-save-btn" type="button" class="btn btn-primary btn-sm">Save key</button>
+                  <button id="google-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove key</button>
+                </div>
+                <p class="card-description" style="margin-top: 0.5rem">
+                  The key must allow server-side requests (no HTTP-referrer/Android restriction, or
+                  allow the server IP). Restrict it to the Places API to limit exposure.
+                </p>
               </div>
             </div>
           </section>

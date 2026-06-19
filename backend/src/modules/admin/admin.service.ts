@@ -29,10 +29,16 @@ import { sendPushToUser } from '../../shared/services/push.service';
 import {
   getEffectiveFoursquareKey,
   getEffectiveFoursquareProFields,
+  getEffectiveGoogleKey,
+  getEffectiveProvider,
   getFoursquareKeySource,
+  getGoogleKeySource,
   getPlacesProvider,
   setFoursquareKeyOverride,
   setFoursquareProOverride,
+  setGoogleKeyOverride,
+  setProviderOverride,
+  type PlacesProviderName,
 } from '../places/places.provider';
 import { clearPlacesCache } from '../places/places.service';
 import { AppSetting } from './app-setting.model';
@@ -109,33 +115,77 @@ export async function clearPushConfig() {
 
 const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
 const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
+const GOOGLE_API_KEY_SETTING = 'google_places_api_key';
+const PLACES_PROVIDER_SETTING = 'places_provider';
+
+const VALID_PROVIDERS: PlacesProviderName[] = ['foursquare', 'google', 'opentripmap', 'sample'];
 
 function maskKey(key: string): string {
   return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }
 
-/** Loads the admin-managed Foursquare key & Pro toggle from the DB into the provider. */
+/** Loads the admin-managed places config (provider + keys + toggles) into the provider. */
 export async function loadPlacesConfig(): Promise<void> {
-  const [keyDoc, proDoc] = await Promise.all([
+  const [keyDoc, proDoc, googleDoc, providerDoc] = await Promise.all([
     AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING }),
     AppSetting.findOne({ key: FOURSQUARE_PRO_FIELDS_SETTING }),
+    AppSetting.findOne({ key: GOOGLE_API_KEY_SETTING }),
+    AppSetting.findOne({ key: PLACES_PROVIDER_SETTING }),
   ]);
   setFoursquareKeyOverride(keyDoc?.value ?? null);
   setFoursquareProOverride(proDoc ? proDoc.value === 'true' : null);
+  setGoogleKeyOverride(googleDoc?.value ?? null);
+  const savedProvider = providerDoc?.value as PlacesProviderName | undefined;
+  setProviderOverride(
+    savedProvider && VALID_PROVIDERS.includes(savedProvider) ? savedProvider : null,
+  );
 }
 
 export async function getPlacesConfig() {
-  const doc = await AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING });
-  const key = getEffectiveFoursquareKey();
+  const [fsqDoc, googleDoc] = await Promise.all([
+    AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING }),
+    AppSetting.findOne({ key: GOOGLE_API_KEY_SETTING }),
+  ]);
+
+  const fsqKey = getEffectiveFoursquareKey();
+  const googleKey = getEffectiveGoogleKey();
+
   return {
-    configured: Boolean(key),
-    source: getFoursquareKeySource(),
+    // Active/selected provider.
     provider: getPlacesProvider().name,
-    maskedKey: key ? maskKey(key) : null,
+    selectedProvider: getEffectiveProvider(),
+    // Foursquare (legacy top-level fields kept for backwards compatibility).
+    configured: Boolean(fsqKey),
+    source: getFoursquareKeySource(),
+    maskedKey: fsqKey ? maskKey(fsqKey) : null,
     apiVersion: env.FOURSQUARE_API_VERSION,
     proFields: getEffectiveFoursquareProFields(),
-    updatedAt: doc?.updatedAt ?? null,
+    updatedAt: fsqDoc?.updatedAt ?? null,
+    // Google Places.
+    google: {
+      configured: Boolean(googleKey),
+      source: getGoogleKeySource(),
+      maskedKey: googleKey ? maskKey(googleKey) : null,
+      updatedAt: googleDoc?.updatedAt ?? null,
+    },
   };
+}
+
+export async function setPlacesProvider(providerName: string) {
+  if (!VALID_PROVIDERS.includes(providerName as PlacesProviderName)) {
+    throw new AppError(400, 'Unsupported places provider', 'INVALID_PLACES_PROVIDER');
+  }
+
+  await AppSetting.findOneAndUpdate(
+    { key: PLACES_PROVIDER_SETTING },
+    { value: providerName },
+    { upsert: true, new: true },
+  );
+
+  setProviderOverride(providerName as PlacesProviderName);
+  clearPlacesCache();
+
+  return getPlacesConfig();
 }
 
 export async function setPlacesProFields(enabled: boolean) {
@@ -172,6 +222,32 @@ export async function setPlacesConfig(apiKey: string) {
 export async function clearPlacesConfig() {
   await AppSetting.deleteOne({ key: FOURSQUARE_API_KEY_SETTING });
   setFoursquareKeyOverride(null);
+  clearPlacesCache();
+
+  return getPlacesConfig();
+}
+
+export async function setGooglePlacesConfig(apiKey: string) {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    throw new AppError(400, 'Google Places API key is required', 'INVALID_GOOGLE_PLACES_KEY');
+  }
+
+  await AppSetting.findOneAndUpdate(
+    { key: GOOGLE_API_KEY_SETTING },
+    { value: trimmed },
+    { upsert: true, new: true },
+  );
+
+  setGoogleKeyOverride(trimmed);
+  clearPlacesCache();
+
+  return getPlacesConfig();
+}
+
+export async function clearGooglePlacesConfig() {
+  await AppSetting.deleteOne({ key: GOOGLE_API_KEY_SETTING });
+  setGoogleKeyOverride(null);
   clearPlacesCache();
 
   return getPlacesConfig();

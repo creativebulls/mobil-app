@@ -1,18 +1,38 @@
 import { env, isDevelopment } from '../../config/env';
 import type { PlacesProvider } from './place.types';
 import { FoursquareProvider } from './providers/foursquare.provider';
+import { GooglePlacesProvider } from './providers/google.provider';
 import { OpenTripMapProvider } from './providers/openTripMap.provider';
 import { SampleProvider } from './providers/sample.provider';
 
+export type PlacesProviderName = 'foursquare' | 'google' | 'opentripmap' | 'sample';
+
 let provider: PlacesProvider | null = null;
 
+// Admin-selected active provider. When set it overrides PLACES_PROVIDER so the
+// integration can be switched entirely from the admin UI without editing env.
+let providerOverride: PlacesProviderName | null = null;
+
 // Foursquare key configured at runtime from the admin panel. When set it takes
-// precedence over the env var and forces the Foursquare provider, so the
-// integration can be managed entirely from the admin UI without editing env.
+// precedence over the env var.
 let foursquareKeyOverride: string | null = null;
 
-// Admin override for the "Pro fields" (photos/ratings) toggle. null = use env.
+// Admin override for the Foursquare "Pro fields" (photos/ratings) toggle.
 let foursquareProOverride: boolean | null = null;
+
+// Google Places key configured at runtime from the admin panel.
+let googleKeyOverride: string | null = null;
+
+/** The active provider (admin override wins over env). */
+export function getEffectiveProvider(): PlacesProviderName {
+  return providerOverride ?? (env.PLACES_PROVIDER as PlacesProviderName);
+}
+
+/** Sets (or clears with null) the admin-selected provider and rebuilds it. */
+export function setProviderOverride(name: PlacesProviderName | null): void {
+  providerOverride = name;
+  provider = null;
+}
 
 /** Returns the active Foursquare key (admin override wins over env). */
 export function getEffectiveFoursquareKey(): string | null {
@@ -51,27 +71,61 @@ export function setFoursquareKeyOverride(key: string | null): void {
   provider = null;
 }
 
-function createProvider(): PlacesProvider {
-  const proFields = getEffectiveFoursquareProFields();
+/** Returns the active Google Places key (admin override wins over env). */
+export function getEffectiveGoogleKey(): string | null {
+  return googleKeyOverride ?? env.GOOGLE_PLACES_API_KEY ?? null;
+}
 
-  // An admin-configured key always wins and forces the Foursquare provider so
-  // the key can be managed from the admin panel without touching env vars.
-  if (foursquareKeyOverride) {
-    return new FoursquareProvider(foursquareKeyOverride, { proFields });
+/** Source of the active Google Places key, for admin display. */
+export function getGoogleKeySource(): 'admin' | 'env' | null {
+  if (googleKeyOverride) {
+    return 'admin';
   }
+  if (env.GOOGLE_PLACES_API_KEY) {
+    return 'env';
+  }
+  return null;
+}
 
-  switch (env.PLACES_PROVIDER) {
-    case 'foursquare': {
-      if (env.FOURSQUARE_API_KEY) {
-        return new FoursquareProvider(env.FOURSQUARE_API_KEY, { proFields });
-      }
-      if (isDevelopment) {
-        console.warn(
-          '[places] FOURSQUARE_API_KEY is not set — falling back to the sample provider.',
-        );
-      }
-      return new SampleProvider();
-    }
+/**
+ * Sets (or clears with null) the admin-managed Google Places key and forces the
+ * cached provider to be rebuilt on next use.
+ */
+export function setGoogleKeyOverride(key: string | null): void {
+  const trimmed = key?.trim();
+  googleKeyOverride = trimmed ? trimmed : null;
+  provider = null;
+}
+
+function buildFoursquare(): PlacesProvider {
+  const proFields = getEffectiveFoursquareProFields();
+  const key = getEffectiveFoursquareKey();
+  if (key) {
+    return new FoursquareProvider(key, { proFields });
+  }
+  if (isDevelopment) {
+    console.warn('[places] No Foursquare key set — falling back to the sample provider.');
+  }
+  return new SampleProvider();
+}
+
+function buildGoogle(): PlacesProvider {
+  const key = getEffectiveGoogleKey();
+  if (key) {
+    return new GooglePlacesProvider(key);
+  }
+  if (isDevelopment) {
+    console.warn('[places] No Google Places key set — falling back to the sample provider.');
+  }
+  return new SampleProvider();
+}
+
+function createProvider(): PlacesProvider {
+  switch (getEffectiveProvider()) {
+    case 'foursquare':
+      return buildFoursquare();
+    case 'google':
+      return buildGoogle();
     case 'opentripmap': {
       if (env.OPENTRIPMAP_API_KEY) {
         return new OpenTripMapProvider(env.OPENTRIPMAP_API_KEY);
@@ -79,15 +133,6 @@ function createProvider(): PlacesProvider {
       if (isDevelopment) {
         console.warn(
           '[places] OPENTRIPMAP_API_KEY is not set — falling back to the sample provider.',
-        );
-      }
-      return new SampleProvider();
-    }
-    case 'google': {
-      // Placeholder for a future GooglePlacesProvider implementation.
-      if (isDevelopment) {
-        console.warn(
-          '[places] Google Places provider is not implemented yet — using the sample provider.',
         );
       }
       return new SampleProvider();

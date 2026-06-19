@@ -15,8 +15,10 @@ import {
   adminSuspendSchema,
   adminUsersQuerySchema,
   appConfigSchema,
+  googlePlacesConfigSchema,
   placesConfigSchema,
   placesProFieldsSchema,
+  placesProviderSchema,
   pushConfigSchema,
   pushTestSchema,
 } from './admin.validation';
@@ -90,6 +92,23 @@ export const clearPlacesConfig = asyncHandler(async (_req: AdminRequest, res: Re
 export const setPlacesProFields = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = placesProFieldsSchema.parse(req.body);
   const result = await adminService.setPlacesProFields(body.enabled);
+  sendSuccess(res, result);
+});
+
+export const setPlacesProvider = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = placesProviderSchema.parse(req.body);
+  const result = await adminService.setPlacesProvider(body.provider);
+  sendSuccess(res, result);
+});
+
+export const setGooglePlacesConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = googlePlacesConfigSchema.parse(req.body);
+  const result = await adminService.setGooglePlacesConfig(body.apiKey);
+  sendSuccess(res, result);
+});
+
+export const clearGooglePlacesConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.clearGooglePlacesConfig();
   sendSuccess(res, result);
 });
 

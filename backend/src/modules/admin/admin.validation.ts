@@ -27,6 +27,14 @@ export const placesConfigSchema = z.object({
   apiKey: z.string().trim().min(1, 'Foursquare API key is required').max(256),
 });
 
+export const googlePlacesConfigSchema = z.object({
+  apiKey: z.string().trim().min(1, 'Google Places API key is required').max(256),
+});
+
+export const placesProviderSchema = z.object({
+  provider: z.enum(['foursquare', 'google', 'opentripmap', 'sample']),
+});
+
 export const placesProFieldsSchema = z.object({
   enabled: z.boolean(),
 });

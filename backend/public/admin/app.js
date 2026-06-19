@@ -540,20 +540,114 @@ function renderPlacesStatus(config) {
     proToggle.checked = config.proFields;
   }
 
-  if (config.configured) {
-    badge.className = 'badge badge-success';
-    badge.textContent = 'Configured';
-    const parts = [];
-    if (config.provider) parts.push(`provider: ${config.provider}`);
-    if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
-    if (config.source) parts.push(`source: ${config.source}`);
-    parts.push(config.proFields ? 'photos/ratings on' : 'photos/ratings off (free tier)');
-    if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
-    detail.textContent = parts.join(' · ');
-  } else {
-    badge.className = 'badge badge-warning';
-    badge.textContent = 'Not configured';
-    detail.textContent = 'Places use the sample provider until a Foursquare key is saved.';
+  const providerSelect = $('places-provider-select');
+  if (providerSelect && config.selectedProvider) {
+    providerSelect.value = config.selectedProvider;
+  }
+
+  // Top status reflects the active provider.
+  const active = config.provider || config.selectedProvider || 'sample';
+  badge.className = active === 'sample' ? 'badge badge-warning' : 'badge badge-success';
+  badge.textContent = `Active: ${active}`;
+  detail.textContent =
+    active === 'sample'
+      ? 'No usable key for the selected provider — using sample data.'
+      : `Serving places via ${active}.`;
+
+  // Foursquare card detail (legacy top-level fields).
+  const fsqBadge = $('places-fsq-badge');
+  const fsqDetail = $('places-fsq-detail');
+  if (fsqBadge && fsqDetail) {
+    if (config.configured) {
+      fsqBadge.className = 'badge badge-success';
+      fsqBadge.textContent = 'Key saved';
+      const parts = [];
+      if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
+      if (config.source) parts.push(`source: ${config.source}`);
+      parts.push(config.proFields ? 'photos/ratings on' : 'photos/ratings off (free tier)');
+      if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
+      fsqDetail.textContent = parts.join(' · ');
+    } else {
+      fsqBadge.className = 'badge badge-muted';
+      fsqBadge.textContent = 'No key';
+      fsqDetail.textContent = 'Add a Foursquare service key to use this provider.';
+    }
+  }
+
+  // Google card detail.
+  const google = config.google || {};
+  const gBadge = $('google-status-badge');
+  const gDetail = $('google-status-detail');
+  if (gBadge && gDetail) {
+    if (google.configured) {
+      gBadge.className = 'badge badge-success';
+      gBadge.textContent = 'Key saved';
+      const parts = [];
+      if (google.maskedKey) parts.push(`key: ${google.maskedKey}`);
+      if (google.source) parts.push(`source: ${google.source}`);
+      if (google.updatedAt) parts.push(`updated ${formatDate(google.updatedAt)}`);
+      gDetail.textContent = parts.join(' · ');
+    } else {
+      gBadge.className = 'badge badge-muted';
+      gBadge.textContent = 'No key';
+      gDetail.textContent = 'Add a Google Places API key to use this provider.';
+    }
+  }
+}
+
+async function setPlacesProvider(provider) {
+  const select = $('places-provider-select');
+  if (select) select.disabled = true;
+  try {
+    const config = await api('/places-config/provider', {
+      method: 'PUT',
+      body: JSON.stringify({ provider }),
+    });
+    renderPlacesStatus(config);
+    toast(`Provider set to ${provider}`);
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    if (select) select.disabled = false;
+  }
+}
+
+async function saveGooglePlacesConfig() {
+  const errorEl = $('google-config-error');
+  errorEl.textContent = '';
+  const apiKey = $('google-api-key').value.trim();
+
+  if (!apiKey) {
+    errorEl.textContent = 'Paste your Google Places API key first.';
+    return;
+  }
+
+  $('google-save-btn').disabled = true;
+  try {
+    const config = await api('/places-config/google', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    });
+    renderPlacesStatus(config);
+    $('google-api-key').value = '';
+    toast('Google Places key saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('google-save-btn').disabled = false;
+  }
+}
+
+async function clearGooglePlacesConfig() {
+  $('google-clear-btn').disabled = true;
+  try {
+    const config = await api('/places-config/google', { method: 'DELETE' });
+    renderPlacesStatus(config);
+    toast('Google Places key removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('google-clear-btn').disabled = false;
   }
 }
 
@@ -1124,6 +1218,11 @@ function bindEvents() {
   $('places-pro-fields')?.addEventListener('change', (event) =>
     void setPlacesProFields(event.target.checked),
   );
+  $('places-provider-select')?.addEventListener('change', (event) =>
+    void setPlacesProvider(event.target.value),
+  );
+  $('google-save-btn')?.addEventListener('click', () => void saveGooglePlacesConfig());
+  $('google-clear-btn')?.addEventListener('click', () => void clearGooglePlacesConfig());
 
   $('config-add')?.addEventListener('click', () => {
     syncConfigFromInputs();
