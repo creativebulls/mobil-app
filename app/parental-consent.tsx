@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 
 import { recordParentalConsent } from '../src/api/authApi';
+import { AppImage } from '../src/components/AppImage';
 import { getErrorMessage } from '../src/api/types';
 import { BrandButton } from '../src/components/BrandButton';
 import { ConsentCheckbox } from '../src/components/ConsentCheckbox';
@@ -82,7 +82,7 @@ export default function ParentalConsentScreen() {
           <View style={styles.photoWrap}>
             <View style={styles.photoCircle}>
               {profilePhotoUri ? (
-                <Image
+                <AppImage
                   source={{ uri: profilePhotoUri }}
                   style={styles.photoImage}
                   resizeMode="cover"

@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from './AppImage';
 
 import { useDialog } from './dialog/DialogProvider';
 import { colors } from '../theme/colors';
@@ -58,7 +60,7 @@ export function ProfilePhotoPicker({ value, onChange }: ProfilePhotoPickerProps)
     >
       <View style={styles.photoCircle}>
         {value ? (
-          <Image source={{ uri: value }} style={styles.photoImage} resizeMode="cover" />
+          <AppImage source={{ uri: value }} style={styles.photoImage} resizeMode="cover" />
         ) : (
           <Ionicons name="person" size={40} color={colors.labelGray} />
         )}

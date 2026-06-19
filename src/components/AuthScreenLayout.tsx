@@ -1,7 +1,9 @@
 import { Href } from 'expo-router';
 import { ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
+
+import { AppImage } from './AppImage';
 
 import { ScreenBackRow } from './ScreenBackRow';
 import { ScreenSafeArea, STACK_SCREEN_EDGES } from './ScreenSafeArea';
@@ -26,7 +28,7 @@ export function AuthScreenLayout({
           <ScreenBackRow fallbackHref={fallbackHref} variant="light" />
           <View style={authStyles.logoWrap} pointerEvents="none">
             {headerIcon ?? (
-              <Image
+              <AppImage
                 source={require('../../assets/black-logo.png')}
                 style={authStyles.logo}
                 resizeMode="contain"

@@ -45,6 +45,13 @@ export function createApp() {
     '/uploads',
     express.static(uploadsRoot, {
       maxAge: env.NODE_ENV === 'production' ? '7d' : 0,
+      // Uploaded media are public assets that must be embeddable from other
+      // origins (e.g. the web app served on a different host). Helmet's default
+      // `Cross-Origin-Resource-Policy: same-origin` would otherwise make the
+      // browser block these images on cross-origin pages.
+      setHeaders: (res) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
     }),
   );
 

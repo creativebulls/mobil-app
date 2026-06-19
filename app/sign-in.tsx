@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
+import { AppImage } from '../src/components/AppImage';
 import { loginAccount } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
 import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
@@ -147,7 +147,7 @@ export default function SignInScreen() {
         <View style={styles.topSection}>
           <ScreenBackRow fallbackHref="/welcome" variant="light" />
           <View style={styles.logoWrap} pointerEvents="none">
-            <Image
+            <AppImage
               source={require('../assets/black-logo.png')}
               style={styles.logo}
               resizeMode="contain"

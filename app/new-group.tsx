@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,6 +17,7 @@ import {
 import { createGroup, updateGroupPhoto } from '../src/api/messagesApi';
 import { fetchFriends, type FriendSummary } from '../src/api/profileApi';
 import { getErrorMessage } from '../src/api/types';
+import { AppImage } from '../src/components/AppImage';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
@@ -166,7 +166,7 @@ export default function NewGroupScreen() {
               accessibilityLabel="Set group picture"
             >
               {groupPhotoUri ? (
-                <Image source={{ uri: groupPhotoUri }} style={styles.groupPhotoImage} />
+                <AppImage source={{ uri: groupPhotoUri }} style={styles.groupPhotoImage} />
               ) : (
                 <View style={styles.groupGlyph}>
                   <Ionicons name="people" size={24} color={colors.white} />

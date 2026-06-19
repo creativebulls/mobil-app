@@ -1,5 +1,6 @@
-import { Image, type ImageProps, StyleSheet, View } from 'react-native';
+import { type ImageProps, StyleSheet, View } from 'react-native';
 
+import { AppImage } from './AppImage';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { colors } from '../theme/colors';
 
@@ -14,7 +15,7 @@ export function MediaImage({ uri, style, ...props }: MediaImageProps) {
     return <View style={[styles.placeholder, style]} />;
   }
 
-  return <Image source={{ uri: resolvedUri }} style={style} {...props} />;
+  return <AppImage source={{ uri: resolvedUri }} style={style} {...props} />;
 }
 
 const styles = StyleSheet.create({

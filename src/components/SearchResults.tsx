@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 
+import { AppImage } from './AppImage';
 import { searchPlaces } from '../api/placesApi';
 import { searchUsers } from '../api/profileApi';
 import { searchPosts } from '../api/postsApi';
@@ -288,7 +288,7 @@ export function SearchResults({ query, currentUserId }: SearchResultsProps) {
 function Thumb({ uri }: { uri: string | null }) {
   const resolved = useMediaUrl(uri);
   return (
-    <Image source={resolved ? { uri: resolved } : undefined} style={styles.placeThumb} />
+    <AppImage source={resolved ? { uri: resolved } : undefined} style={styles.placeThumb} />
   );
 }
 

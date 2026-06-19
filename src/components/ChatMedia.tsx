@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import {
   ActivityIndicator,
-  Image,
   Linking,
   Modal,
   Pressable,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 
 import type { MessageMedia } from '../api/types';
+import { AppImage } from './AppImage';
 import { FullscreenVideoPlayer } from './FullscreenVideoPlayer';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { colors } from '../theme/colors';
@@ -198,7 +198,7 @@ export function ChatMediaBubble({
             </View>
           </View>
         ) : (
-          <Image source={{ uri: resolved }} style={styles.mediaImage} resizeMode="cover" />
+          <AppImage source={{ uri: resolved }} style={styles.mediaImage} resizeMode="cover" />
         )
       ) : (
         <View style={styles.mediaLoading}>
@@ -229,7 +229,7 @@ export function MediaViewerModal({
         {isVideo && media ? (
           <FullscreenVideoPlayer uri={media.uri} />
         ) : media ? (
-          <Image source={{ uri: media.uri }} style={styles.viewerImage} resizeMode="contain" />
+          <AppImage source={{ uri: media.uri }} style={styles.viewerImage} resizeMode="contain" />
         ) : null}
         <Pressable style={styles.viewerClose} onPress={onClose} hitSlop={12}>
           <Ionicons name="close" size={30} color={colors.white} />

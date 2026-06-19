@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from './AppImage';
 
 import type { DiscoverPlace } from '../constants/discoverPlaces';
 import { colors } from '../theme/colors';
@@ -50,7 +52,7 @@ export function DiscoverPlaceCard({
     >
       <View style={styles.imageWrap}>
         {place.imageUri ? (
-          <Image source={{ uri: place.imageUri }} style={styles.image} resizeMode="cover" />
+          <AppImage source={{ uri: place.imageUri }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={[styles.image, styles.imagePlaceholder]}>
             <Ionicons name="image-outline" size={28} color={colors.labelGray} />

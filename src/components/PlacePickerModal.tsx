@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +13,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { AppImage } from './AppImage';
 
 import { fetchPlaces, searchPlaces } from '../api/placesApi';
 import type { Place } from '../api/types';
@@ -116,7 +117,7 @@ export function PlacePickerModal({ visible, onClose, onSelect }: PlacePickerModa
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                 >
                   {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+                    <AppImage source={{ uri: item.imageUrl }} style={styles.thumb} />
                   ) : (
                     <View style={[styles.thumb, styles.thumbPlaceholder]}>
                       <Ionicons name="image-outline" size={20} color={colors.labelGray} />

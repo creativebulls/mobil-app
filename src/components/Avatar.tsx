@@ -1,5 +1,6 @@
-import { Image, StyleSheet, Text, View, type ImageStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type ImageStyle, type ViewStyle } from 'react-native';
 
+import { AppImage } from './AppImage';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { useIsOnline } from '../realtime/PresenceProvider';
 import { colors } from '../theme/colors';
@@ -43,7 +44,7 @@ export function Avatar({
   if (!showOnline) {
     if (resolvedUri) {
       return (
-        <Image
+        <AppImage
           source={{ uri: resolvedUri }}
           style={[dimensions, styles.image, style as ImageStyle]}
           resizeMode="cover"
@@ -63,7 +64,7 @@ export function Avatar({
   return (
     <View style={[{ width: size, height: size }, style]}>
       {resolvedUri ? (
-        <Image source={{ uri: resolvedUri }} style={[dimensions, styles.image]} resizeMode="cover" />
+        <AppImage source={{ uri: resolvedUri }} style={[dimensions, styles.image]} resizeMode="cover" />
       ) : (
         <View style={[dimensions, styles.placeholder]}>
           <Text style={[styles.initials, { fontSize: size * 0.4 }]}>{getInitials(name)}</Text>

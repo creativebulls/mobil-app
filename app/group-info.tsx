@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { AppImage } from '../src/components/AppImage';
 import {
   deleteGroup,
   fetchGroupDetails,
@@ -210,7 +210,7 @@ export default function GroupInfoScreen() {
               accessibilityLabel="Group picture"
             >
               {details.avatarUri ? (
-                <Image source={{ uri: details.avatarUri }} style={styles.photoImage} />
+                <AppImage source={{ uri: details.avatarUri }} style={styles.photoImage} />
               ) : (
                 <View style={styles.photoGlyph}>
                   <Ionicons name="people" size={44} color={colors.white} />

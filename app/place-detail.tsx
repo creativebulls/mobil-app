@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -15,6 +14,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { AppImage } from '../src/components/AppImage';
 
 import {
   addPlaceComment,
@@ -242,7 +243,7 @@ export default function PlaceDetailScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
             {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+              <AppImage source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
             ) : (
               <View style={[styles.heroImage, styles.heroPlaceholder]} />
             )}
@@ -266,7 +267,7 @@ export default function PlaceDetailScreen() {
               contentContainerStyle={styles.galleryContent}
             >
               {galleryPhotos.map((url) => (
-                <Image key={url} source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+                <AppImage key={url} source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
               ))}
             </ScrollView>
           ) : null}

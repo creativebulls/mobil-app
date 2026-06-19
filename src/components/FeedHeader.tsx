@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from './AppImage';
 
 import { useNotifications } from '../notifications/NotificationsProvider';
 import { colors } from '../theme/colors';
@@ -42,7 +44,7 @@ export function FeedHeader({
 
   return (
     <View style={styles.container}>
-      <Image
+      <AppImage
         source={require('../../assets/black-logo.png')}
         style={styles.logo}
         resizeMode="contain"

@@ -2,7 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from '../src/components/AppImage';
 
 import { fetchPlaces, searchPlaces } from '../src/api/placesApi';
 import { getErrorMessage, type Place } from '../src/api/types';
@@ -130,7 +132,7 @@ export default function PlacesScreen() {
                 accessibilityLabel={item.name}
               >
                 {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={styles.thumb} resizeMode="cover" />
+                  <AppImage source={{ uri: item.imageUrl }} style={styles.thumb} resizeMode="cover" />
                 ) : (
                   <View style={[styles.thumb, styles.thumbPlaceholder]}>
                     <Ionicons name="image-outline" size={22} color={colors.labelGray} />

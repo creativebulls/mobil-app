@@ -1,5 +1,6 @@
-import { Image, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 
+import { AppImage } from './AppImage';
 import { GradientBackground } from './GradientBackground';
 import { colors } from '../theme/colors';
 
@@ -12,7 +13,7 @@ export function AppSplashScreen({ onLayout }: AppSplashScreenProps) {
     <GradientBackground variant="screen">
       <View style={styles.container} onLayout={onLayout}>
         <View style={styles.content}>
-          <Image
+          <AppImage
             source={require('../../assets/splash-screen-logo.png')}
             style={styles.logo}
             resizeMode="contain"

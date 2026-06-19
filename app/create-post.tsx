@@ -4,7 +4,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +16,7 @@ import {
 
 import { createPost } from '../src/api/postsApi';
 import { getErrorMessage } from '../src/api/types';
+import { AppImage } from '../src/components/AppImage';
 import { Avatar } from '../src/components/Avatar';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
@@ -250,7 +250,7 @@ export default function CreatePostScreen() {
                             <Text style={styles.videoTileLabel}>Video</Text>
                           </View>
                         ) : (
-                          <Image source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+                          <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
                         )}
                         <Pressable
                           onPress={() => removeMedia(item.uri)}
@@ -337,7 +337,7 @@ export default function CreatePostScreen() {
                             <Text style={styles.videoTileLabel}>Video</Text>
                           </View>
                         ) : (
-                          <Image source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+                          <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
                         )}
                         <Pressable
                           onPress={() => removeMedia(item.uri)}

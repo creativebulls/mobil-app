@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from './AppImage';
 
 import type { FavoritePlace } from '../api/profileApi';
 import { colors } from '../theme/colors';
@@ -30,7 +32,7 @@ export function ProfileFavoritePlaces({ places, onPlacePress }: ProfileFavoriteP
             style={({ pressed }) => [styles.card, pressed && styles.pressed]}
           >
             {place.imageUrl ? (
-              <Image source={{ uri: place.imageUrl }} style={styles.image} resizeMode="cover" />
+              <AppImage source={{ uri: place.imageUrl }} style={styles.image} resizeMode="cover" />
             ) : (
               <View style={[styles.image, styles.imagePlaceholder]}>
                 <Ionicons name="location" size={28} color={colors.primary} />

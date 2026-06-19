@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
-  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   ViewToken,
 } from 'react-native';
 
+import { AppImage } from './AppImage';
 import { NEARBY_PLACE_SLIDES, type NearbyPlaceSlide } from '../constants/nearbyPlaces';
 import { colors } from '../theme/colors';
 
@@ -46,10 +46,10 @@ export function NearbyPlacesCarousel({ slides = NEARBY_PLACE_SLIDES }: NearbyPla
     return (
       <View style={styles.slide}>
         <View style={styles.slideCard}>
-          <Image source={{ uri: item.imageUri }} style={styles.slideImage} resizeMode="cover" />
+          <AppImage source={{ uri: item.imageUri }} style={styles.slideImage} resizeMode="cover" />
 
           <View style={styles.companyRow}>
-            <Image source={{ uri: item.logoUri }} style={styles.companyLogo} resizeMode="cover" />
+            <AppImage source={{ uri: item.logoUri }} style={styles.companyLogo} resizeMode="cover" />
 
             <View style={styles.companyText}>
               <Text style={styles.companyName}>{item.companyName}</Text>

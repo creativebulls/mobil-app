@@ -12,7 +12,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -40,6 +39,7 @@ import { reportUser } from '../src/api/moderationApi';
 import type { ChatMessage, CallLog } from '../src/api/types';
 import { getErrorMessage } from '../src/api/types';
 import { useCall } from '../src/calls/CallProvider';
+import { AppImage } from '../src/components/AppImage';
 import { Avatar } from '../src/components/Avatar';
 import { CameraCaptureModal, type CapturedMedia } from '../src/components/CameraCaptureModal';
 import { ChatMediaBubble, MediaViewerModal, type OpenableMedia } from '../src/components/ChatMedia';
@@ -1381,7 +1381,7 @@ const MessageRow = memo(function MessageRow({
             style={({ pressed }) => [styles.placeCard, pressed && styles.pressed]}
           >
             {message.sharedPlace.imageUrl ? (
-              <Image source={{ uri: message.sharedPlace.imageUrl }} style={styles.placeImage} />
+              <AppImage source={{ uri: message.sharedPlace.imageUrl }} style={styles.placeImage} />
             ) : (
               <View style={[styles.placeImage, styles.placeImagePlaceholder]}>
                 <Ionicons name="location" size={28} color={colors.brand} />

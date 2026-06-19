@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
@@ -80,6 +80,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="dark" />
+        <View style={styles.appFrame}>
         <ConfigProvider>
         <DialogProvider>
           <NotificationsProvider>
@@ -132,6 +133,7 @@ export default function RootLayout() {
           </NotificationsProvider>
         </DialogProvider>
         </ConfigProvider>
+        </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -140,5 +142,22 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    // On desktop web, show a neutral backdrop on the sides of the app column.
+    ...(Platform.OS === 'web' ? { backgroundColor: '#E8E4EC' } : null),
+  },
+  appFrame: {
+    flex: 1,
+    width: '100%',
+    // Constrain to a phone-like column on the web (mobile layouts assume a
+    // narrow viewport); native keeps the full device width. alignSelf centers
+    // the column while the parent still spans the full viewport so width: '100%'
+    // resolves correctly up to the cap.
+    ...(Platform.OS === 'web'
+      ? {
+          maxWidth: 540,
+          alignSelf: 'center',
+          backgroundColor: '#FFFFFF',
+        }
+      : null),
   },
 });

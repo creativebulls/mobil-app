@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { AppImage } from './AppImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../theme/colors';
@@ -88,7 +90,7 @@ export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: 
       >
         {profileImageUri ? (
           <View style={[styles.profileWrap, activeTab === 'profile' && styles.profileWrapActive]}>
-            <Image source={{ uri: profileImageUri }} style={styles.profileImage} resizeMode="cover" />
+            <AppImage source={{ uri: profileImageUri }} style={styles.profileImage} resizeMode="cover" />
           </View>
         ) : (
           <Ionicons
