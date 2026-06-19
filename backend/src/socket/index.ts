@@ -8,6 +8,7 @@ import {
   markCallAnswered,
   notifyCallDismiss,
   recordCallInvite,
+  sendIncomingCallPush,
 } from '../modules/calls/call-history.service';
 import { FriendRequest } from '../modules/friends/friend-request.model';
 import { User } from '../modules/users/user.model';
@@ -29,10 +30,84 @@ const pendingSessionRooms = new Map<string, string>();
 // count is > 0, which tolerates multiple devices/tabs gracefully.
 const onlineCounts = new Map<string, number>();
 
-// In-flight calls that are still ringing, keyed by callId. Lets the server ask
-// the caller to re-send the call invite once the callee's app reconnects (e.g.
-// after tapping the incoming-call notification from a locked/background state).
-const ringingCalls = new Map<string, { callerId: string; calleeId: string }>();
+// Active (possibly group) voice calls, keyed by callId. The server is the
+// source of truth for who is connected and who is still ringing so that mesh
+// negotiation, mid-call adds, and reconnects (e.g. after tapping the
+// lock-screen incoming-call notification) all stay consistent.
+const MAX_CALL_PARTICIPANTS = 4;
+
+type ParticipantInfo = { userId: string; name: string; avatarUri: string | null };
+
+type ActiveCall = {
+  callId: string;
+  conversationId: string | null;
+  hostId: string;
+  // Connected (accepted) participants.
+  participants: Map<string, ParticipantInfo>;
+  // Invited participants whose devices are still ringing.
+  invited: Map<string, ParticipantInfo>;
+  // The single callee used for the (1:1-shaped) history row of this call.
+  recordedCalleeId: string | null;
+};
+
+const activeCalls = new Map<string, ActiveCall>();
+
+/** Pushes the current roster to every connected participant for UI updates. */
+function emitRoster(call: ActiveCall): void {
+  const payload = {
+    callId: call.callId,
+    participants: [...call.participants.values()],
+    invited: [...call.invited.values()],
+  };
+  for (const pid of call.participants.keys()) {
+    io?.to(`user:${pid}`).emit('call:roster', payload);
+  }
+}
+
+/** Ends a call entirely: notifies everyone, finalizes history, and drops it. */
+function teardownCall(call: ActiveCall): void {
+  for (const pid of call.participants.keys()) {
+    io?.to(`user:${pid}`).emit('call:ended', { callId: call.callId });
+  }
+  for (const iid of call.invited.keys()) {
+    io?.to(`user:${iid}`).emit('call:cancelled', { callId: call.callId });
+    void notifyCallDismiss(iid, call.callId);
+  }
+  activeCalls.delete(call.callId);
+  void finalizeCall(call.callId, 'cancelled').then((participants) => {
+    if (participants) {
+      io?.to(`user:${participants.callerId}`).emit('call:history:updated', {});
+      io?.to(`user:${participants.calleeId}`).emit('call:history:updated', {});
+    }
+  });
+}
+
+/** Removes a user from a call (leave/hang-up/disconnect) and ends it if empty. */
+function handleLeaveCall(callId: string | undefined, leaverId: string): void {
+  if (!callId) {
+    return;
+  }
+  const call = activeCalls.get(callId);
+  if (!call) {
+    return;
+  }
+  const wasParticipant = call.participants.delete(leaverId);
+  const wasInvited = call.invited.delete(leaverId);
+  if (!wasParticipant && !wasInvited) {
+    return;
+  }
+
+  for (const pid of call.participants.keys()) {
+    io?.to(`user:${pid}`).emit('call:peer-left', { callId, peerId: leaverId });
+  }
+
+  // No one connected, or a single straggler with nobody else ringing → end.
+  if (call.participants.size === 0 || (call.participants.size <= 1 && call.invited.size === 0)) {
+    teardownCall(call);
+    return;
+  }
+  emitRoster(call);
+}
 
 export function isUserOnline(userId: string): boolean {
   return (onlineCounts.get(userId) ?? 0) > 0;
@@ -140,13 +215,25 @@ export function initializeSocket(httpServer: HttpServer): Server {
         socket.emit('presence:list', { online: friendIds.filter(isUserOnline) });
       });
 
-      // If this user is the callee of a still-ringing call, their app likely
+      // If this user is still being rung for an active call, their app likely
       // just reconnected after tapping the incoming-call notification (the
-      // socket had dropped in the background). Ask the caller to re-send the
-      // call so the WebRTC handshake can complete.
-      for (const [callId, parties] of ringingCalls) {
-        if (parties.calleeId === userId) {
-          io?.to(`user:${parties.callerId}`).emit('call:reinvite', { callId, toUserId: userId });
+      // socket had dropped in the background). Re-show the incoming call so they
+      // can accept and the mesh handshake can complete.
+      for (const call of activeCalls.values()) {
+        const info = call.invited.get(userId);
+        if (info) {
+          const host = call.participants.get(call.hostId) ?? {
+            userId: call.hostId,
+            name: 'Caller',
+            avatarUri: null,
+          };
+          io?.to(`user:${userId}`).emit('call:incoming', {
+            callId: call.callId,
+            fromUserId: call.hostId,
+            conversationId: call.conversationId,
+            caller: host,
+            roster: [...call.participants.values()],
+          });
         }
       }
     }
@@ -198,64 +285,158 @@ export function initializeSocket(httpServer: HttpServer): Server {
       io?.to(`user:${participants.calleeId}`).emit('call:history:updated', {});
     };
 
-    // Caller -> callee: incoming call invitation.
-    socket.on('call:invite', (payload: { toUserId?: string; callId?: string; conversationId?: string; caller?: unknown }) => {
-      relayToUser('call:incoming', payload);
-      if (payload.callId && payload.toUserId) {
-        ringingCalls.set(payload.callId, { callerId: userId, calleeId: payload.toUserId });
-      }
-      void recordCallInvite({
-        callId: payload.callId,
-        callerId: userId,
-        calleeId: payload.toUserId,
-        conversationId: payload.conversationId ?? null,
-      });
-    });
+    const selfInfo = (caller?: unknown): ParticipantInfo => {
+      const c = caller as Partial<ParticipantInfo> | undefined;
+      return {
+        userId,
+        name: c?.name ?? 'Caller',
+        avatarUri: c?.avatarUri ?? null,
+      };
+    };
 
-    // Caller -> callee: re-delivery of an in-flight call after the callee's app
-    // reconnects (so WebRTC can negotiate). Unlike call:invite this does not
-    // record a new call or re-send a push — it only re-shows the incoming UI.
-    socket.on('call:resend', (payload: { toUserId?: string; callId?: string; caller?: unknown; sdp?: unknown }) => {
-      relayToUser('call:incoming', payload);
-    });
+    // Host (or any participant) -> server: ring one or more invitees. Used both
+    // to start a call and to add people to an ongoing one. The first invite for
+    // a callId creates the call and adds the caller as the first participant.
+    socket.on(
+      'call:invite',
+      (payload: {
+        callId?: string;
+        conversationId?: string | null;
+        caller?: ParticipantInfo;
+        invitees?: ParticipantInfo[];
+      }) => {
+        const { callId } = payload;
+        if (!callId || !Array.isArray(payload.invitees) || payload.invitees.length === 0) {
+          return;
+        }
 
-    // Callee -> caller: the callee's device is now ringing.
+        let call = activeCalls.get(callId);
+        const isNew = !call;
+        if (!call) {
+          call = {
+            callId,
+            conversationId: payload.conversationId ?? null,
+            hostId: userId,
+            participants: new Map(),
+            invited: new Map(),
+            recordedCalleeId: null,
+          };
+          call.participants.set(userId, selfInfo(payload.caller));
+          activeCalls.set(callId, call);
+        }
+
+        const host = call.participants.get(call.hostId) ?? selfInfo(payload.caller);
+
+        for (const invitee of payload.invitees) {
+          if (!invitee?.userId || invitee.userId === userId) {
+            continue;
+          }
+          if (call.participants.has(invitee.userId) || call.invited.has(invitee.userId)) {
+            continue;
+          }
+          if (call.participants.size + call.invited.size >= MAX_CALL_PARTICIPANTS) {
+            break;
+          }
+
+          call.invited.set(invitee.userId, {
+            userId: invitee.userId,
+            name: invitee.name ?? 'Member',
+            avatarUri: invitee.avatarUri ?? null,
+          });
+
+          io?.to(`user:${invitee.userId}`).emit('call:incoming', {
+            callId,
+            fromUserId: userId,
+            conversationId: call.conversationId,
+            caller: host,
+            roster: [...call.participants.values()],
+          });
+
+          sendIncomingCallPush({
+            calleeId: invitee.userId,
+            callId,
+            callerId: host.userId,
+            callerName: host.name,
+            callerAvatar: host.avatarUri,
+            conversationId: call.conversationId,
+          });
+
+          // Record a single representative history row per call (host + first
+          // invitee). Group adds don't create additional history rows.
+          if (isNew && !call.recordedCalleeId) {
+            call.recordedCalleeId = invitee.userId;
+            void recordCallInvite({
+              callId,
+              callerId: userId,
+              calleeId: invitee.userId,
+              conversationId: call.conversationId,
+            });
+          }
+        }
+
+        emitRoster(call);
+      },
+    );
+
+    // Invitee -> participants: their device is now ringing ("Ringing…").
     socket.on('call:ringing', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:ringing', payload);
     });
 
-    // Callee -> caller: accepted / rejected / busy.
-    socket.on('call:accept', (payload: { toUserId?: string; callId?: string }) => {
-      relayToUser('call:accepted', payload);
-      if (payload.callId) ringingCalls.delete(payload.callId);
-      void markCallAnswered(payload.callId);
-      // Clear the ringing notification on the callee's device(s) once answered.
-      void notifyCallDismiss(userId, payload.callId);
-    });
-    socket.on('call:reject', (payload: { toUserId?: string; callId?: string }) => {
-      relayToUser('call:rejected', payload);
-      if (payload.callId) ringingCalls.delete(payload.callId);
-      void finalizeCall(payload.callId, 'rejected').then(notifyHistoryUpdated);
-    });
-    socket.on('call:busy', (payload: { toUserId?: string; callId?: string }) => {
-      relayToUser('call:busy', payload);
-      if (payload.callId) ringingCalls.delete(payload.callId);
-      void finalizeCall(payload.callId, 'busy').then(notifyHistoryUpdated);
+    // Invitee accepts: promote to participant and have existing participants
+    // offer to the newcomer (glare-free: older participants offer to newer).
+    socket.on('call:accept', (payload: { callId?: string }) => {
+      const call = payload.callId ? activeCalls.get(payload.callId) : undefined;
+      if (!call) {
+        return;
+      }
+      const info = call.invited.get(userId);
+      if (!info) {
+        return;
+      }
+      call.invited.delete(userId);
+      call.participants.set(userId, info);
+
+      for (const pid of call.participants.keys()) {
+        if (pid !== userId) {
+          io?.to(`user:${pid}`).emit('call:peer-joined', { callId: call.callId, peer: info });
+        }
+      }
+
+      void markCallAnswered(call.callId);
+      void notifyCallDismiss(userId, call.callId);
+      emitRoster(call);
     });
 
-    // Either party: cancel a ringing call or hang up an active one.
-    socket.on('call:cancel', (payload: { toUserId?: string; callId?: string }) => {
-      relayToUser('call:cancelled', payload);
-      if (payload.callId) ringingCalls.delete(payload.callId);
-      void finalizeCall(payload.callId, 'cancelled').then(notifyHistoryUpdated);
-    });
-    socket.on('call:end', (payload: { toUserId?: string; callId?: string }) => {
-      relayToUser('call:ended', payload);
-      if (payload.callId) ringingCalls.delete(payload.callId);
-      void finalizeCall(payload.callId, 'end').then(notifyHistoryUpdated);
-    });
+    const declineInvite = (callId: string | undefined, reason: 'rejected' | 'busy') => {
+      const call = callId ? activeCalls.get(callId) : undefined;
+      if (!call || !call.invited.delete(userId)) {
+        return;
+      }
+      for (const pid of call.participants.keys()) {
+        io?.to(`user:${pid}`).emit('call:peer-declined', { callId: call.callId, peerId: userId, reason });
+      }
+      if (userId === call.recordedCalleeId) {
+        call.recordedCalleeId = null;
+        void finalizeCall(call.callId, reason).then(notifyHistoryUpdated);
+      }
+      if (call.participants.size <= 1 && call.invited.size === 0) {
+        teardownCall(call);
+        return;
+      }
+      emitRoster(call);
+    };
 
-    // WebRTC handshake: SDP offer/answer and ICE candidates.
+    socket.on('call:reject', (payload: { callId?: string }) => declineInvite(payload.callId, 'rejected'));
+    socket.on('call:busy', (payload: { callId?: string }) => declineInvite(payload.callId, 'busy'));
+
+    // Leave / cancel / hang up — a participant exits; the call ends if empty.
+    const onLeave = (payload: { callId?: string }) => handleLeaveCall(payload.callId, userId);
+    socket.on('call:leave', onLeave);
+    socket.on('call:cancel', onLeave);
+    socket.on('call:end', onLeave);
+
+    // WebRTC handshake: SDP offer/answer and ICE candidates (per peer).
     socket.on('webrtc:offer', (payload: { toUserId?: string; callId?: string; sdp?: unknown }) => {
       relayToUser('webrtc:offer', payload);
     });
@@ -336,11 +517,11 @@ export function initializeSocket(httpServer: HttpServer): Server {
           onlineCounts.delete(userId);
           void broadcastPresence(userId, false);
 
-          // Drop any ringing calls this user initiated so the map can't leak if
-          // the caller's app dies before sending an explicit cancel.
-          for (const [callId, parties] of ringingCalls) {
-            if (parties.callerId === userId) {
-              ringingCalls.delete(callId);
+          // The user's last device went offline — drop them from any calls so
+          // peers are notified and empty calls don't leak.
+          for (const call of [...activeCalls.values()]) {
+            if (call.participants.has(userId) || call.invited.has(userId)) {
+              handleLeaveCall(call.callId, userId);
             }
           }
         } else {

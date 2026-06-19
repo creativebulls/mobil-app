@@ -75,27 +75,39 @@ export async function recordCallInvite(input: {
     // Unique index race — another signaling event already created the row.
     return;
   }
+}
 
-  // Ring the callee's phone even when the app is backgrounded, closed, or the
-  // device is locked. A high-priority push on the high-importance "calls"
-  // channel surfaces a heads-up notification with sound/vibration. When the app
-  // is in the foreground the client suppresses this and shows the in-app call
-  // overlay instead (delivered over the socket).
+/**
+ * Rings an invitee's phone even when the app is backgrounded, closed, or the
+ * device is locked. A high-priority data-only push lets the native handler build
+ * a full-screen incoming-call notification (caller avatar, name, Accept/Reject).
+ * When the app is in the foreground the client suppresses this and shows the
+ * in-app call overlay instead (delivered over the socket). Sent for every
+ * invitee of a (group) call, independent of history recording.
+ */
+export function sendIncomingCallPush(input: {
+  calleeId: string;
+  callId: string;
+  callerId: string;
+  callerName: string;
+  callerAvatar?: string | null;
+  conversationId?: string | null;
+}): void {
+  const { calleeId, callId, callerId, callerName, callerAvatar, conversationId } = input;
+  const absoluteAvatar = resolveAbsoluteMediaUrl(callerAvatar ?? null);
   void sendPushToUser(calleeId, {
     title: 'Incoming call',
     body: `${callerName} is calling you`,
-    imageUrl: resolveAbsoluteMediaUrl(callerAvatar),
+    imageUrl: absoluteAvatar,
     channelId: 'calls',
     androidTag: `incoming-${callId}`,
-    // Data-only so the native handler builds a full-screen call notification
-    // with a caller avatar, name, and Accept/Reject actions even when locked.
     dataOnly: true,
     data: {
       type: 'incoming_call',
       callId,
       callerId,
       callerName,
-      callerAvatar: resolveAbsoluteMediaUrl(callerAvatar) ?? '',
+      callerAvatar: absoluteAvatar ?? '',
       conversationId: conversationId ?? '',
     },
   }).catch(() => undefined);
