@@ -35,6 +35,10 @@ export const placesProviderSchema = z.object({
   provider: z.enum(['foursquare', 'google', 'opentripmap', 'sample']),
 });
 
+export const placesCategoriesSchema = z.object({
+  keys: z.array(z.string().trim().min(1).max(64)).max(50),
+});
+
 export const placesProFieldsSchema = z.object({
   enabled: z.boolean(),
 });

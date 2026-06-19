@@ -439,6 +439,25 @@
                     sample data.
                   </p>
                 </div>
+                <div class="field" style="margin-top: 1rem">
+                  <label class="label">Allowed place types</label>
+                  <p class="card-description" style="margin-top: 0.25rem; margin-bottom: 0.5rem">
+                    Only fetch places from the checked types. Leave all unchecked to fetch every
+                    type.
+                  </p>
+                  <div
+                    id="places-categories"
+                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.4rem"
+                  ></div>
+                  <div class="actions" style="margin-top: 0.75rem">
+                    <button id="places-categories-save-btn" type="button" class="btn btn-primary btn-sm">
+                      Save types
+                    </button>
+                    <button id="places-categories-clear-btn" type="button" class="btn btn-secondary btn-sm">
+                      Clear (all types)
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 

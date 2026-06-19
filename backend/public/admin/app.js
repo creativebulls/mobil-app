@@ -574,6 +574,9 @@ function renderPlacesStatus(config) {
     }
   }
 
+  // Allowed place categories (multi-checkbox).
+  renderPlaceCategories(config.categories);
+
   // Google card detail.
   const google = config.google || {};
   const gBadge = $('google-status-badge');
@@ -592,6 +595,52 @@ function renderPlacesStatus(config) {
       gBadge.textContent = 'No key';
       gDetail.textContent = 'Add a Google Places API key to use this provider.';
     }
+  }
+}
+
+function renderPlaceCategories(categories) {
+  const container = $('places-categories');
+  if (!container || !categories) return;
+
+  const available = categories.available || [];
+  const selected = new Set(categories.selected || []);
+
+  container.innerHTML = available
+    .map(
+      (cat) => `
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem">
+          <input type="checkbox" class="places-category-checkbox" value="${escapeHtml(cat.key)}" ${
+            selected.has(cat.key) ? 'checked' : ''
+          } />
+          <span>${escapeHtml(cat.label)}</span>
+        </label>`,
+    )
+    .join('');
+}
+
+function selectedCategoryKeys() {
+  return Array.from(document.querySelectorAll('.places-category-checkbox'))
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+}
+
+async function savePlacesCategories(keys) {
+  const saveBtn = $('places-categories-save-btn');
+  const clearBtn = $('places-categories-clear-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  if (clearBtn) clearBtn.disabled = true;
+  try {
+    const config = await api('/places-config/categories', {
+      method: 'PUT',
+      body: JSON.stringify({ keys }),
+    });
+    renderPlacesStatus(config);
+    toast(keys.length ? `Allowed types updated (${keys.length})` : 'Fetching all place types');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+    if (clearBtn) clearBtn.disabled = false;
   }
 }
 
@@ -1221,6 +1270,10 @@ function bindEvents() {
   $('places-provider-select')?.addEventListener('change', (event) =>
     void setPlacesProvider(event.target.value),
   );
+  $('places-categories-save-btn')?.addEventListener('click', () =>
+    void savePlacesCategories(selectedCategoryKeys()),
+  );
+  $('places-categories-clear-btn')?.addEventListener('click', () => void savePlacesCategories([]));
   $('google-save-btn')?.addEventListener('click', () => void saveGooglePlacesConfig());
   $('google-clear-btn')?.addEventListener('click', () => void clearGooglePlacesConfig());
 

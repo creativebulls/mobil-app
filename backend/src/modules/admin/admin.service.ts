@@ -33,13 +33,16 @@ import {
   getEffectiveProvider,
   getFoursquareKeySource,
   getGoogleKeySource,
+  getPlaceCategoryKeys,
   getPlacesProvider,
   setFoursquareKeyOverride,
   setFoursquareProOverride,
   setGoogleKeyOverride,
+  setPlaceCategoryKeys,
   setProviderOverride,
   type PlacesProviderName,
 } from '../places/places.provider';
+import { listCategoryOptions, sanitizeCategoryKeys } from '../places/place.categories';
 import { clearPlacesCache } from '../places/places.service';
 import { AppSetting } from './app-setting.model';
 
@@ -117,6 +120,7 @@ const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
 const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
 const GOOGLE_API_KEY_SETTING = 'google_places_api_key';
 const PLACES_PROVIDER_SETTING = 'places_provider';
+const PLACES_CATEGORIES_SETTING = 'places_category_keys';
 
 const VALID_PROVIDERS: PlacesProviderName[] = ['foursquare', 'google', 'opentripmap', 'sample'];
 
@@ -124,17 +128,31 @@ function maskKey(key: string): string {
   return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }
 
+function parseCategoryKeys(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? sanitizeCategoryKeys(parsed.map(String)) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Loads the admin-managed places config (provider + keys + toggles) into the provider. */
 export async function loadPlacesConfig(): Promise<void> {
-  const [keyDoc, proDoc, googleDoc, providerDoc] = await Promise.all([
+  const [keyDoc, proDoc, googleDoc, providerDoc, categoriesDoc] = await Promise.all([
     AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING }),
     AppSetting.findOne({ key: FOURSQUARE_PRO_FIELDS_SETTING }),
     AppSetting.findOne({ key: GOOGLE_API_KEY_SETTING }),
     AppSetting.findOne({ key: PLACES_PROVIDER_SETTING }),
+    AppSetting.findOne({ key: PLACES_CATEGORIES_SETTING }),
   ]);
   setFoursquareKeyOverride(keyDoc?.value ?? null);
   setFoursquareProOverride(proDoc ? proDoc.value === 'true' : null);
   setGoogleKeyOverride(googleDoc?.value ?? null);
+  setPlaceCategoryKeys(parseCategoryKeys(categoriesDoc?.value));
   const savedProvider = providerDoc?.value as PlacesProviderName | undefined;
   setProviderOverride(
     savedProvider && VALID_PROVIDERS.includes(savedProvider) ? savedProvider : null,
@@ -168,7 +186,27 @@ export async function getPlacesConfig() {
       maskedKey: googleKey ? maskKey(googleKey) : null,
       updatedAt: googleDoc?.updatedAt ?? null,
     },
+    // Allowed place categories (empty selection = fetch all types).
+    categories: {
+      available: listCategoryOptions(),
+      selected: getPlaceCategoryKeys(),
+    },
   };
+}
+
+export async function setPlacesCategories(keys: string[]) {
+  const sanitized = sanitizeCategoryKeys(keys);
+
+  await AppSetting.findOneAndUpdate(
+    { key: PLACES_CATEGORIES_SETTING },
+    { value: JSON.stringify(sanitized) },
+    { upsert: true, new: true },
+  );
+
+  setPlaceCategoryKeys(sanitized);
+  clearPlacesCache();
+
+  return getPlacesConfig();
 }
 
 export async function setPlacesProvider(providerName: string) {

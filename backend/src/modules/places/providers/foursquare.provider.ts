@@ -119,9 +119,16 @@ export class FoursquareProvider implements PlacesProvider {
 
   private readonly proFields: boolean;
 
-  constructor(apiKey: string, options: { proFields?: boolean } = {}) {
+  // Foursquare category IDs to restrict results to. Empty = no filter.
+  private readonly categoryIds: string[];
+
+  constructor(
+    apiKey: string,
+    options: { proFields?: boolean; categoryIds?: string[] } = {},
+  ) {
     this.apiKey = apiKey;
     this.proFields = options.proFields ?? false;
+    this.categoryIds = options.categoryIds ?? [];
   }
 
   private get headers(): Record<string, string> {
@@ -167,16 +174,29 @@ export class FoursquareProvider implements PlacesProvider {
   // enabled but the request fails (e.g. no credits → 429/4xx), it retries once
   // with free Core fields so places keep working (just without photos/ratings).
   private async fetchSearch(base: URLSearchParams): Promise<FsqPlace[]> {
-    const run = async (pro: boolean): Promise<Response> => {
+    const hasCategories = this.categoryIds.length > 0;
+
+    const run = async (pro: boolean, withCategories: boolean): Promise<Response> => {
       const params = new URLSearchParams(base);
       params.set('fields', this.searchFields(pro));
+      if (withCategories) {
+        params.set('fsq_category_ids', this.categoryIds.join(','));
+      }
       return fetch(`${FSQ_BASE}/search?${params.toString()}`, { headers: this.headers });
     };
 
     try {
-      let response = await run(this.proFields);
+      let response = await run(this.proFields, hasCategories);
       if (!response.ok && this.proFields) {
-        response = await run(false);
+        response = await run(false, hasCategories);
+      }
+      // If the category filter is unsupported/invalid, fall back to an unfiltered
+      // request so places still load rather than coming back empty.
+      if (!response.ok && hasCategories) {
+        response = await run(this.proFields, false);
+        if (!response.ok && this.proFields) {
+          response = await run(false, false);
+        }
       }
       if (!response.ok) {
         return [];

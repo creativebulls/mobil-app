@@ -16,6 +16,7 @@ import {
   adminUsersQuerySchema,
   appConfigSchema,
   googlePlacesConfigSchema,
+  placesCategoriesSchema,
   placesConfigSchema,
   placesProFieldsSchema,
   placesProviderSchema,
@@ -109,6 +110,12 @@ export const setGooglePlacesConfig = asyncHandler(async (req: AdminRequest, res:
 
 export const clearGooglePlacesConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
   const result = await adminService.clearGooglePlacesConfig();
+  sendSuccess(res, result);
+});
+
+export const setPlacesCategories = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = placesCategoriesSchema.parse(req.body);
+  const result = await adminService.setPlacesCategories(body.keys);
   sendSuccess(res, result);
 });
 

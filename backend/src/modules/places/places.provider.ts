@@ -1,4 +1,9 @@
 import { env, isDevelopment } from '../../config/env';
+import {
+  foursquareIdsForKeys,
+  googleTypesForKeys,
+  sanitizeCategoryKeys,
+} from './place.categories';
 import type { PlacesProvider } from './place.types';
 import { FoursquareProvider } from './providers/foursquare.provider';
 import { GooglePlacesProvider } from './providers/google.provider';
@@ -22,6 +27,9 @@ let foursquareProOverride: boolean | null = null;
 
 // Google Places key configured at runtime from the admin panel.
 let googleKeyOverride: string | null = null;
+
+// Admin-selected place category keys to restrict results to. Empty = all types.
+let categoryKeys: string[] = [];
 
 /** The active provider (admin override wins over env). */
 export function getEffectiveProvider(): PlacesProviderName {
@@ -97,11 +105,25 @@ export function setGoogleKeyOverride(key: string | null): void {
   provider = null;
 }
 
+/** The selected place category keys (empty = fetch all types). */
+export function getPlaceCategoryKeys(): string[] {
+  return categoryKeys;
+}
+
+/** Sets the selected place category keys and rebuilds the provider. */
+export function setPlaceCategoryKeys(keys: string[]): void {
+  categoryKeys = sanitizeCategoryKeys(keys);
+  provider = null;
+}
+
 function buildFoursquare(): PlacesProvider {
   const proFields = getEffectiveFoursquareProFields();
   const key = getEffectiveFoursquareKey();
   if (key) {
-    return new FoursquareProvider(key, { proFields });
+    return new FoursquareProvider(key, {
+      proFields,
+      categoryIds: foursquareIdsForKeys(categoryKeys),
+    });
   }
   if (isDevelopment) {
     console.warn('[places] No Foursquare key set — falling back to the sample provider.');
@@ -112,7 +134,7 @@ function buildFoursquare(): PlacesProvider {
 function buildGoogle(): PlacesProvider {
   const key = getEffectiveGoogleKey();
   if (key) {
-    return new GooglePlacesProvider(key);
+    return new GooglePlacesProvider(key, { includedTypes: googleTypesForKeys(categoryKeys) });
   }
   if (isDevelopment) {
     console.warn('[places] No Google Places key set — falling back to the sample provider.');

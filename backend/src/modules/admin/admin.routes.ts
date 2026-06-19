@@ -41,5 +41,6 @@ adminRouter.put('/places-config', adminController.setPlacesConfig);
 adminRouter.delete('/places-config', adminController.clearPlacesConfig);
 adminRouter.put('/places-config/pro-fields', adminController.setPlacesProFields);
 adminRouter.put('/places-config/provider', adminController.setPlacesProvider);
+adminRouter.put('/places-config/categories', adminController.setPlacesCategories);
 adminRouter.put('/places-config/google', adminController.setGooglePlacesConfig);
 adminRouter.delete('/places-config/google', adminController.clearGooglePlacesConfig);

@@ -84,8 +84,21 @@ export class GooglePlacesProvider implements PlacesProvider {
 
   private readonly apiKey: string;
 
-  constructor(apiKey: string) {
+  // Google Places "Table A" types to restrict results to. Empty = no filter.
+  private readonly includedTypes: string[];
+
+  constructor(apiKey: string, options: { includedTypes?: string[] } = {}) {
     this.apiKey = apiKey;
+    this.includedTypes = options.includedTypes ?? [];
+  }
+
+  /** Keeps only places whose types intersect the configured allow-list. */
+  private filterByTypes(places: GooglePlace[]): GooglePlace[] {
+    if (this.includedTypes.length === 0) {
+      return places;
+    }
+    const allowed = new Set(this.includedTypes);
+    return places.filter((place) => (place.types ?? []).some((type) => allowed.has(type)));
   }
 
   private headers(fieldMask: string): Record<string, string> {
@@ -171,7 +184,7 @@ export class GooglePlacesProvider implements PlacesProvider {
   }
 
   async getNearby({ lat, lon, radiusKm = 5, limit }: NearbyParams): Promise<PlaceDTO[]> {
-    const places = await this.runSearch(`${GOOGLE_BASE}/places:searchNearby`, {
+    const body: Record<string, unknown> = {
       maxResultCount: Math.min(limit, MAX_RESULTS),
       rankPreference: 'DISTANCE',
       locationRestriction: {
@@ -180,12 +193,16 @@ export class GooglePlacesProvider implements PlacesProvider {
           radius: Math.min(Math.round(radiusKm * 1000), 50000),
         },
       },
-    });
+    };
+    if (this.includedTypes.length > 0) {
+      body.includedTypes = this.includedTypes;
+    }
+    const places = this.filterByTypes(await this.runSearch(`${GOOGLE_BASE}/places:searchNearby`, body));
     return this.mapPlaces(places, { lat, lon });
   }
 
   async getTopRated({ limit }: TopRatedParams): Promise<PlaceDTO[]> {
-    const places = await this.runSearch(`${GOOGLE_BASE}/places:searchNearby`, {
+    const body: Record<string, unknown> = {
       maxResultCount: Math.min(limit, MAX_RESULTS),
       rankPreference: 'POPULARITY',
       locationRestriction: {
@@ -194,7 +211,11 @@ export class GooglePlacesProvider implements PlacesProvider {
           radius: 20000,
         },
       },
-    });
+    };
+    if (this.includedTypes.length > 0) {
+      body.includedTypes = this.includedTypes;
+    }
+    const places = this.filterByTypes(await this.runSearch(`${GOOGLE_BASE}/places:searchNearby`, body));
     // Google doesn't sort by rating server-side; do it here for a "top rated" feel.
     const sorted = places.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     return this.mapPlaces(sorted, null);
@@ -211,7 +232,9 @@ export class GooglePlacesProvider implements PlacesProvider {
         circle: { center: { latitude: lat, longitude: lon }, radius: 20000 },
       };
     }
-    const places = await this.runSearch(`${GOOGLE_BASE}/places:searchText`, body);
+    // Text Search only accepts a single `includedType`, so restrict client-side
+    // to honour the full multi-category allow-list.
+    const places = this.filterByTypes(await this.runSearch(`${GOOGLE_BASE}/places:searchText`, body));
     return this.mapPlaces(places, hasOrigin ? { lat: lat!, lon: lon! } : null);
   }
 
