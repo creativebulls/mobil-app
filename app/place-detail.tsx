@@ -142,6 +142,8 @@ export default function PlaceDetailScreen() {
 
   const name = detail?.name ?? params.name ?? 'Place';
   const imageUrl = detail?.imageUrl ?? params.imageUrl;
+  // Extra photos beyond the hero image, for the gallery strip.
+  const galleryPhotos = (detail?.photos ?? []).filter((url) => url && url !== imageUrl);
 
   const metaParts: string[] = [];
   if (typeof detail?.distanceKm === 'number') {
@@ -230,6 +232,19 @@ export default function PlaceDetailScreen() {
               </Pressable>
             </SafeAreaView>
           </View>
+
+          {galleryPhotos.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.gallery}
+              contentContainerStyle={styles.galleryContent}
+            >
+              {galleryPhotos.map((url) => (
+                <Image key={url} source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+              ))}
+            </ScrollView>
+          ) : null}
 
           <View style={styles.body}>
             <View style={styles.titleRow}>
@@ -482,6 +497,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputGray,
   },
   heroPlaceholder: {
+    backgroundColor: colors.inputGray,
+  },
+  gallery: {
+    marginTop: 12,
+  },
+  galleryContent: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  galleryThumb: {
+    width: 110,
+    height: 84,
+    borderRadius: 12,
     backgroundColor: colors.inputGray,
   },
   heroScrim: {

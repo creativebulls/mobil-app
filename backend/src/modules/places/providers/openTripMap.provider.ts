@@ -170,12 +170,13 @@ export class OpenTripMapProvider implements PlacesProvider {
     }
 
     const point = details.point;
+    const imageUrl = details.preview?.source || details.image || fallbackImage(id);
 
     return {
       id: details.xid ?? id,
       name: details.name,
       category: humanizeCategory(details.kinds),
-      imageUrl: details.preview?.source || details.image || fallbackImage(id),
+      imageUrl,
       rating: toRating(details.rate),
       distanceKm: null,
       lat: point?.lat ?? 0,
@@ -185,6 +186,7 @@ export class OpenTripMapProvider implements PlacesProvider {
       description: details.wikipedia_extracts?.text ?? details.info?.descr ?? null,
       website: details.url ?? details.otm ?? null,
       wikipediaUrl: details.wikipedia ?? null,
+      photos: imageUrl ? [imageUrl] : [],
     };
   }
 

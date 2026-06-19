@@ -1,6 +1,6 @@
 export type DiscoverPlace = {
   id: string;
-  imageUri: string;
+  imageUri: string | null;
   companyName: string;
   distanceKm: number | null;
   location: string;

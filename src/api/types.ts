@@ -336,7 +336,7 @@ export type Place = {
   id: string;
   name: string;
   category: string | null;
-  imageUrl: string;
+  imageUrl: string | null;
   rating: number | null;
   distanceKm: number | null;
   lat: number;
@@ -355,6 +355,7 @@ export type PlaceDetail = Place & {
   description: string | null;
   website: string | null;
   wikipediaUrl: string | null;
+  photos: string[];
 };
 
 export type PlaceEngagement = {

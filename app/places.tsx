@@ -122,14 +122,20 @@ export default function PlacesScreen() {
                 onPress={() =>
                   router.push({
                     pathname: '/place-detail',
-                    params: { id: item.id, name: item.name, imageUrl: item.imageUrl },
+                    params: { id: item.id, name: item.name, imageUrl: item.imageUrl ?? undefined },
                   })
                 }
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                 accessibilityRole="button"
                 accessibilityLabel={item.name}
               >
-                <Image source={{ uri: item.imageUrl }} style={styles.thumb} resizeMode="cover" />
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.thumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                    <Ionicons name="image-outline" size={22} color={colors.labelGray} />
+                  </View>
+                )}
 
                 <View style={styles.rowText}>
                   <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
@@ -213,6 +219,10 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     backgroundColor: colors.inputGray,
+  },
+  thumbPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowText: {
     flex: 1,

@@ -1,6 +1,5 @@
 import { env } from '../../../config/env';
 import {
-  fallbackImage,
   type NearbyParams,
   type PlaceDetailDTO,
   type PlaceDTO,
@@ -77,12 +76,16 @@ type FsqPlace = {
 
 type FsqSearchResponse = { results?: FsqPlace[] };
 
-function photoUrl(photos: FsqPhoto[] | undefined, seed: string): string {
-  const photo = photos?.find((p) => p.prefix && p.suffix);
+function buildPhotoUrl(photo: FsqPhoto | undefined): string | null {
   if (photo?.prefix && photo.suffix) {
     return `${photo.prefix}${PHOTO_SIZE}${photo.suffix}`;
   }
-  return fallbackImage(seed);
+  return null;
+}
+
+/** First usable real photo URL from a list, or null (no dummy fallback). */
+function photoUrl(photos: FsqPhoto[] | undefined): string | null {
+  return buildPhotoUrl(photos?.find((p) => p.prefix && p.suffix));
 }
 
 function categoryName(categories: FsqCategory[] | undefined): string | null {
@@ -147,7 +150,7 @@ export class FoursquareProvider implements PlacesProvider {
       id,
       name: place.name ?? 'Unknown place',
       category: categoryName(place.categories),
-      imageUrl: photoUrl(place.photos, id || place.name || 'place'),
+      imageUrl: photoUrl(place.photos),
       rating: toRating(place.rating),
       distanceKm:
         hasOrigin && typeof place.distance === 'number'
@@ -220,6 +223,35 @@ export class FoursquareProvider implements PlacesProvider {
     return results.map((place) => this.toDto(place, hasOrigin));
   }
 
+  /**
+   * Fetches real photos from the dedicated Place Photos endpoint
+   * (https://docs.foursquare.com/.../place-photos). Billed "Pro", so it is only
+   * called when Pro fields are enabled; failures degrade to an empty gallery.
+   */
+  private async fetchPhotos(id: string, limit = 10): Promise<string[]> {
+    if (!this.proFields) {
+      return [];
+    }
+    try {
+      const params = new URLSearchParams({ limit: String(Math.min(limit, 50)), sort: 'POPULAR' });
+      const response = await fetch(
+        `${FSQ_BASE}/${encodeURIComponent(id)}/photos?${params.toString()}`,
+        { headers: this.headers },
+      );
+      if (!response.ok) {
+        return [];
+      }
+      // The endpoint returns a bare array; tolerate a wrapped shape too.
+      const data = (await response.json()) as FsqPhoto[] | { results?: FsqPhoto[] };
+      const photos = Array.isArray(data) ? data : Array.isArray(data.results) ? data.results : [];
+      return photos
+        .map((photo) => buildPhotoUrl(photo))
+        .filter((url): url is string => Boolean(url));
+    } catch {
+      return [];
+    }
+  }
+
   async getDetails(id: string): Promise<PlaceDetailDTO | null> {
     const run = async (pro: boolean): Promise<Response> => {
       const params = new URLSearchParams({ fields: this.detailFields(pro) });
@@ -229,21 +261,33 @@ export class FoursquareProvider implements PlacesProvider {
     };
 
     try {
-      let response = await run(this.proFields);
-      if (!response.ok && this.proFields) {
-        response = await run(false);
-      }
-      if (!response.ok) {
+      const [detailResult, galleryPhotos] = await Promise.all([
+        (async () => {
+          let response = await run(this.proFields);
+          if (!response.ok && this.proFields) {
+            response = await run(false);
+          }
+          return response;
+        })(),
+        this.fetchPhotos(id),
+      ]);
+
+      if (!detailResult.ok) {
         return null;
       }
-      const place = (await response.json()) as FsqPlace;
+      const place = (await detailResult.json()) as FsqPlace;
       if (!place.fsq_place_id || !place.name) {
         return null;
       }
 
       const base = this.toDto(place, false);
+      // Prefer real gallery photos; fall back to the inline search-field photo.
+      const photos = galleryPhotos.length > 0 ? galleryPhotos : base.imageUrl ? [base.imageUrl] : [];
+
       return {
         ...base,
+        imageUrl: photos[0] ?? base.imageUrl,
+        photos,
         description: place.description ?? null,
         website: place.website ?? place.social_media?.website ?? null,
         wikipediaUrl: null,

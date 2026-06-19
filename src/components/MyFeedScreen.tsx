@@ -150,10 +150,10 @@ export function MyFeedScreen() {
     router.push({ pathname: '/places', params: { title: sectionTitle } });
   }
 
-  function openPlaceDetail(place: { id: string; companyName: string; imageUri: string }) {
+  function openPlaceDetail(place: { id: string; companyName: string; imageUri: string | null }) {
     router.push({
       pathname: '/place-detail',
-      params: { id: place.id, name: place.companyName, imageUrl: place.imageUri },
+      params: { id: place.id, name: place.companyName, imageUrl: place.imageUri ?? undefined },
     });
   }
 

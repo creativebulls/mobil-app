@@ -138,7 +138,7 @@ export async function listFavoritePlaces(userId: string, limit = 20) {
       favorites.push({
         id: details.id,
         name: details.name,
-        imageUrl: details.imageUrl,
+        imageUrl: details.imageUrl ?? '',
         rating: details.rating,
         reaction: 'like',
       });

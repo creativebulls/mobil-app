@@ -2,7 +2,8 @@ export type PlaceDTO = {
   id: string;
   name: string;
   category: string | null;
-  imageUrl: string;
+  /** Real photo URL from the provider, or null when none is available. */
+  imageUrl: string | null;
   rating: number | null;
   distanceKm: number | null;
   lat: number;
@@ -15,6 +16,8 @@ export type PlaceDetailDTO = PlaceDTO & {
   description: string | null;
   website: string | null;
   wikipediaUrl: string | null;
+  /** Gallery of real photo URLs (may be empty). */
+  photos: string[];
 };
 
 export type NearbyParams = {

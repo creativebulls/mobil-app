@@ -49,7 +49,13 @@ export function DiscoverPlaceCard({
       accessibilityLabel={`${place.companyName}, ${metaLabel}`}
     >
       <View style={styles.imageWrap}>
-        <Image source={{ uri: place.imageUri }} style={styles.image} resizeMode="cover" />
+        {place.imageUri ? (
+          <Image source={{ uri: place.imageUri }} style={styles.image} resizeMode="cover" />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Ionicons name="image-outline" size={28} color={colors.labelGray} />
+          </View>
+        )}
 
         <Pressable
           onPress={handleFavoritePress}
@@ -100,6 +106,11 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.inputGray,
   },
   heartButton: {
     position: 'absolute',

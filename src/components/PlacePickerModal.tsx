@@ -115,7 +115,13 @@ export function PlacePickerModal({ visible, onClose, onSelect }: PlacePickerModa
                   }
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                 >
-                  <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+                  ) : (
+                    <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                      <Ionicons name="image-outline" size={20} color={colors.labelGray} />
+                    </View>
+                  )}
                   <View style={styles.rowText}>
                     <Text style={styles.name} numberOfLines={1}>
                       {item.name}
@@ -218,6 +224,10 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: colors.inputGray,
+  },
+  thumbPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowText: {
     flex: 1,

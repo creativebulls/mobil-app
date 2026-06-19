@@ -73,11 +73,13 @@ export class SampleProvider implements PlacesProvider {
       return null;
     }
 
+    const base = toDTO(place, null);
     return {
-      ...toDTO(place, null),
+      ...base,
       description: `${place.name} is a popular ${place.category.toLowerCase()} located at ${place.address}. A favourite spot among locals and visitors alike.`,
       website: null,
       wikipediaUrl: null,
+      photos: base.imageUrl ? [base.imageUrl] : [],
     };
   }
 
