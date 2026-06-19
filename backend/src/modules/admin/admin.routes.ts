@@ -9,7 +9,13 @@ adminRouter.post('/login', adminController.login);
 
 adminRouter.use(requireAdmin);
 
+adminRouter.get('/stats', adminController.stats);
+
+adminRouter.get('/app-config', adminController.getAppConfig);
+adminRouter.put('/app-config', adminController.setAppConfig);
+
 adminRouter.get('/users', adminController.listUsers);
+adminRouter.get('/users/:id', adminController.userDetail);
 adminRouter.post('/users/:id/verify', adminController.forceVerifyUser);
 adminRouter.post('/users/:id/reset-password', adminController.resetUserPassword);
 adminRouter.post('/users/:id/suspend', adminController.suspendUser);

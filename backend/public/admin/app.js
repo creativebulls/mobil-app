@@ -72,6 +72,7 @@ const PAGE_TITLES = {
   users: 'Users',
   reports: 'Reports & abuse',
   appeals: 'Suspension appeals',
+  content: 'App content & constants',
   settings: 'Settings',
 };
 
@@ -183,6 +184,9 @@ function renderUsers() {
         <td>${formatDate(user.createdAt)}</td>
         <td>
           <div class="actions">
+            <button class="btn btn-secondary btn-sm" data-action="view" data-id="${user.id}" data-name="${escapeAttr(
+              user.displayName,
+            )}">View</button>
             ${
               user.emailVerified
                 ? ''
@@ -223,9 +227,6 @@ function renderUsers() {
   }
 
   $('page-info').textContent = `Page ${pagination.page} of ${pagination.totalPages} · ${pagination.total} users`;
-  $('stat-total').textContent = String(pagination.total);
-  $('stat-verified').textContent = String(users.filter((u) => u.emailVerified).length);
-  $('stat-unverified').textContent = String(users.filter((u) => !u.emailVerified).length);
 
   $('prev-page').disabled = pagination.page <= 1;
   $('next-page').disabled = pagination.page >= pagination.totalPages;
@@ -262,6 +263,184 @@ async function loadUsers() {
     toast(error.message, 'error');
   } finally {
     $('load-indicator').classList.add('hidden');
+  }
+}
+
+function setStat(id, value) {
+  const el = $(id);
+  if (el) el.textContent = String(value ?? 0);
+}
+
+async function loadStats() {
+  try {
+    const data = await api('/stats');
+    setStat('stat-online', data.onlineUsers);
+    setStat('stat-total', data.totalUsers);
+    setStat('stat-posts', data.totalPosts);
+    setStat('stat-verified', data.verifiedUsers);
+    setStat('stat-new', data.newUsers7d);
+    setStat('stat-comments', data.totalComments);
+    setStat('stat-conversations', data.totalConversations);
+    setStat('stat-reports', data.openReports);
+    setStat('stat-appeals', data.pendingAppeals);
+    setStat('stat-suspended', data.suspendedUsers);
+
+    const reportsNav = $('reports-nav-count');
+    if (reportsNav) {
+      reportsNav.textContent = String(data.openReports);
+      reportsNav.classList.toggle('hidden', data.openReports === 0);
+    }
+    const appealsNav = $('appeals-nav-count');
+    if (appealsNav) {
+      appealsNav.textContent = String(data.pendingAppeals);
+      appealsNav.classList.toggle('hidden', data.pendingAppeals === 0);
+    }
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+/* ---------- User detail overview ---------- */
+function detailStatItem(label, value) {
+  return `
+    <div class="detail-stat">
+      <div class="detail-stat-value">${value}</div>
+      <div class="detail-stat-label">${escapeHtml(label)}</div>
+    </div>`;
+}
+
+async function openUserDetail(userId, name) {
+  openModal('user-modal');
+  $('user-modal-sub').textContent = name ? `Overview for ${name}` : 'Profile and activity summary.';
+  $('user-modal-body').innerHTML = '<div class="empty-state">Loading…</div>';
+
+  try {
+    const data = await api(`/users/${userId}`);
+    const u = data.user;
+    const s = data.stats;
+
+    const badges = [
+      u.online
+        ? '<span class="badge badge-success">Online</span>'
+        : '<span class="badge badge-muted">Offline</span>',
+      u.emailVerified
+        ? '<span class="badge badge-success">Verified</span>'
+        : '<span class="badge badge-warning">Unverified</span>',
+      u.suspended ? '<span class="badge badge-warning">Suspended</span>' : '',
+      u.liveAudioEnabled ? '<span class="badge badge-info">Live audio</span>' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    $('user-modal-body').innerHTML = `
+      <div class="detail-head">
+        <div class="detail-identity">
+          <div class="detail-name">${escapeHtml(u.displayName)}</div>
+          <div class="user-email">${escapeHtml(u.email)}</div>
+        </div>
+        <div class="detail-badges">${badges}</div>
+      </div>
+      <div class="detail-grid">
+        ${detailStatItem('Friends', s.friends)}
+        ${detailStatItem('Pending in', s.pendingIncoming)}
+        ${detailStatItem('Pending out', s.pendingOutgoing)}
+        ${detailStatItem('Blocked', s.blocked)}
+        ${detailStatItem('Blocked by', s.blockedBy)}
+        ${detailStatItem('Restricted', s.restricted)}
+        ${detailStatItem('Posts', s.posts)}
+        ${detailStatItem('Comments', s.comments)}
+        ${detailStatItem('Places visited', s.placeVisits)}
+        ${detailStatItem('Conversations', s.conversations)}
+      </div>
+      <div class="detail-meta">
+        <div><span class="detail-meta-label">Joined</span> ${formatDate(u.createdAt)}</div>
+        <div><span class="detail-meta-label">Registration</span> ${escapeHtml(u.registrationStatus ?? '—')}</div>
+        ${u.suspended && u.suspensionReason ? `<div><span class="detail-meta-label">Suspension reason</span> ${escapeHtml(u.suspensionReason)}</div>` : ''}
+      </div>`;
+  } catch (error) {
+    $('user-modal-body').innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+/* ---------- App content / constants ---------- */
+let configEntries = [];
+
+function renderConfigList() {
+  const list = $('config-list');
+  if (!configEntries.length) {
+    list.innerHTML = '<div class="empty-state">No fields yet. Add one to get started.</div>';
+    return;
+  }
+  list.innerHTML = configEntries
+    .map(
+      (entry, index) => `
+      <div class="config-row" data-index="${index}">
+        <input class="input config-key" type="text" placeholder="key" value="${escapeAttr(entry.key)}" data-index="${index}" />
+        <textarea class="input config-value" rows="1" placeholder="value" data-index="${index}">${escapeHtml(entry.value)}</textarea>
+        <button type="button" class="btn btn-destructive btn-sm config-remove" data-index="${index}" aria-label="Remove">✕</button>
+      </div>`,
+    )
+    .join('');
+}
+
+async function loadAppConfig() {
+  $('config-load').classList.remove('hidden');
+  $('config-error').textContent = '';
+  try {
+    const data = await api('/app-config');
+    configEntries = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
+    configEntries.sort((a, b) => a.key.localeCompare(b.key));
+    renderConfigList();
+    $('config-updated').textContent = data.updatedAt ? `Updated ${formatDate(data.updatedAt)}` : '';
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('config-load').classList.add('hidden');
+  }
+}
+
+function syncConfigFromInputs() {
+  document.querySelectorAll('#config-list .config-row').forEach((row) => {
+    const index = Number(row.dataset.index);
+    const keyEl = row.querySelector('.config-key');
+    const valueEl = row.querySelector('.config-value');
+    if (configEntries[index]) {
+      configEntries[index].key = keyEl.value;
+      configEntries[index].value = valueEl.value;
+    }
+  });
+}
+
+async function saveAppConfig() {
+  syncConfigFromInputs();
+  $('config-error').textContent = '';
+
+  const config = {};
+  for (const entry of configEntries) {
+    const key = entry.key.trim();
+    if (!key) continue;
+    if (config[key] !== undefined) {
+      $('config-error').textContent = `Duplicate key: ${key}`;
+      return;
+    }
+    config[key] = entry.value;
+  }
+
+  $('config-save').disabled = true;
+  try {
+    const data = await api('/app-config', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+    configEntries = Object.entries(data.config ?? {}).map(([key, value]) => ({ key, value }));
+    configEntries.sort((a, b) => a.key.localeCompare(b.key));
+    renderConfigList();
+    $('config-updated').textContent = data.updatedAt ? `Updated ${formatDate(data.updatedAt)}` : '';
+    toast('App content saved');
+  } catch (error) {
+    $('config-error').textContent = error.message;
+  } finally {
+    $('config-save').disabled = false;
   }
 }
 
@@ -537,14 +716,14 @@ async function suspendUser(userId, reason) {
   toast('User suspended');
   closeModal('suspend-modal');
   $('suspend-reason').value = '';
-  await Promise.all([loadUsers(), loadReports()]);
+  await Promise.all([loadUsers(), loadReports(), loadStats()]);
 }
 
 async function unsuspendUser(userId) {
   try {
     await api(`/users/${userId}/unsuspend`, { method: 'POST', body: '{}' });
     toast('User reinstated');
-    await loadUsers();
+    await Promise.all([loadUsers(), loadStats()]);
   } catch (error) {
     toast(error.message, 'error');
   }
@@ -784,6 +963,7 @@ async function handleLogin(event) {
     });
     setToken(data.token);
     showDashboard();
+    await loadStats();
     await loadUsers();
     await loadPushConfig();
     await loadReports();
@@ -819,7 +999,7 @@ async function deleteUser(userId) {
   await api(`/users/${userId}`, { method: 'DELETE' });
   toast('User deleted');
   closeModal('delete-modal');
-  await loadUsers();
+  await Promise.all([loadUsers(), loadStats()]);
 }
 
 function bindEvents() {
@@ -827,7 +1007,15 @@ function bindEvents() {
   $('logout-btn').addEventListener('click', logout);
 
   document.querySelectorAll('[data-view]').forEach((el) => {
-    el.addEventListener('click', () => setActiveView(el.dataset.view));
+    el.addEventListener('click', () => {
+      const view = el.dataset.view;
+      setActiveView(view);
+      if (view === 'overview') {
+        void loadStats();
+      } else if (view === 'content') {
+        void loadAppConfig();
+      }
+    });
   });
 
   $('sidebar-toggle')?.addEventListener('click', openSidebar);
@@ -837,6 +1025,21 @@ function bindEvents() {
   $('push-save-btn').addEventListener('click', () => void savePushConfig());
   $('push-clear-btn').addEventListener('click', () => void clearPushConfig());
   $('push-test-btn').addEventListener('click', () => void sendTestPush());
+
+  $('config-add')?.addEventListener('click', () => {
+    syncConfigFromInputs();
+    configEntries.push({ key: '', value: '' });
+    renderConfigList();
+  });
+  $('config-save')?.addEventListener('click', () => void saveAppConfig());
+  $('config-reload')?.addEventListener('click', () => void loadAppConfig());
+  $('config-list')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button.config-remove');
+    if (!button) return;
+    syncConfigFromInputs();
+    configEntries.splice(Number(button.dataset.index), 1);
+    renderConfigList();
+  });
 
   $('search-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -865,6 +1068,11 @@ function bindEvents() {
 
     const { action, id, name } = button.dataset;
     state.activeUser = { id, name };
+
+    if (action === 'view') {
+      void openUserDetail(id, name);
+      return;
+    }
 
     if (action === 'verify') {
       void verifyUser(id);
@@ -1030,6 +1238,7 @@ async function init() {
   if (getToken()) {
     showDashboard();
     try {
+      await loadStats();
       await loadUsers();
       await loadPushConfig();
       await loadReports();

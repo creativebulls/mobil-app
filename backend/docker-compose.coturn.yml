@@ -5,15 +5,20 @@
 # calls connect reliably everywhere. There is no longer a working free public
 # TURN, so you must run your own — this file does that in one command.
 #
-# RUN THIS ON YOUR PUBLIC SERVER (e.g. mobilevps.tech), not on your laptop:
-#   1. Edit the two CHANGE_ME values below (EXTERNAL_IP + the shared secret).
-#   2. Open firewall ports: 3478/udp, 3478/tcp, and 49152-49200/udp.
-#   3. docker compose -f docker-compose.coturn.yml up -d
-#   4. In backend/.env set:
-#        TURN_URLS=turn:mobilevps.tech:3478?transport=udp,turn:mobilevps.tech:3478?transport=tcp
-#        TURN_USERNAME=whereabout
-#        TURN_CREDENTIAL=CHANGE_ME_STRONG_SECRET
-#      then restart the backend.
+# RUN THIS ON YOUR PUBLIC SERVER (e.g. mobilevps.tech), not on your laptop.
+#
+# 1. Open firewall ports: 3478/udp, 3478/tcp, and 49152-49200/udp.
+# 2. Start it (auto-detects the public IP, sets a random secret if unset):
+#
+#      export TURN_SECRET=$(openssl rand -hex 16)
+#      export EXTERNAL_IP=$(curl -s ifconfig.me)
+#      echo "secret=$TURN_SECRET ip=$EXTERNAL_IP"
+#      docker compose -f docker-compose.coturn.yml up -d
+#
+# 3. Put the printed values into backend/.env, then restart the backend:
+#      TURN_URLS=turn:mobilevps.tech:3478?transport=udp,turn:mobilevps.tech:3478?transport=tcp
+#      TURN_USERNAME=whereabout
+#      TURN_CREDENTIAL=<the TURN_SECRET printed above>
 #
 # Host networking is required so the relay's UDP ports are directly reachable.
 services:
@@ -28,8 +33,8 @@ services:
       - --fingerprint
       - --lt-cred-mech
       - --realm=mobilevps.tech
-      - --user=whereabout:CHANGE_ME_STRONG_SECRET
-      - --external-ip=CHANGE_ME_SERVER_PUBLIC_IP
+      - --user=whereabout:${TURN_SECRET:-changeme}
+      - --external-ip=${EXTERNAL_IP}
       - --min-port=49152
       - --max-port=49200
       - --no-cli

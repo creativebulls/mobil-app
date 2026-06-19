@@ -6,6 +6,7 @@ import path from 'path';
 
 import { env, uploadsRoot } from './config/env';
 import { adminRouter } from './modules/admin/admin.routes';
+import * as adminController from './modules/admin/admin.controller';
 import { authRouter } from './modules/auth/auth.routes';
 import { callsRouter } from './modules/calls/calls.routes';
 import { friendsRouter } from './modules/friends/friends.routes';
@@ -57,6 +58,9 @@ export function createApp() {
   app.get('/health', (_req, res) => {
     res.json({ success: true, data: { status: 'ok', service: 'whereabout-backend' } });
   });
+
+  // Public, read-only app config for the mobile client (no auth required).
+  app.get('/api/v1/app-config', adminController.publicAppConfig);
 
   app.use('/api/v1/auth', authLimiter, authRouter);
   app.use('/api/v1/admin', authLimiter, adminRouter);

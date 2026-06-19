@@ -78,6 +78,9 @@
             <span class="nav-icon">⚖</span><span>Appeals</span>
             <span id="appeals-nav-count" class="nav-count hidden">0</span>
           </button>
+          <button type="button" class="nav-item" data-view="content">
+            <span class="nav-icon">✎</span><span>Content</span>
+          </button>
           <button type="button" class="nav-item" data-view="settings">
             <span class="nav-icon">⚙</span><span>Settings</span>
           </button>
@@ -102,24 +105,52 @@
           <section data-view-section="overview">
             <div class="stats">
               <div class="card stat-card">
+                <div class="stat-icon stat-icon-emerald"><span class="live-dot"></span></div>
+                <div>
+                  <div class="stat-label">Online now</div>
+                  <div id="stat-online" class="stat-value">0</div>
+                </div>
+              </div>
+              <div class="card stat-card">
                 <div class="stat-icon stat-icon-blue">◍</div>
                 <div>
-                  <div class="stat-label">Users (page)</div>
+                  <div class="stat-label">Total users</div>
                   <div id="stat-total" class="stat-value">0</div>
+                </div>
+              </div>
+              <div class="card stat-card">
+                <div class="stat-icon stat-icon-violet">▦</div>
+                <div>
+                  <div class="stat-label">Total posts</div>
+                  <div id="stat-posts" class="stat-value">0</div>
                 </div>
               </div>
               <div class="card stat-card">
                 <div class="stat-icon stat-icon-green">✓</div>
                 <div>
-                  <div class="stat-label">Verified (page)</div>
+                  <div class="stat-label">Verified users</div>
                   <div id="stat-verified" class="stat-value">0</div>
                 </div>
               </div>
               <div class="card stat-card">
-                <div class="stat-icon stat-icon-amber">!</div>
+                <div class="stat-icon stat-icon-amber">⊕</div>
                 <div>
-                  <div class="stat-label">Unverified (page)</div>
-                  <div id="stat-unverified" class="stat-value">0</div>
+                  <div class="stat-label">New (7 days)</div>
+                  <div id="stat-new" class="stat-value">0</div>
+                </div>
+              </div>
+              <div class="card stat-card">
+                <div class="stat-icon stat-icon-slate">✎</div>
+                <div>
+                  <div class="stat-label">Comments</div>
+                  <div id="stat-comments" class="stat-value">0</div>
+                </div>
+              </div>
+              <div class="card stat-card">
+                <div class="stat-icon stat-icon-cyan">✉</div>
+                <div>
+                  <div class="stat-label">Conversations</div>
+                  <div id="stat-conversations" class="stat-value">0</div>
                 </div>
               </div>
               <div class="card stat-card">
@@ -134,6 +165,13 @@
                 <div>
                   <div class="stat-label">Pending appeals</div>
                   <div id="stat-appeals" class="stat-value">0</div>
+                </div>
+              </div>
+              <div class="card stat-card">
+                <div class="stat-icon stat-icon-amber">!</div>
+                <div>
+                  <div class="stat-label">Suspended</div>
+                  <div id="stat-suspended" class="stat-value">0</div>
                 </div>
               </div>
             </div>
@@ -303,6 +341,32 @@
             </div>
           </section>
 
+          <!-- Content / App constants -->
+          <section data-view-section="content" class="hidden">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">App content &amp; constants</h2>
+                <p class="card-description">
+                  Manage app-wide text and configuration. These values are served to the mobile
+                  app via the public config endpoint, so changes take effect without a new build.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="toolbar">
+                  <button id="config-add" type="button" class="btn btn-secondary btn-sm">+ Add field</button>
+                  <span id="config-load" class="badge badge-muted hidden">Loading…</span>
+                  <span id="config-updated" class="user-email"></span>
+                </div>
+                <div id="config-list" class="config-list"></div>
+                <p id="config-error" class="error-text"></p>
+                <div class="actions" style="margin-top: 1rem">
+                  <button id="config-save" type="button" class="btn btn-primary btn-sm">Save changes</button>
+                  <button id="config-reload" type="button" class="btn btn-secondary btn-sm">Discard</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <!-- Settings -->
           <section data-view-section="settings" class="hidden">
             <div class="card">
@@ -352,6 +416,24 @@
       </div>
 
       <div id="sidebar-scrim" class="sidebar-scrim hidden"></div>
+    </div>
+
+    <!-- User detail modal -->
+    <div id="user-modal" class="overlay hidden">
+      <div class="dialog dialog-lg" role="dialog" aria-modal="true">
+        <div class="dialog-header">
+          <h3 class="dialog-title">User overview</h3>
+          <p class="dialog-description" id="user-modal-sub">Profile and activity summary.</p>
+        </div>
+        <div class="dialog-content">
+          <div id="user-modal-body">
+            <div class="empty-state">Loading…</div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-secondary" data-close="user-modal">Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- Reset password modal -->

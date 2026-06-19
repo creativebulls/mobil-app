@@ -23,9 +23,22 @@ async function ensureAudioMode(): Promise<void> {
   }
 }
 
+/**
+ * Routes call audio to the loudspeaker (on=true) or the earpiece (on=false).
+ * Used by the in-call speaker toggle. Earpiece is the default for voice calls.
+ */
+export async function setSpeakerphone(on: boolean): Promise<void> {
+  try {
+    await setAudioModeAsync({ playsInSilentMode: true, shouldRouteThroughEarpiece: !on });
+  } catch {
+    // Non-fatal: routing stays as-is.
+  }
+}
+
 /** Outgoing ring the caller (dialer) hears while the other side rings. */
 export function playRingback(): void {
   void ensureAudioMode();
+  void setSpeakerphone(true);
   try {
     if (!ringbackPlayer) {
       ringbackPlayer = createAudioPlayer(ringbackSource);
@@ -41,6 +54,7 @@ export function playRingback(): void {
 /** Incoming ring the recipient hears when a call arrives. */
 export function playIncomingRing(): void {
   void ensureAudioMode();
+  void setSpeakerphone(true);
   try {
     if (!incomingPlayer) {
       incomingPlayer = createAudioPlayer(incomingRingSource);

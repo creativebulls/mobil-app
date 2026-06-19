@@ -50,3 +50,7 @@ export const adminAppealReviewSchema = z.object({
 export const adminLiveAudioSchema = z.object({
   enabled: z.boolean(),
 });
+
+export const appConfigSchema = z.object({
+  config: z.record(z.string(), z.string().max(5000)),
+});

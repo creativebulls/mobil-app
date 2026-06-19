@@ -32,6 +32,17 @@ export function isUserOnline(userId: string): boolean {
   return (onlineCounts.get(userId) ?? 0) > 0;
 }
 
+/** Number of distinct users with at least one active socket connection. */
+export function getOnlineUserCount(): number {
+  let count = 0;
+  for (const value of onlineCounts.values()) {
+    if (value > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 async function getFriendIds(userId: string): Promise<string[]> {
   const accepted = await FriendRequest.find({
     status: 'accepted',
@@ -180,6 +191,11 @@ export function initializeSocket(httpServer: HttpServer): Server {
         calleeId: payload.toUserId,
         conversationId: payload.conversationId ?? null,
       });
+    });
+
+    // Callee -> caller: the callee's device is now ringing.
+    socket.on('call:ringing', (payload: { toUserId?: string; callId?: string }) => {
+      relayToUser('call:ringing', payload);
     });
 
     // Callee -> caller: accepted / rejected / busy.

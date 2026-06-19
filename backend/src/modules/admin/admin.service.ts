@@ -14,7 +14,11 @@ import { Post } from '../posts/post.model';
 import { User, getUserDisplayName, serializeUser } from '../users/user.model';
 import { Appeal } from '../moderation/appeal.model';
 import { Report } from '../moderation/report.model';
+import { FriendRequest } from '../friends/friend-request.model';
+import { Conversation } from '../messages/conversation.model';
+import { UserRelation } from '../relations/block.model';
 import { AppError } from '../../shared/errors/AppError';
+import { getOnlineUserCount, isUserOnline } from '../../socket/index';
 import { signAdminToken } from '../../shared/utils/jwt';
 import {
   FIREBASE_SERVICE_ACCOUNT_KEY,
@@ -139,6 +143,171 @@ export function adminLogin(email: string, password: string) {
     token: signAdminToken(normalizedEmail),
     admin: { email: normalizedEmail },
   };
+}
+
+/** Dashboard metrics: live + lifetime totals across the platform. */
+export async function getStats() {
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    totalUsers,
+    verifiedUsers,
+    completedUsers,
+    suspendedUsers,
+    newUsers7d,
+    totalPosts,
+    totalComments,
+    totalConversations,
+    openReports,
+    pendingAppeals,
+  ] = await Promise.all([
+    User.countDocuments({}),
+    User.countDocuments({ emailVerified: true }),
+    User.countDocuments({ registrationStatus: 'completed' }),
+    User.countDocuments({ suspended: true }),
+    User.countDocuments({ createdAt: { $gte: weekAgo } }),
+    Post.countDocuments({}),
+    Comment.countDocuments({}),
+    Conversation.countDocuments({}),
+    Report.countDocuments({ status: 'open' }),
+    Appeal.countDocuments({ status: 'pending' }),
+  ]);
+
+  return {
+    onlineUsers: getOnlineUserCount(),
+    totalUsers,
+    verifiedUsers,
+    completedUsers,
+    suspendedUsers,
+    newUsers7d,
+    totalPosts,
+    totalComments,
+    totalConversations,
+    openReports,
+    pendingAppeals,
+  };
+}
+
+/** Per-user overview: profile, social graph counts, and content totals. */
+export async function getUserDetail(userId: string) {
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(400, 'Invalid user id', 'INVALID_USER_ID');
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  const id = user._id;
+
+  const [
+    friends,
+    pendingIncoming,
+    pendingOutgoing,
+    blockedCount,
+    blockedByCount,
+    restrictedCount,
+    posts,
+    comments,
+    placeVisits,
+    conversations,
+  ] = await Promise.all([
+    FriendRequest.countDocuments({ status: 'accepted', $or: [{ from: id }, { to: id }] }),
+    FriendRequest.countDocuments({ status: 'pending', to: id }),
+    FriendRequest.countDocuments({ status: 'pending', from: id }),
+    UserRelation.countDocuments({ owner: id, type: 'block' }),
+    UserRelation.countDocuments({ target: id, type: 'block' }),
+    UserRelation.countDocuments({ owner: id, type: 'restrict' }),
+    Post.countDocuments({ author: id }),
+    Comment.countDocuments({ author: id }),
+    PlaceVisit.countDocuments({ user: id }),
+    Conversation.countDocuments({ participants: id }),
+  ]);
+
+  return {
+    user: {
+      ...serializeUser(user),
+      displayName: getUserDisplayName(user),
+      online: isUserOnline(user._id.toString()),
+    },
+    stats: {
+      friends,
+      pendingIncoming,
+      pendingOutgoing,
+      blocked: blockedCount,
+      blockedBy: blockedByCount,
+      restricted: restrictedCount,
+      posts,
+      comments,
+      placeVisits,
+      conversations,
+    },
+  };
+}
+
+const APP_CONFIG_KEY = 'app_config';
+
+// Editable, app-wide text/constants the mobile client can fetch. Seeded on first
+// read so the admin always has a starting point to edit.
+const DEFAULT_APP_CONFIG: Record<string, string> = {
+  app_name: 'WhereAbout',
+  support_email: 'support@whereabout.app',
+  about_text: 'WhereAbout helps you discover places and friends around you.',
+  terms_url: 'https://whereabout.app/terms',
+  privacy_url: 'https://whereabout.app/privacy',
+  welcome_tagline: 'Discover places and people around you.',
+  maintenance_message: '',
+  min_supported_version: '1.0.0',
+};
+
+function parseConfig(value: string | undefined): Record<string, string> {
+  if (!value) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const result: Record<string, string> = {};
+    for (const [key, raw] of Object.entries(parsed)) {
+      result[key] = typeof raw === 'string' ? raw : String(raw ?? '');
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export async function getAppConfig(): Promise<{ config: Record<string, string>; updatedAt: Date | null }> {
+  const doc = await AppSetting.findOne({ key: APP_CONFIG_KEY });
+
+  if (!doc) {
+    // Seed defaults the first time so the panel isn't empty.
+    const created = await AppSetting.create({
+      key: APP_CONFIG_KEY,
+      value: JSON.stringify(DEFAULT_APP_CONFIG),
+    });
+    return { config: { ...DEFAULT_APP_CONFIG }, updatedAt: created.updatedAt };
+  }
+
+  return { config: parseConfig(doc.value), updatedAt: doc.updatedAt };
+}
+
+export async function setAppConfig(config: Record<string, string>) {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(config)) {
+    const trimmedKey = key.trim();
+    if (trimmedKey) {
+      normalized[trimmedKey] = typeof value === 'string' ? value : String(value ?? '');
+    }
+  }
+
+  const doc = await AppSetting.findOneAndUpdate(
+    { key: APP_CONFIG_KEY },
+    { value: JSON.stringify(normalized) },
+    { upsert: true, new: true },
+  );
+
+  return { config: normalized, updatedAt: doc?.updatedAt ?? new Date() };
 }
 
 export async function listUsers(input: { search?: string; page: number; limit: number }) {

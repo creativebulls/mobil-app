@@ -14,6 +14,7 @@ import {
   adminResetPasswordSchema,
   adminSuspendSchema,
   adminUsersQuerySchema,
+  appConfigSchema,
   pushConfigSchema,
   pushTestSchema,
 } from './admin.validation';
@@ -111,4 +112,31 @@ export const setLiveAudioEnabled = asyncHandler(async (req: AdminRequest, res: R
 
 export const iceServers = asyncHandler(async (_req: AdminRequest, res: Response) => {
   sendSuccess(res, { iceServers: getIceServers() });
+});
+
+export const stats = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getStats();
+  sendSuccess(res, result);
+});
+
+export const userDetail = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const result = await adminService.getUserDetail(String(req.params.id));
+  sendSuccess(res, result);
+});
+
+export const getAppConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getAppConfig();
+  sendSuccess(res, result);
+});
+
+export const setAppConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = appConfigSchema.parse(req.body);
+  const result = await adminService.setAppConfig(body.config);
+  sendSuccess(res, result);
+});
+
+// Public (unauthenticated) endpoint so the mobile client can fetch live config.
+export const publicAppConfig = asyncHandler(async (_req, res: Response) => {
+  const result = await adminService.getAppConfig();
+  sendSuccess(res, { config: result.config });
 });

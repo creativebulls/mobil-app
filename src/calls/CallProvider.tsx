@@ -20,12 +20,12 @@ import {
 
 import { fetchIceServers, type IceServer } from '../api/callsApi';
 import { getRealtimeSocket } from '../realtime/socket';
-import { playIncomingRing, playRingback, stopRings } from '../sounds/sounds';
+import { playIncomingRing, playRingback, setSpeakerphone, stopRings } from '../sounds/sounds';
 import { getStoredUser } from '../storage/authSession';
 import { Avatar } from '../components/Avatar';
 import { colors } from '../theme/colors';
 
-type CallStatus = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'active';
+type CallStatus = 'idle' | 'outgoing' | 'ringing' | 'incoming' | 'connecting' | 'active';
 
 type PeerInfo = {
   userId: string;
@@ -100,6 +100,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<CallStatus>('idle');
   const [peer, setPeer] = useState<PeerInfo | null>(null);
   const [muted, setMuted] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -144,6 +145,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     peerIdRef.current = null;
     callIdRef.current = null;
     setMuted(false);
+    setSpeakerOn(false);
+    // Return audio routing to the earpiece default for the next call/ring.
+    void setSpeakerphone(false);
     setPeer(null);
     setStatus('idle');
   }, [clearConnectTimer]);
@@ -393,7 +397,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const callId = callIdRef.current;
     const peerUserId = peerIdRef.current;
     if (callId && peerUserId) {
-      const event = status === 'outgoing' ? 'call:cancel' : 'call:end';
+      const event = status === 'outgoing' || status === 'ringing' ? 'call:cancel' : 'call:end';
       await emit(event, { toUserId: peerUserId, callId });
     }
     cleanup();
@@ -410,6 +414,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
     });
     setMuted(next);
   }, [muted]);
+
+  const toggleSpeaker = useCallback(() => {
+    setSpeakerOn((current) => {
+      const next = !current;
+      void setSpeakerphone(next);
+      return next;
+    });
+  }, []);
 
   // Subscribe to signaling events once. Handlers read refs so they always act
   // on the current call without re-binding on every state change.
@@ -442,6 +454,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
         avatarUri: payload.caller?.avatarUri ?? null,
       });
       setStatus('incoming');
+      // Tell the caller their device is now ringing so they see "Ringing…".
+      void emit('call:ringing', { toUserId: payload.fromUserId, callId: payload.callId });
+    };
+
+    // Caller side: the callee's device started ringing.
+    const onRinging = (payload: IncomingPayload) => {
+      if (payload.callId === callIdRef.current) {
+        setStatus((current) => (current === 'outgoing' ? 'ringing' : current));
+      }
     };
 
     const onAccepted = (payload: IncomingPayload) => {
@@ -457,7 +478,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       try {
         // The answer means the callee accepted — leave the ringing state even
         // if the separate call:accepted event was missed.
-        setStatus((current) => (current === 'outgoing' ? 'connecting' : current));
+        setStatus((current) =>
+          current === 'outgoing' || current === 'ringing' ? 'connecting' : current,
+        );
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp as never));
         await flushPendingCandidates();
       } catch {
@@ -494,6 +517,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       socketRef = socket;
       socket.on('call:incoming', onIncoming);
+      socket.on('call:ringing', onRinging);
       socket.on('call:accepted', onAccepted);
       socket.on('call:rejected', onRemoteEnd);
       socket.on('call:busy', onRemoteEnd);
@@ -507,6 +531,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       active = false;
       if (socketRef) {
         socketRef.off('call:incoming', onIncoming);
+        socketRef.off('call:ringing', onRinging);
         socketRef.off('call:accepted', onAccepted);
         socketRef.off('call:rejected', onRemoteEnd);
         socketRef.off('call:busy', onRemoteEnd);
@@ -536,7 +561,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // Ring while the call is being established (outgoing ringback / incoming ring),
   // then stop once it connects or ends.
   useEffect(() => {
-    if (status === 'outgoing') {
+    if (status === 'outgoing' || status === 'ringing') {
       playRingback();
     } else if (status === 'incoming') {
       playIncomingRing();
@@ -545,6 +570,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
     return () => stopRings();
   }, [status]);
+
+  // When the call connects, switch from the loud ring routing to the chosen
+  // output (earpiece by default, loudspeaker if the user toggled it).
+  useEffect(() => {
+    if (status === 'active') {
+      void setSpeakerphone(speakerOn);
+    }
+  }, [status, speakerOn]);
 
   const value = useMemo<CallContextValue>(() => ({ status, startCall }), [status, startCall]);
 
@@ -555,10 +588,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
         status={status}
         peer={peer}
         muted={muted}
+        speakerOn={speakerOn}
         onReject={() => void rejectCall()}
         onAccept={() => void acceptCall()}
         onEnd={() => void endCall()}
         onToggleMute={toggleMute}
+        onToggleSpeaker={toggleSpeaker}
       />
     </CallContext.Provider>
   );
@@ -568,20 +603,24 @@ type CallOverlayProps = {
   status: CallStatus;
   peer: PeerInfo | null;
   muted: boolean;
+  speakerOn: boolean;
   onReject: () => void;
   onAccept: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
+  onToggleSpeaker: () => void;
 };
 
 function CallOverlay({
   status,
   peer,
   muted,
+  speakerOn,
   onReject,
   onAccept,
   onEnd,
   onToggleMute,
+  onToggleSpeaker,
 }: CallOverlayProps) {
   const [seconds, setSeconds] = useState(0);
 
@@ -598,6 +637,8 @@ function CallOverlay({
     switch (status) {
       case 'outgoing':
         return 'Calling…';
+      case 'ringing':
+        return 'Ringing…';
       case 'incoming':
         return 'Incoming call';
       case 'connecting':
@@ -642,15 +683,30 @@ function CallOverlay({
             ) : (
               <View style={styles.activeRow}>
                 {status === 'active' ? (
-                  <View style={styles.actionWrap}>
-                    <Pressable
-                      style={[styles.roundButton, muted ? styles.mutedButton : styles.secondaryButton]}
-                      onPress={onToggleMute}
-                    >
-                      <Ionicons name={muted ? 'mic-off' : 'mic'} size={26} color={colors.white} />
-                    </Pressable>
-                    <Text style={styles.actionLabel}>{muted ? 'Unmute' : 'Mute'}</Text>
-                  </View>
+                  <>
+                    <View style={styles.actionWrap}>
+                      <Pressable
+                        style={[styles.roundButton, muted ? styles.mutedButton : styles.secondaryButton]}
+                        onPress={onToggleMute}
+                      >
+                        <Ionicons name={muted ? 'mic-off' : 'mic'} size={26} color={colors.white} />
+                      </Pressable>
+                      <Text style={styles.actionLabel}>{muted ? 'Unmute' : 'Mute'}</Text>
+                    </View>
+                    <View style={styles.actionWrap}>
+                      <Pressable
+                        style={[styles.roundButton, speakerOn ? styles.activeToggleButton : styles.secondaryButton]}
+                        onPress={onToggleSpeaker}
+                      >
+                        <Ionicons
+                          name={speakerOn ? 'volume-high' : 'volume-medium'}
+                          size={26}
+                          color={colors.white}
+                        />
+                      </Pressable>
+                      <Text style={styles.actionLabel}>Speaker</Text>
+                    </View>
+                  </>
                 ) : null}
                 <View style={styles.actionWrap}>
                   <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onEnd}>
@@ -710,7 +766,7 @@ const styles = StyleSheet.create({
   activeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 48,
+    gap: 36,
   },
   actionWrap: {
     alignItems: 'center',
@@ -733,6 +789,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
   mutedButton: {
+    backgroundColor: colors.brand,
+  },
+  activeToggleButton: {
     backgroundColor: colors.brand,
   },
   endIcon: {
