@@ -87,11 +87,15 @@ export async function recordCallInvite(input: {
     imageUrl: resolveAbsoluteMediaUrl(callerAvatar),
     channelId: 'calls',
     androidTag: `incoming-${callId}`,
+    // Data-only so the native handler builds a full-screen call notification
+    // with a caller avatar, name, and Accept/Reject actions even when locked.
+    dataOnly: true,
     data: {
       type: 'incoming_call',
       callId,
       callerId,
       callerName,
+      callerAvatar: resolveAbsoluteMediaUrl(callerAvatar) ?? '',
       conversationId: conversationId ?? '',
     },
   }).catch(() => undefined);
@@ -106,6 +110,25 @@ export async function markCallAnswered(callId?: string): Promise<void> {
     { callId, status: 'ringing' },
     { status: 'ongoing', answeredAt: new Date() },
   );
+}
+
+/**
+ * Tells the callee's device(s) to dismiss the ringing incoming-call
+ * notification (once answered, cancelled, rejected, or missed). Delivered as a
+ * data-only push so the native handler can cancel the notification.
+ */
+export async function notifyCallDismiss(userId?: string, callId?: string): Promise<void> {
+  if (!userId || !callId) {
+    return;
+  }
+  await sendPushToUser(userId, {
+    title: '',
+    body: '',
+    channelId: 'calls',
+    androidTag: `incoming-${callId}`,
+    dataOnly: true,
+    data: { type: 'call_dismiss', callId },
+  }).catch(() => undefined);
 }
 
 /**
@@ -152,6 +175,12 @@ export async function finalizeCall(
   doc.endedAt = now;
   doc.durationSeconds = durationSeconds;
   await doc.save();
+
+  // Clear the ringing incoming-call notification on the callee's device once
+  // the call is no longer ringing (cancelled/rejected/missed).
+  if (status !== 'completed') {
+    void notifyCallDismiss(participants.calleeId, doc.callId);
+  }
 
   // Let the callee know they missed a call (incoming call that was never
   // answered), so it surfaces even if their app was backgrounded or closed.

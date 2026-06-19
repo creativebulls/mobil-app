@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import {
   finalizeCall,
   markCallAnswered,
+  notifyCallDismiss,
   recordCallInvite,
 } from '../modules/calls/call-history.service';
 import { FriendRequest } from '../modules/friends/friend-request.model';
@@ -228,6 +229,8 @@ export function initializeSocket(httpServer: HttpServer): Server {
       relayToUser('call:accepted', payload);
       if (payload.callId) ringingCalls.delete(payload.callId);
       void markCallAnswered(payload.callId);
+      // Clear the ringing notification on the callee's device(s) once answered.
+      void notifyCallDismiss(userId, payload.callId);
     });
     socket.on('call:reject', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:rejected', payload);

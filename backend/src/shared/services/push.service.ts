@@ -15,6 +15,14 @@ export type PushPayload = {
   channelId?: string;
   /** Groups / replaces notifications for the same thread (e.g. conversation id). */
   androidTag?: string;
+  /**
+   * Send a data-only message (no `notification` block). The OS will not auto-
+   * display anything; instead our native FirebaseMessagingService builds the
+   * notification itself. Required for incoming-call notifications so we can add
+   * Accept/Reject actions and a full-screen, lock-screen ringer. The title/body
+   * are folded into the data payload so the native handler can render them.
+   */
+  dataOnly?: boolean;
 };
 
 // FCM error codes that mean a token is permanently invalid and should be purged.
@@ -74,49 +82,68 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     ...payload.data,
     ...(imageUrl ? { imageUrl } : {}),
     ...(payload.subtitle ? { subtitle: payload.subtitle } : {}),
+    // Fold the visible text into data for the data-only path so the native
+    // handler can render the notification it builds.
+    ...(payload.dataOnly ? { title: payload.title, body: payload.body } : {}),
   });
 
-  const message: MulticastMessage = {
-    tokens,
-    notification: {
-      title: payload.title,
-      body: payload.body,
-      ...(imageUrl ? { imageUrl } : {}),
-    },
-    data,
-    android: {
-      priority: 'high',
-      collapseKey: payload.androidTag,
-      notification: {
-        channelId,
-        sound: 'default',
-        defaultVibrateTimings: true,
-        ...(imageUrl ? { imageUrl } : {}),
-        ...(payload.androidTag ? { tag: payload.androidTag } : {}),
-        color: '#F36464',
-      },
-    },
-    apns: {
-      payload: {
-        aps: {
-          alert: {
-            title: payload.title,
-            body: payload.body,
-            ...(payload.subtitle ? { subtitle: payload.subtitle } : {}),
-          },
-          sound: 'default',
-          ...(imageUrl ? { 'mutable-content': 1 } : {}),
+  const message: MulticastMessage = payload.dataOnly
+    ? {
+        tokens,
+        // No `notification` block: this guarantees onMessageReceived fires in
+        // the background/killed state so the native service can build the call
+        // notification (Accept/Reject + full-screen ringer).
+        data,
+        android: {
+          priority: 'high',
+          collapseKey: payload.androidTag,
         },
-      },
-      ...(imageUrl
-        ? {
-            fcmOptions: {
-              imageUrl,
+        apns: {
+          headers: { 'apns-priority': '10', 'apns-push-type': 'background' },
+          payload: { aps: { 'content-available': 1 } },
+        },
+      }
+    : {
+        tokens,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+          ...(imageUrl ? { imageUrl } : {}),
+        },
+        data,
+        android: {
+          priority: 'high',
+          collapseKey: payload.androidTag,
+          notification: {
+            channelId,
+            sound: 'default',
+            defaultVibrateTimings: true,
+            ...(imageUrl ? { imageUrl } : {}),
+            ...(payload.androidTag ? { tag: payload.androidTag } : {}),
+            color: '#F36464',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: payload.title,
+                body: payload.body,
+                ...(payload.subtitle ? { subtitle: payload.subtitle } : {}),
+              },
+              sound: 'default',
+              ...(imageUrl ? { 'mutable-content': 1 } : {}),
             },
-          }
-        : {}),
-    },
-  };
+          },
+          ...(imageUrl
+            ? {
+                fcmOptions: {
+                  imageUrl,
+                },
+              }
+            : {}),
+        },
+      };
 
   try {
     const response = await messaging.sendEachForMulticast(message);
