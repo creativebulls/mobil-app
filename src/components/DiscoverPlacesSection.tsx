@@ -14,10 +14,14 @@ type DiscoverPlacesSectionProps = {
   title?: string;
   places?: DiscoverPlace[];
   isLoading?: boolean;
+  /** True while appending more places (shows a trailing spinner). */
+  isLoadingMore?: boolean;
   emptyText?: string;
   onViewAllPress?: () => void;
   onPlacePress?: (place: DiscoverPlace) => void;
   onFavoritePress?: (place: DiscoverPlace, isFavorite: boolean) => void;
+  /** Called when the user scrolls near the end of the carousel. */
+  onEndReached?: () => void;
 };
 
 function chunkPlaces(places: DiscoverPlace[]): DiscoverPlace[][] {
@@ -34,10 +38,12 @@ export function DiscoverPlacesSection({
   title = 'Discover Places',
   places = DISCOVER_PLACES_DUMMY,
   isLoading = false,
+  isLoadingMore = false,
   emptyText = 'No places to show right now.',
   onViewAllPress,
   onPlacePress,
   onFavoritePress,
+  onEndReached,
 }: DiscoverPlacesSectionProps) {
   const slides = chunkPlaces(places);
 
@@ -89,11 +95,15 @@ export function DiscoverPlacesSection({
           snapToAlignment="start"
           nestedScrollEnabled
           style={styles.list}
-          getItemLayout={(_, index) => ({
-            length: SCREEN_WIDTH,
-            offset: SCREEN_WIDTH * index,
-            index,
-          })}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={colors.brand} />
+              </View>
+            ) : null
+          }
         />
       )}
     </View>
@@ -113,6 +123,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: HORIZONTAL_PADDING,
     gap: CARD_GAP,
+  },
+  footer: {
+    width: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stateBox: {
     minHeight: 120,

@@ -51,36 +51,101 @@ export default function PlacesScreen() {
   const [query, setQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const coordsRef = useRef<{ lat: number; lon: number } | null>(null);
   const coordsReadyRef = useRef(false);
 
-  const load = useCallback(async (search: string) => {
-    setIsLoading(true);
-    setError(null);
+  // Pagination bookkeeping. `activeQueryRef` ties an in-flight "load more" to the
+  // query that started it so stale pages aren't appended after the search changes.
+  const offsetRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const activeQueryRef = useRef('');
+
+  const PAGE_SIZE = 20;
+
+  const fetchPage = useCallback(async (search: string, offset: number) => {
+    const coords = coordsRef.current;
+    const trimmed = search.trim();
+    return trimmed
+      ? searchPlaces(trimmed, { lat: coords?.lat, lon: coords?.lon, offset })
+      : fetchPlaces({ lat: coords?.lat, lon: coords?.lon, limit: PAGE_SIZE, offset });
+  }, []);
+
+  const load = useCallback(
+    async (search: string) => {
+      setIsLoading(true);
+      setError(null);
+      activeQueryRef.current = search;
+      offsetRef.current = 0;
+      hasMoreRef.current = false;
+
+      try {
+        if (!coordsReadyRef.current) {
+          coordsRef.current = await resolveCoords();
+          coordsReadyRef.current = true;
+        }
+
+        const response = await fetchPage(search, 0);
+
+        // Ignore the result if the query changed while we were loading.
+        if (activeQueryRef.current !== search) {
+          return;
+        }
+
+        setPlaces(response.places);
+        offsetRef.current = response.places.length;
+        hasMoreRef.current = response.hasMore;
+        setHasMore(response.hasMore);
+      } catch (err) {
+        if (activeQueryRef.current === search) {
+          setError(getErrorMessage(err, 'Could not load places'));
+          setPlaces([]);
+          setHasMore(false);
+          hasMoreRef.current = false;
+        }
+      } finally {
+        if (activeQueryRef.current === search) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [fetchPage],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) {
+      return;
+    }
+    const search = activeQueryRef.current;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
 
     try {
-      if (!coordsReadyRef.current) {
-        coordsRef.current = await resolveCoords();
-        coordsReadyRef.current = true;
+      const response = await fetchPage(search, offsetRef.current);
+
+      // Drop the page if the query changed mid-flight.
+      if (activeQueryRef.current !== search) {
+        return;
       }
 
-      const coords = coordsRef.current;
-      const trimmed = search.trim();
-
-      const response = trimmed
-        ? await searchPlaces(trimmed, { lat: coords?.lat, lon: coords?.lon })
-        : await fetchPlaces({ lat: coords?.lat, lon: coords?.lon, limit: 30 });
-
-      setPlaces(response.places);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Could not load places'));
-      setPlaces([]);
+      offsetRef.current += response.places.length;
+      hasMoreRef.current = response.hasMore;
+      setHasMore(response.hasMore);
+      setPlaces((prev) => {
+        const seen = new Set(prev.map((place) => place.id));
+        return [...prev, ...response.places.filter((place) => !seen.has(place.id))];
+      });
+    } catch {
+      // Keep current results; user can scroll again to retry.
     } finally {
-      setIsLoading(false);
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
     }
-  }, []);
+  }, [fetchPage]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -118,6 +183,13 @@ export default function PlacesScreen() {
             contentContainerStyle={styles.list}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isLoadingMore ? (
+                <ActivityIndicator color={colors.brand} style={styles.footerLoader} />
+              ) : null
+            }
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => (
               <Pressable
@@ -200,6 +272,9 @@ const styles = StyleSheet.create({
   },
   loader: {
     paddingVertical: 32,
+  },
+  footerLoader: {
+    paddingVertical: 20,
   },
   list: {
     flexGrow: 1,

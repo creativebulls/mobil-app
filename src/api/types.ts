@@ -349,6 +349,10 @@ export type PlacesResponse = {
   places: Place[];
   locationBased: boolean;
   provider: string;
+  /** True when more places can be loaded (for lazy loading / infinite scroll). */
+  hasMore: boolean;
+  /** Total places available in the current result pool. */
+  total: number;
 };
 
 export type PlaceDetail = Place & {

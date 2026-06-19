@@ -32,7 +32,7 @@ const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
 
 export function MyFeedScreen() {
   const router = useRouter();
-  const { places, isLoading, locationBased, placeName } = usePlaces(16);
+  const { places, isLoading, isLoadingMore, locationBased, placeName, loadMore } = usePlaces(16);
 
   const [query, setQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -216,9 +216,11 @@ export function MyFeedScreen() {
           title={discoverTitle}
           places={discoverPlaces}
           isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
           emptyText="No places found nearby."
           onViewAllPress={() => openPlaces(discoverTitle)}
           onPlacePress={openPlaceDetail}
+          onEndReached={loadMore}
         />
         <LatestPostsSection />
         <RecommendedPlacesByFriendsSection

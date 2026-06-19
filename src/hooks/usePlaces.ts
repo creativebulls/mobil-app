@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchPlaces } from '../api/placesApi';
 import { getErrorMessage, type Place } from '../api/types';
@@ -10,17 +10,24 @@ type CachedPlaces = {
   places: Place[];
   locationBased: boolean;
   placeName: string | null;
+  hasMore: boolean;
 };
 
 type UsePlacesState = {
   places: Place[];
   isLoading: boolean;
+  /** True while an additional page is being appended. */
+  isLoadingMore: boolean;
+  /** True when more places can be lazily loaded. */
+  hasMore: boolean;
   error: string | null;
   /** True when results are based on the user's current location. */
   locationBased: boolean;
   /** Human-readable name of the user's area (e.g. city), if resolved. */
   placeName: string | null;
   refresh: () => void;
+  /** Loads and appends the next page of places. */
+  loadMore: () => void;
 };
 
 async function resolveCoords(): Promise<{ lat: number; lon: number } | null> {
@@ -60,10 +67,19 @@ async function resolvePlaceName(coords: { lat: number; lon: number }): Promise<s
 export function usePlaces(limit = 12): UsePlacesState {
   const [places, setPlaces] = useState<Place[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationBased, setLocationBased] = useState(false);
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Coordinates resolved on the initial load and reused for paging.
+  const coordsRef = useRef<{ lat: number; lon: number } | null>(null);
+  // Backend pool offset reached so far (sum of items received).
+  const offsetRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(false);
 
   const refresh = useCallback(() => setReloadKey((key) => key + 1), []);
 
@@ -75,6 +91,7 @@ export function usePlaces(limit = 12): UsePlacesState {
     async function load() {
       setIsLoading(true);
       setError(null);
+      offsetRef.current = 0;
 
       // Show the last-known places instantly (and keep them if we're offline).
       const cached = await readCache<CachedPlaces>(cacheKey);
@@ -82,13 +99,16 @@ export function usePlaces(limit = 12): UsePlacesState {
         setPlaces(cached.data.places);
         setLocationBased(cached.data.locationBased);
         setPlaceName(cached.data.placeName);
+        setHasMore(cached.data.hasMore ?? false);
+        hasMoreRef.current = cached.data.hasMore ?? false;
         setIsLoading(false);
       }
 
       try {
         const coords = await resolveCoords();
+        coordsRef.current = coords;
         const [response, resolvedName] = await Promise.all([
-          fetchPlaces({ lat: coords?.lat, lon: coords?.lon, limit }),
+          fetchPlaces({ lat: coords?.lat, lon: coords?.lon, limit, offset: 0 }),
           coords ? resolvePlaceName(coords) : Promise.resolve(null),
         ]);
 
@@ -98,6 +118,9 @@ export function usePlaces(limit = 12): UsePlacesState {
           setPlaces(response.places);
           setLocationBased(response.locationBased);
           setPlaceName(placeNameValue);
+          setHasMore(response.hasMore);
+          hasMoreRef.current = response.hasMore;
+          offsetRef.current = response.places.length;
           setError(null);
         }
 
@@ -105,6 +128,7 @@ export function usePlaces(limit = 12): UsePlacesState {
           places: response.places,
           locationBased: response.locationBased,
           placeName: placeNameValue,
+          hasMore: response.hasMore,
         });
       } catch (err) {
         if (!cancelled) {
@@ -112,6 +136,8 @@ export function usePlaces(limit = 12): UsePlacesState {
           if (!cached) {
             setError(getErrorMessage(err, 'Could not load places'));
             setPlaces([]);
+            setHasMore(false);
+            hasMoreRef.current = false;
           }
         }
       } finally {
@@ -128,5 +154,46 @@ export function usePlaces(limit = 12): UsePlacesState {
     };
   }, [limit, reloadKey, cacheKey]);
 
-  return { places, isLoading, error, locationBased, placeName, refresh };
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) {
+      return;
+    }
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const coords = coordsRef.current;
+      const response = await fetchPlaces({
+        lat: coords?.lat,
+        lon: coords?.lon,
+        limit,
+        offset: offsetRef.current,
+      });
+
+      offsetRef.current += response.places.length;
+      hasMoreRef.current = response.hasMore;
+      setHasMore(response.hasMore);
+      setPlaces((prev) => {
+        const seen = new Set(prev.map((place) => place.id));
+        return [...prev, ...response.places.filter((place) => !seen.has(place.id))];
+      });
+    } catch {
+      // Keep what we have; let the user retry by scrolling again.
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [limit]);
+
+  return {
+    places,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    error,
+    locationBased,
+    placeName,
+    refresh,
+    loadMore,
+  };
 }

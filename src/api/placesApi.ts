@@ -17,6 +17,7 @@ export async function fetchPlaces(input?: {
   lat?: number | null;
   lon?: number | null;
   limit?: number;
+  offset?: number;
 }): Promise<PlacesResponse> {
   const params = new URLSearchParams();
 
@@ -27,6 +28,10 @@ export async function fetchPlaces(input?: {
 
   if (input?.limit) {
     params.set('limit', String(input.limit));
+  }
+
+  if (input?.offset) {
+    params.set('offset', String(input.offset));
   }
 
   const query = params.toString();
@@ -91,7 +96,7 @@ export async function fetchPlacePosts(
 
 export async function searchPlaces(
   query: string,
-  location?: { lat?: number | null; lon?: number | null },
+  location?: { lat?: number | null; lon?: number | null; offset?: number },
 ): Promise<PlacesResponse> {
   const params = new URLSearchParams();
   params.set('q', query);
@@ -99,6 +104,10 @@ export async function searchPlaces(
   if (typeof location?.lat === 'number' && typeof location?.lon === 'number') {
     params.set('lat', String(location.lat));
     params.set('lon', String(location.lon));
+  }
+
+  if (location?.offset) {
+    params.set('offset', String(location.offset));
   }
 
   return apiRequest<PlacesResponse>(`/places/search?${params.toString()}`);

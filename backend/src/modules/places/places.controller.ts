@@ -31,6 +31,7 @@ export const searchPlaces = asyncHandler(async (req: AuthenticatedRequest, res: 
     lat: query.lat,
     lon: query.lon,
     limit: query.limit,
+    offset: query.offset,
   });
   sendSuccess(res, result);
 });
