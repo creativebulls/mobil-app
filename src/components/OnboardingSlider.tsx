@@ -138,6 +138,7 @@ export function OnboardingSlider({ onAdvance, onComplete }: OnboardingSliderProp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   slider: {
     flex: 1,

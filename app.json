@@ -18,7 +18,7 @@
         "NSLocationWhenInUseUsageDescription": "WhereAbout uses your location to show awesome places near you.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.anonymous.mobileapp"
+      "bundleIdentifier": "com.mohit9313.mobileapp"
     },
     "android": {
       "usesCleartextTraffic": true,
