@@ -26,22 +26,13 @@ const CORE_SEARCH_FIELDS = [
 const CORE_DETAIL_EXTRAS = ['website', 'tel', 'social_media'];
 
 // "Pro" fields are billed and require account credits. Requesting them on a
-// credit-less account returns HTTP 429, so they are gated behind an env flag.
+// credit-less account returns HTTP 429/4xx, so they are gated behind a toggle
+// (env default, overridable from the admin panel) and a graceful fallback.
 const PRO_SEARCH_FIELDS = ['photos', 'rating'];
 const PRO_DETAIL_EXTRAS = ['description', 'hours'];
 
-const proFieldsEnabled = env.FOURSQUARE_ENABLE_PRO_FIELDS === 'true';
-
-const SEARCH_FIELDS = [
-  ...CORE_SEARCH_FIELDS,
-  ...(proFieldsEnabled ? PRO_SEARCH_FIELDS : []),
-].join(',');
-
-const DETAIL_FIELDS = [
-  ...CORE_SEARCH_FIELDS,
-  ...CORE_DETAIL_EXTRAS,
-  ...(proFieldsEnabled ? [...PRO_SEARCH_FIELDS, ...PRO_DETAIL_EXTRAS] : []),
-].join(',');
+// Requested image size for Foursquare photo URLs (prefix + size + suffix).
+const PHOTO_SIZE = '800x600';
 
 type FsqIcon = { prefix?: string; suffix?: string };
 
@@ -89,7 +80,7 @@ type FsqSearchResponse = { results?: FsqPlace[] };
 function photoUrl(photos: FsqPhoto[] | undefined, seed: string): string {
   const photo = photos?.find((p) => p.prefix && p.suffix);
   if (photo?.prefix && photo.suffix) {
-    return `${photo.prefix}original${photo.suffix}`;
+    return `${photo.prefix}${PHOTO_SIZE}${photo.suffix}`;
   }
   return fallbackImage(seed);
 }
@@ -123,8 +114,11 @@ export class FoursquareProvider implements PlacesProvider {
 
   private readonly apiKey: string;
 
-  constructor(apiKey: string) {
+  private readonly proFields: boolean;
+
+  constructor(apiKey: string, options: { proFields?: boolean } = {}) {
     this.apiKey = apiKey;
+    this.proFields = options.proFields ?? false;
   }
 
   private get headers(): Record<string, string> {
@@ -133,6 +127,18 @@ export class FoursquareProvider implements PlacesProvider {
       'X-Places-Api-Version': env.FOURSQUARE_API_VERSION,
       Accept: 'application/json',
     };
+  }
+
+  private searchFields(pro: boolean): string {
+    return [...CORE_SEARCH_FIELDS, ...(pro ? PRO_SEARCH_FIELDS : [])].join(',');
+  }
+
+  private detailFields(pro: boolean): string {
+    return [
+      ...CORE_SEARCH_FIELDS,
+      ...CORE_DETAIL_EXTRAS,
+      ...(pro ? [...PRO_SEARCH_FIELDS, ...PRO_DETAIL_EXTRAS] : []),
+    ].join(',');
   }
 
   private toDto(place: FsqPlace, hasOrigin: boolean): PlaceDTO {
@@ -154,11 +160,21 @@ export class FoursquareProvider implements PlacesProvider {
     };
   }
 
-  private async fetchSearch(params: URLSearchParams): Promise<FsqPlace[]> {
+  // Runs the search request with the requested fields. When Pro fields are
+  // enabled but the request fails (e.g. no credits → 429/4xx), it retries once
+  // with free Core fields so places keep working (just without photos/ratings).
+  private async fetchSearch(base: URLSearchParams): Promise<FsqPlace[]> {
+    const run = async (pro: boolean): Promise<Response> => {
+      const params = new URLSearchParams(base);
+      params.set('fields', this.searchFields(pro));
+      return fetch(`${FSQ_BASE}/search?${params.toString()}`, { headers: this.headers });
+    };
+
     try {
-      const response = await fetch(`${FSQ_BASE}/search?${params.toString()}`, {
-        headers: this.headers,
-      });
+      let response = await run(this.proFields);
+      if (!response.ok && this.proFields) {
+        response = await run(false);
+      }
       if (!response.ok) {
         return [];
       }
@@ -176,7 +192,6 @@ export class FoursquareProvider implements PlacesProvider {
       radius: String(Math.min(Math.round(radiusKm * 1000), 100000)),
       sort: 'DISTANCE',
       limit: String(Math.min(limit, 50)),
-      fields: SEARCH_FIELDS,
     });
     const results = await this.fetchSearch(params);
     return results.map((place) => this.toDto(place, true));
@@ -188,7 +203,6 @@ export class FoursquareProvider implements PlacesProvider {
       radius: '22000',
       sort: 'RATING',
       limit: String(Math.min(limit, 50)),
-      fields: SEARCH_FIELDS,
     });
     const results = await this.fetchSearch(params);
     return results.map((place) => this.toDto(place, false));
@@ -201,19 +215,24 @@ export class FoursquareProvider implements PlacesProvider {
       ll: hasOrigin ? `${lat},${lon}` : `${env.PLACES_DEFAULT_LAT},${env.PLACES_DEFAULT_LON}`,
       sort: 'RELEVANCE',
       limit: String(Math.min(limit, 50)),
-      fields: SEARCH_FIELDS,
     });
     const results = await this.fetchSearch(params);
     return results.map((place) => this.toDto(place, hasOrigin));
   }
 
   async getDetails(id: string): Promise<PlaceDetailDTO | null> {
+    const run = async (pro: boolean): Promise<Response> => {
+      const params = new URLSearchParams({ fields: this.detailFields(pro) });
+      return fetch(`${FSQ_BASE}/${encodeURIComponent(id)}?${params.toString()}`, {
+        headers: this.headers,
+      });
+    };
+
     try {
-      const params = new URLSearchParams({ fields: DETAIL_FIELDS });
-      const response = await fetch(
-        `${FSQ_BASE}/${encodeURIComponent(id)}?${params.toString()}`,
-        { headers: this.headers },
-      );
+      let response = await run(this.proFields);
+      if (!response.ok && this.proFields) {
+        response = await run(false);
+      }
       if (!response.ok) {
         return null;
       }

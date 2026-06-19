@@ -52,6 +52,7 @@ import { useIsOnline } from '../src/realtime/PresenceProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { getRealtimeSocket } from '../src/realtime/socket';
 import { getStoredUser } from '../src/storage/authSession';
+import { readCache, writeCache } from '../src/storage/offlineCache';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
 
@@ -164,17 +165,34 @@ export default function ChatScreen() {
       }
 
       setConversationId(convId);
-      const result = await fetchMessages(convId);
-      setMessages(result.messages);
-      setNextCursor(result.nextCursor);
-      if (result.conversation?.isGroup) {
-        setGroupName(result.conversation.name);
-        setGroupAvatar(result.conversation.avatarUri);
-        setMemberCount(result.conversation.memberCount);
-      } else if (result.user) {
-        setOtherUserId(result.user.id);
+
+      // Show the last cached thread instantly (and keep it if we're offline).
+      const cached = await readCache<ChatMessage[]>(`chat:${convId}`);
+      if (cached && cached.data.length > 0) {
+        setMessages((current) => (current.length > 0 ? current : cached.data));
+        setIsLoading(false);
       }
-      void markConversationRead(convId).catch(() => undefined);
+
+      try {
+        const result = await fetchMessages(convId);
+        setMessages(result.messages);
+        setNextCursor(result.nextCursor);
+        if (result.conversation?.isGroup) {
+          setGroupName(result.conversation.name);
+          setGroupAvatar(result.conversation.avatarUri);
+          setMemberCount(result.conversation.memberCount);
+        } else if (result.user) {
+          setOtherUserId(result.user.id);
+        }
+        // Cache the most recent page so it's available offline next time.
+        void writeCache(`chat:${convId}`, result.messages);
+        void markConversationRead(convId).catch(() => undefined);
+      } catch (fetchError) {
+        // If we have cached messages, stay on the thread; otherwise surface it.
+        if (!cached || cached.data.length === 0) {
+          throw fetchError;
+        }
+      }
     } catch (error) {
       await dialog.alert({
         title: 'Could not open chat',

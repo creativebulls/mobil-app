@@ -16,6 +16,7 @@ import {
   adminUsersQuerySchema,
   appConfigSchema,
   placesConfigSchema,
+  placesProFieldsSchema,
   pushConfigSchema,
   pushTestSchema,
 } from './admin.validation';
@@ -83,6 +84,12 @@ export const setPlacesConfig = asyncHandler(async (req: AdminRequest, res: Respo
 
 export const clearPlacesConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
   const result = await adminService.clearPlacesConfig();
+  sendSuccess(res, result);
+});
+
+export const setPlacesProFields = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = placesProFieldsSchema.parse(req.body);
+  const result = await adminService.setPlacesProFields(body.enabled);
   sendSuccess(res, result);
 });
 

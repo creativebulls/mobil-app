@@ -25,6 +25,7 @@ import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { useNotifications } from '../src/notifications/NotificationsProvider';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { getStoredUser } from '../src/storage/authSession';
+import { readCache, writeCache } from '../src/storage/offlineCache';
 import { colors } from '../src/theme/colors';
 
 function notificationIcon(type: NotificationType): keyof typeof Ionicons.glyphMap {
@@ -74,18 +75,28 @@ export default function NotificationsScreen() {
       if (result.notifications.some((item) => !item.read)) {
         await markNotificationsRead();
         setUnreadCount(0);
-        setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+        const read = result.notifications.map((item) => ({ ...item, read: true }));
+        setNotifications(read);
+        void writeCache('notifications:list', read);
       } else {
+        void writeCache('notifications:list', result.notifications);
         await refreshUnreadCount();
       }
     } catch {
-      // ignore
+      // ignore — keep cached/in-memory notifications
     } finally {
       setIsLoading(false);
     }
   }, [refreshUnreadCount, setUnreadCount]);
 
   useEffect(() => {
+    // Show the last cached notifications instantly (and while offline).
+    void readCache<AppNotification[]>('notifications:list').then((cached) => {
+      if (cached && cached.data.length > 0) {
+        setNotifications((current) => (current.length > 0 ? current : cached.data));
+        setIsLoading(false);
+      }
+    });
     void load();
   }, [load]);
 

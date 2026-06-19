@@ -3,7 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { fetchPlaces } from '../api/placesApi';
 import { getErrorMessage, type Place } from '../api/types';
+import { readCache, writeCache } from '../storage/offlineCache';
 import { hasLocationAccess } from '../utils/locationAccess';
+
+type CachedPlaces = {
+  places: Place[];
+  locationBased: boolean;
+  placeName: string | null;
+};
 
 type UsePlacesState = {
   places: Place[];
@@ -60,12 +67,23 @@ export function usePlaces(limit = 12): UsePlacesState {
 
   const refresh = useCallback(() => setReloadKey((key) => key + 1), []);
 
+  const cacheKey = `places:${limit}`;
+
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setIsLoading(true);
       setError(null);
+
+      // Show the last-known places instantly (and keep them if we're offline).
+      const cached = await readCache<CachedPlaces>(cacheKey);
+      if (!cancelled && cached) {
+        setPlaces(cached.data.places);
+        setLocationBased(cached.data.locationBased);
+        setPlaceName(cached.data.placeName);
+        setIsLoading(false);
+      }
 
       try {
         const coords = await resolveCoords();
@@ -74,15 +92,27 @@ export function usePlaces(limit = 12): UsePlacesState {
           coords ? resolvePlaceName(coords) : Promise.resolve(null),
         ]);
 
+        const placeNameValue = response.locationBased ? resolvedName : null;
+
         if (!cancelled) {
           setPlaces(response.places);
           setLocationBased(response.locationBased);
-          setPlaceName(response.locationBased ? resolvedName : null);
+          setPlaceName(placeNameValue);
+          setError(null);
         }
+
+        void writeCache<CachedPlaces>(cacheKey, {
+          places: response.places,
+          locationBased: response.locationBased,
+          placeName: placeNameValue,
+        });
       } catch (err) {
         if (!cancelled) {
-          setError(getErrorMessage(err, 'Could not load places'));
-          setPlaces([]);
+          // Offline / failed fetch: keep cached places if we have them.
+          if (!cached) {
+            setError(getErrorMessage(err, 'Could not load places'));
+            setPlaces([]);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -96,7 +126,7 @@ export function usePlaces(limit = 12): UsePlacesState {
     return () => {
       cancelled = true;
     };
-  }, [limit, reloadKey]);
+  }, [limit, reloadKey, cacheKey]);
 
   return { places, isLoading, error, locationBased, placeName, refresh };
 }

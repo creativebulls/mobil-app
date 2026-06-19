@@ -11,9 +11,23 @@ let provider: PlacesProvider | null = null;
 // integration can be managed entirely from the admin UI without editing env.
 let foursquareKeyOverride: string | null = null;
 
+// Admin override for the "Pro fields" (photos/ratings) toggle. null = use env.
+let foursquareProOverride: boolean | null = null;
+
 /** Returns the active Foursquare key (admin override wins over env). */
 export function getEffectiveFoursquareKey(): string | null {
   return foursquareKeyOverride ?? env.FOURSQUARE_API_KEY ?? null;
+}
+
+/** Whether Pro fields (photos/ratings) are enabled (admin override wins over env). */
+export function getEffectiveFoursquareProFields(): boolean {
+  return foursquareProOverride ?? env.FOURSQUARE_ENABLE_PRO_FIELDS === 'true';
+}
+
+/** Sets (or clears with null) the admin Pro-fields toggle and rebuilds the provider. */
+export function setFoursquareProOverride(enabled: boolean | null): void {
+  foursquareProOverride = enabled;
+  provider = null;
 }
 
 /** Source of the active Foursquare key, for admin display. */
@@ -38,16 +52,18 @@ export function setFoursquareKeyOverride(key: string | null): void {
 }
 
 function createProvider(): PlacesProvider {
+  const proFields = getEffectiveFoursquareProFields();
+
   // An admin-configured key always wins and forces the Foursquare provider so
   // the key can be managed from the admin panel without touching env vars.
   if (foursquareKeyOverride) {
-    return new FoursquareProvider(foursquareKeyOverride);
+    return new FoursquareProvider(foursquareKeyOverride, { proFields });
   }
 
   switch (env.PLACES_PROVIDER) {
     case 'foursquare': {
       if (env.FOURSQUARE_API_KEY) {
-        return new FoursquareProvider(env.FOURSQUARE_API_KEY);
+        return new FoursquareProvider(env.FOURSQUARE_API_KEY, { proFields });
       }
       if (isDevelopment) {
         console.warn(

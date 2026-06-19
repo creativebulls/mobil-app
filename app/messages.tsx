@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import { Avatar } from '../src/components/Avatar';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { seedPresence } from '../src/realtime/presenceStore';
 import { getStoredUser } from '../src/storage/authSession';
+import { readCache, writeCache } from '../src/storage/offlineCache';
 import { colors } from '../src/theme/colors';
 
 function messagePreview(message: ChatMessage): string {
@@ -74,11 +75,22 @@ export default function MessagesScreen() {
           .filter((item) => item.isOnline && item.user?.id)
           .map((item) => item.user!.id),
       );
+      void writeCache('messages:conversations', result.conversations);
     } catch {
-      // Keep whatever we have; the empty state covers the first-load failure.
+      // Keep whatever we have (cached or in-memory); offline shows the last list.
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    // Show the last cached conversations instantly on a cold/offline start.
+    void readCache<ConversationSummary[]>('messages:conversations').then((cached) => {
+      if (cached && cached.data.length > 0) {
+        setConversations((current) => (current.length > 0 ? current : cached.data));
+        setIsLoading(false);
+      }
+    });
   }, []);
 
   useFocusEffect(

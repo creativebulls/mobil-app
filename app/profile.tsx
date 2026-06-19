@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -25,6 +25,7 @@ import {
 } from '../src/api/profileApi';
 import { updateProfilePhoto } from '../src/api/authApi';
 import { getErrorMessage, type Post } from '../src/api/types';
+import { readCache, writeCache } from '../src/storage/offlineCache';
 import { Avatar } from '../src/components/Avatar';
 import { BrandButton } from '../src/components/BrandButton';
 import { FeedPostCard } from '../src/components/FeedPostCard';
@@ -37,6 +38,13 @@ import { getStoredUser, updateStoredUser } from '../src/storage/authSession';
 import type { UserProfile } from '../src/api/types';
 import { openUserProfile } from '../src/utils/openUserProfile';
 import { colors } from '../src/theme/colors';
+
+type CachedProfile = {
+  stats: ProfileStats;
+  friends: FriendSummary[];
+  favoritePlaces: FavoritePlace[];
+  posts: Post[];
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -67,6 +75,13 @@ export default function ProfileScreen() {
       setFavoritePlaces(placesResult.places);
       setPosts(postsResult.posts);
 
+      void writeCache<CachedProfile>('profile:me', {
+        stats: statsResult,
+        friends: friendsResult.friends,
+        favoritePlaces: placesResult.places,
+        posts: postsResult.posts,
+      });
+
       if (storedUser) {
         await updateStoredUser({
           ...storedUser,
@@ -79,6 +94,21 @@ export default function ProfileScreen() {
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    // Render the last-known profile instantly (and keep it while offline).
+    void getStoredUser().then((stored) => setUser((current) => current ?? stored));
+    void readCache<CachedProfile>('profile:me').then((cached) => {
+      if (!cached) {
+        return;
+      }
+      setStats((current) => current ?? cached.data.stats);
+      setFriends((current) => (current.length > 0 ? current : cached.data.friends));
+      setFavoritePlaces((current) => (current.length > 0 ? current : cached.data.favoritePlaces));
+      setPosts((current) => (current.length > 0 ? current : cached.data.posts));
+      setIsLoading(false);
+    });
   }, []);
 
   useFocusEffect(

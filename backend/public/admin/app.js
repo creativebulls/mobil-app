@@ -535,6 +535,11 @@ function renderPlacesStatus(config) {
   const badge = $('places-status-badge');
   const detail = $('places-status-detail');
 
+  const proToggle = $('places-pro-fields');
+  if (proToggle && typeof config.proFields === 'boolean') {
+    proToggle.checked = config.proFields;
+  }
+
   if (config.configured) {
     badge.className = 'badge badge-success';
     badge.textContent = 'Configured';
@@ -542,7 +547,7 @@ function renderPlacesStatus(config) {
     if (config.provider) parts.push(`provider: ${config.provider}`);
     if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
     if (config.source) parts.push(`source: ${config.source}`);
-    if (config.proFields === false) parts.push('photos/ratings off (free tier)');
+    parts.push(config.proFields ? 'photos/ratings on' : 'photos/ratings off (free tier)');
     if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
     detail.textContent = parts.join(' · ');
   } else {
@@ -597,6 +602,24 @@ async function clearPlacesConfig() {
     toast(error.message, 'error');
   } finally {
     $('places-clear-btn').disabled = false;
+  }
+}
+
+async function setPlacesProFields(enabled) {
+  const toggle = $('places-pro-fields');
+  if (toggle) toggle.disabled = true;
+  try {
+    const config = await api('/places-config/pro-fields', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+    renderPlacesStatus(config);
+    toast(enabled ? 'Photos & ratings enabled' : 'Photos & ratings disabled');
+  } catch (error) {
+    if (toggle) toggle.checked = !enabled;
+    toast(error.message, 'error');
+  } finally {
+    if (toggle) toggle.disabled = false;
   }
 }
 
@@ -1098,6 +1121,9 @@ function bindEvents() {
 
   $('places-save-btn')?.addEventListener('click', () => void savePlacesConfig());
   $('places-clear-btn')?.addEventListener('click', () => void clearPlacesConfig());
+  $('places-pro-fields')?.addEventListener('change', (event) =>
+    void setPlacesProFields(event.target.checked),
+  );
 
   $('config-add')?.addEventListener('click', () => {
     syncConfigFromInputs();

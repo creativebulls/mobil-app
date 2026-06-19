@@ -39,3 +39,4 @@ adminRouter.post('/push-config/test', adminController.sendTestPush);
 adminRouter.get('/places-config', adminController.getPlacesConfig);
 adminRouter.put('/places-config', adminController.setPlacesConfig);
 adminRouter.delete('/places-config', adminController.clearPlacesConfig);
+adminRouter.put('/places-config/pro-fields', adminController.setPlacesProFields);

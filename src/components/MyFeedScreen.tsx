@@ -7,6 +7,7 @@ import { fetchFriends, fetchMeetPeople, type FriendSummary, type MeetPerson } fr
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { usePlaces } from '../hooks/usePlaces';
 import { onHomeReselect } from '../navigation/tabEvents';
+import { readCache, writeCache } from '../storage/offlineCache';
 import { seedPresence } from '../realtime/presenceStore';
 import { getStoredUser } from '../storage/authSession';
 import { colors } from '../theme/colors';
@@ -70,6 +71,18 @@ export function MyFeedScreen() {
 
   useEffect(() => {
     void getStoredUser().then((user) => setCurrentUserId(user?.id ?? null));
+
+    // Hydrate from the offline cache so the feed isn't empty on a cold/offline start.
+    void readCache<FriendSummary[]>('feed:friends').then((cached) => {
+      if (cached && cached.data.length > 0) {
+        setFriends((current) => (current.length > 0 ? current : cached.data));
+      }
+    });
+    void readCache<MeetPerson[]>('feed:meetPeople').then((cached) => {
+      if (cached && cached.data.length > 0) {
+        setMeetPeople((current) => (current.length > 0 ? current : cached.data));
+      }
+    });
   }, []);
 
   const loadFriends = useCallback(async () => {
@@ -77,8 +90,9 @@ export function MyFeedScreen() {
       const result = await fetchFriends();
       setFriends(result.friends);
       seedPresence(result.friends.filter((friend) => friend.isOnline).map((friend) => friend.id));
+      void writeCache('feed:friends', result.friends);
     } catch {
-      // Keep whatever friends were already shown.
+      // Keep whatever friends were already shown (cached or in-memory).
     }
   }, []);
 
@@ -86,8 +100,9 @@ export function MyFeedScreen() {
     try {
       const result = await fetchMeetPeople();
       setMeetPeople(result.people);
+      void writeCache('feed:meetPeople', result.people);
     } catch {
-      // Keep whatever suggestions were already shown.
+      // Keep whatever suggestions were already shown (cached or in-memory).
     }
   }, []);
 

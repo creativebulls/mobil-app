@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFeed } from '../api/postsApi';
@@ -7,6 +7,7 @@ import type { Post } from '../api/types';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { getStoredUser } from '../storage/authSession';
 import { getHiddenPostIds, hidePost } from '../storage/hiddenPosts';
+import { readCache, writeCache } from '../storage/offlineCache';
 import { FeedPostCard } from './FeedPostCard';
 import { openUserProfile } from '../utils/openUserProfile';
 import { SectionHeader } from './SectionHeader';
@@ -26,13 +27,26 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
         getHiddenPostIds(),
       ]);
       const hidden = new Set(hiddenIds);
-      setPosts(feed.posts.filter((post) => !hidden.has(post.id)));
+      const visible = feed.posts.filter((post) => !hidden.has(post.id));
+      setPosts(visible);
       setCurrentUserId(user?.id ?? null);
+      void writeCache('feed:latestPosts', visible);
     } catch {
-      // keep existing posts on error
+      // keep existing posts on error (cached or in-memory)
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    // Show the last cached feed instantly on a cold/offline start.
+    void readCache<Post[]>('feed:latestPosts').then((cached) => {
+      if (cached && cached.data.length > 0) {
+        setPosts((current) => (current.length > 0 ? current : cached.data));
+        setIsLoading(false);
+      }
+    });
+    void getStoredUser().then((user) => setCurrentUserId((id) => id ?? user?.id ?? null));
   }, []);
 
   useFocusEffect(

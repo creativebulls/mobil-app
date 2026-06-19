@@ -28,9 +28,11 @@ import {
 import { sendPushToUser } from '../../shared/services/push.service';
 import {
   getEffectiveFoursquareKey,
+  getEffectiveFoursquareProFields,
   getFoursquareKeySource,
   getPlacesProvider,
   setFoursquareKeyOverride,
+  setFoursquareProOverride,
 } from '../places/places.provider';
 import { clearPlacesCache } from '../places/places.service';
 import { AppSetting } from './app-setting.model';
@@ -106,15 +108,20 @@ export async function clearPushConfig() {
 }
 
 const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
+const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
 
 function maskKey(key: string): string {
   return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }
 
-/** Loads the admin-managed Foursquare key from the DB into the provider. */
+/** Loads the admin-managed Foursquare key & Pro toggle from the DB into the provider. */
 export async function loadPlacesConfig(): Promise<void> {
-  const doc = await AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING });
-  setFoursquareKeyOverride(doc?.value ?? null);
+  const [keyDoc, proDoc] = await Promise.all([
+    AppSetting.findOne({ key: FOURSQUARE_API_KEY_SETTING }),
+    AppSetting.findOne({ key: FOURSQUARE_PRO_FIELDS_SETTING }),
+  ]);
+  setFoursquareKeyOverride(keyDoc?.value ?? null);
+  setFoursquareProOverride(proDoc ? proDoc.value === 'true' : null);
 }
 
 export async function getPlacesConfig() {
@@ -126,9 +133,22 @@ export async function getPlacesConfig() {
     provider: getPlacesProvider().name,
     maskedKey: key ? maskKey(key) : null,
     apiVersion: env.FOURSQUARE_API_VERSION,
-    proFields: env.FOURSQUARE_ENABLE_PRO_FIELDS === 'true',
+    proFields: getEffectiveFoursquareProFields(),
     updatedAt: doc?.updatedAt ?? null,
   };
+}
+
+export async function setPlacesProFields(enabled: boolean) {
+  await AppSetting.findOneAndUpdate(
+    { key: FOURSQUARE_PRO_FIELDS_SETTING },
+    { value: enabled ? 'true' : 'false' },
+    { upsert: true, new: true },
+  );
+
+  setFoursquareProOverride(enabled);
+  clearPlacesCache();
+
+  return getPlacesConfig();
 }
 
 export async function setPlacesConfig(apiKey: string) {
