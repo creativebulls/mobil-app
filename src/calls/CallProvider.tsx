@@ -19,6 +19,7 @@ import {
 } from 'react-native-webrtc';
 
 import { fetchIceServers, type IceServer } from '../api/callsApi';
+import { onCallAcceptIntent } from './callIntentBus';
 import { getRealtimeSocket } from '../realtime/socket';
 import { playIncomingRing, playRingback, setSpeakerphone, stopRings } from '../sounds/sounds';
 import { getStoredUser } from '../storage/authSession';
@@ -116,6 +117,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   // The outgoing invite payload (caller info + SDP offer), kept so we can
   // re-send it if the callee's app reconnects mid-ring (call:reinvite).
   const outgoingInviteRef = useRef<{ caller: unknown; sdp: unknown } | null>(null);
+  // Set when the user tapped "Accept" on the native incoming-call notification:
+  // the call with this id should be auto-accepted as soon as its offer arrives.
+  const autoAcceptCallIdRef = useRef<string | null>(null);
 
   const emit = useCallback(async (event: string, payload: Record<string, unknown>) => {
     const socket = await getRealtimeSocket();
@@ -146,6 +150,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     pendingCandidatesRef.current = [];
     pendingOfferRef.current = null;
     outgoingInviteRef.current = null;
+    autoAcceptCallIdRef.current = null;
     peerIdRef.current = null;
     callIdRef.current = null;
     setMuted(false);
@@ -391,6 +396,26 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [requestMicPermission, createPeerConnection, flushPendingCandidates, emit, cleanup]);
 
+  // Keep a stable reference so socket handlers / notification intents can invoke
+  // the latest acceptCall without re-subscribing.
+  const acceptCallRef = useRef(acceptCall);
+  acceptCallRef.current = acceptCall;
+
+  // The native full-screen call notification's "Accept" button deep-links into
+  // the app and emits here. Remember the call id and accept as soon as its
+  // offer arrives (it's re-sent by the server once the socket reconnects).
+  useEffect(
+    () =>
+      onCallAcceptIntent(({ callId }) => {
+        autoAcceptCallIdRef.current = callId;
+        if (callIdRef.current === callId && pendingOfferRef.current) {
+          autoAcceptCallIdRef.current = null;
+          void acceptCallRef.current();
+        }
+      }),
+    [],
+  );
+
   const rejectCall = useCallback(async () => {
     const callId = callIdRef.current;
     const peerUserId = peerIdRef.current;
@@ -463,6 +488,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setStatus('incoming');
       // Tell the caller their device is now ringing so they see "Ringing…".
       void emit('call:ringing', { toUserId: payload.fromUserId, callId: payload.callId });
+
+      // If the user already tapped "Accept" on the lock-screen notification,
+      // accept automatically now that the offer has arrived.
+      if (autoAcceptCallIdRef.current && autoAcceptCallIdRef.current === payload.callId) {
+        autoAcceptCallIdRef.current = null;
+        void acceptCallRef.current();
+      }
     };
 
     // Caller side: the callee's device started ringing.
