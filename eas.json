@@ -20,7 +20,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://mobilevps.tech"
+        "EXPO_PUBLIC_API_URL": "https://mobilevps.tech",
+        "EXPO_USE_PRECOMPILED_MODULES": "false"
       },
       "android": {
         "buildType": "apk"
