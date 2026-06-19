@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -33,6 +33,7 @@ export function SharePlaceModal({ visible, place, onClose }: SharePlaceModalProp
   const dialog = useDialog();
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState('');
   const [note, setNote] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -53,9 +54,18 @@ export function SharePlaceModal({ visible, place, onClose }: SharePlaceModalProp
     if (visible) {
       setSelected(new Set());
       setNote('');
+      setQuery('');
       void loadFriends();
     }
   }, [visible, loadFriends]);
+
+  const visibleFriends = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return friends;
+    }
+    return friends.filter((friend) => friend.name.toLowerCase().includes(q));
+  }, [friends, query]);
 
   async function handleShareExternally() {
     if (!place) {
@@ -174,15 +184,37 @@ export function SharePlaceModal({ visible, place, onClose }: SharePlaceModalProp
 
             <Text style={styles.contactsHeading}>Send to contacts</Text>
 
+            {!isLoading && friends.length > 0 ? (
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={18} color={colors.labelGray} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search friends"
+                  placeholderTextColor={colors.labelGray}
+                  value={query}
+                  onChangeText={setQuery}
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+                {query.length > 0 ? (
+                  <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color={colors.labelGray} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
             {isLoading ? (
               <ActivityIndicator color={colors.brand} style={styles.loader} />
             ) : friends.length === 0 ? (
               <Text style={styles.empty}>
                 You have no contacts yet. Add friends to share places with them.
               </Text>
+            ) : visibleFriends.length === 0 ? (
+              <Text style={styles.empty}>No friends match "{query.trim()}".</Text>
             ) : (
               <FlatList
-                data={friends}
+                data={visibleFriends}
                 keyExtractor={(item) => item.id}
                 style={styles.list}
                 contentContainerStyle={styles.listContent}
@@ -309,6 +341,23 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     paddingHorizontal: 20,
     paddingBottom: 6,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.inputGray,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    paddingVertical: 0,
   },
   loader: {
     marginTop: 30,

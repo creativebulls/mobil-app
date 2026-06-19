@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Modal, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, PermissionsAndroid, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   RTCIceCandidate,
   RTCPeerConnection,
@@ -23,16 +23,21 @@ import { onCallAcceptIntent } from './callIntentBus';
 import { getRealtimeSocket } from '../realtime/socket';
 import { playIncomingRing, playRingback, setSpeakerphone, stopRings } from '../sounds/sounds';
 import { getStoredUser } from '../storage/authSession';
+import { AddParticipantsModal } from '../components/AddParticipantsModal';
 import { Avatar } from '../components/Avatar';
 import { colors } from '../theme/colors';
 
 type CallStatus = 'idle' | 'outgoing' | 'ringing' | 'incoming' | 'connecting' | 'active';
 
-type PeerInfo = {
+type MemberStatus = 'ringing' | 'connecting' | 'connected';
+
+export type CallParticipant = {
   userId: string;
   name: string;
   avatarUri: string | null;
 };
+
+type Member = CallParticipant & { status: MemberStatus };
 
 type StartCallInput = {
   userId: string;
@@ -48,6 +53,8 @@ type CallContextValue = {
 
 const CallContext = createContext<CallContextValue | undefined>(undefined);
 
+const MAX_PARTICIPANTS = 4;
+
 const DEFAULT_ICE_SERVERS: IceServer[] = [
   {
     urls: [
@@ -57,6 +64,12 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
     ],
   },
 ];
+
+type PeerEntry = {
+  pc: RTCPeerConnection;
+  pendingCandidates: RTCIceCandidate[];
+  remoteStream: MediaStream | null;
+};
 
 /**
  * Rewrites the Opus codec parameters to a low, mobile-friendly bitrate with
@@ -99,32 +112,56 @@ function formatDuration(totalSeconds: number): string {
 
 export function CallProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<CallStatus>('idle');
-  const [peer, setPeer] = useState<PeerInfo | null>(null);
+  // The caller/host shown on the incoming-call screen.
+  const [host, setHost] = useState<CallParticipant | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(false);
+  const [addVisible, setAddVisible] = useState(false);
 
-  const pcRef = useRef<RTCPeerConnection | null>(null);
+  // userId -> peer connection state. Shared local stream feeds every peer.
+  const peersRef = useRef<Map<string, PeerEntry>>(new Map());
+  const membersRef = useRef<Map<string, Member>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
-  const peerIdRef = useRef<string | null>(null);
   const callIdRef = useRef<string | null>(null);
-  // ICE candidates can arrive before the remote description is applied; buffer
-  // them until the peer connection is ready to accept them.
-  const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
-  // Holds the incoming SDP offer until the user accepts the call.
-  const pendingOfferRef = useRef<unknown>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const selfInfoRef = useRef<CallParticipant | null>(null);
   const iceServersRef = useRef<IceServer[]>(DEFAULT_ICE_SERVERS);
   const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The outgoing invite payload (caller info + SDP offer), kept so we can
-  // re-send it if the callee's app reconnects mid-ring (call:reinvite).
-  const outgoingInviteRef = useRef<{ caller: unknown; sdp: unknown } | null>(null);
   // Set when the user tapped "Accept" on the native incoming-call notification:
-  // the call with this id should be auto-accepted as soon as its offer arrives.
+  // the call with this id should be auto-accepted as soon as it (re)arrives.
   const autoAcceptCallIdRef = useRef<string | null>(null);
 
   const emit = useCallback(async (event: string, payload: Record<string, unknown>) => {
     const socket = await getRealtimeSocket();
     socket?.emit(event, payload);
   }, []);
+
+  const syncMembers = useCallback(() => {
+    setMembers([...membersRef.current.values()]);
+  }, []);
+
+  const setMemberStatus = useCallback(
+    (userId: string, next: MemberStatus, info?: Partial<CallParticipant>) => {
+      const current = membersRef.current.get(userId);
+      const merged: Member = {
+        userId,
+        name: info?.name ?? current?.name ?? 'Member',
+        avatarUri: info?.avatarUri ?? current?.avatarUri ?? null,
+        status: next,
+      };
+      membersRef.current.set(userId, merged);
+      syncMembers();
+      if (next === 'connected') {
+        if (connectTimerRef.current) {
+          clearTimeout(connectTimerRef.current);
+          connectTimerRef.current = null;
+        }
+        setStatus('active');
+      }
+    },
+    [syncMembers],
+  );
 
   const clearConnectTimer = useCallback(() => {
     if (connectTimerRef.current) {
@@ -133,33 +170,40 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const cleanup = useCallback(() => {
-    clearConnectTimer();
-    if (pcRef.current) {
+  const closePeer = useCallback((userId: string) => {
+    const entry = peersRef.current.get(userId);
+    if (entry) {
       try {
-        pcRef.current.close();
+        entry.pc.close();
       } catch {
         // ignore
       }
-      pcRef.current = null;
+      peersRef.current.delete(userId);
     }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    clearConnectTimer();
+    for (const userId of [...peersRef.current.keys()]) {
+      closePeer(userId);
+    }
+    peersRef.current.clear();
+    membersRef.current.clear();
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
-    pendingCandidatesRef.current = [];
-    pendingOfferRef.current = null;
-    outgoingInviteRef.current = null;
-    autoAcceptCallIdRef.current = null;
-    peerIdRef.current = null;
     callIdRef.current = null;
+    conversationIdRef.current = null;
+    autoAcceptCallIdRef.current = null;
+    setMembers([]);
+    setHost(null);
     setMuted(false);
     setSpeakerOn(false);
-    // Return audio routing to the earpiece default for the next call/ring.
+    setAddVisible(false);
     void setSpeakerphone(false);
-    setPeer(null);
     setStatus('idle');
-  }, [clearConnectTimer]);
+  }, [clearConnectTimer, closePeer]);
 
   const ensureIceServers = useCallback(async () => {
     try {
@@ -191,224 +235,224 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const createPeerConnection = useCallback(
-    (peerUserId: string, callId: string): RTCPeerConnection => {
+  const getSelfInfo = useCallback(async (): Promise<CallParticipant> => {
+    if (selfInfoRef.current) {
+      return selfInfoRef.current;
+    }
+    const me = await getStoredUser();
+    const name = me
+      ? [me.givenName, me.surname].filter(Boolean).join(' ') ||
+        [me.firstName, me.lastName].filter(Boolean).join(' ') ||
+        me.email?.split('@')[0] ||
+        'WhereAbout user'
+      : 'WhereAbout user';
+    const info: CallParticipant = {
+      userId: me?.id ?? '',
+      name,
+      avatarUri: me?.profilePhotoUrl ?? null,
+    };
+    selfInfoRef.current = info;
+    return info;
+  }, []);
+
+  const ensureLocalStream = useCallback(async (): Promise<MediaStream | null> => {
+    if (localStreamRef.current) {
+      return localStreamRef.current;
+    }
+    const granted = await requestMicPermission();
+    if (!granted) {
+      return null;
+    }
+    const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+    // Honour the current mute state for any peers added later.
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !muted;
+    });
+    localStreamRef.current = stream;
+    return stream;
+  }, [requestMicPermission, muted]);
+
+  const createPeer = useCallback(
+    (peerUserId: string): PeerEntry => {
+      const existing = peersRef.current.get(peerUserId);
+      if (existing) {
+        return existing;
+      }
+
       const pc = new RTCPeerConnection({
         iceServers: iceServersRef.current,
-        // Pre-gather candidates and force a single bundled transport for faster,
-        // more reliable connection establishment on mobile networks.
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
       } as never);
 
-      // Forward locally-gathered ICE candidates to the remote peer.
-      (pc as unknown as { addEventListener: (e: string, cb: (event: unknown) => void) => void }).addEventListener(
-        'icecandidate',
-        (event: unknown) => {
-          const candidate = (event as { candidate?: RTCIceCandidate | null }).candidate;
-          if (candidate) {
-            if (__DEV__) {
-              const c = (candidate as unknown as { candidate?: string }).candidate ?? '';
-              const type = c.split(' ')[7] ?? 'unknown';
-              console.log(`[call] local ICE candidate (${type})`);
-            }
-            void emit('webrtc:ice-candidate', {
-              toUserId: peerUserId,
-              callId,
-              candidate,
-            });
-          } else if (__DEV__) {
-            console.log('[call] ICE gathering complete');
-          }
-        },
-      );
+      const entry: PeerEntry = { pc, pendingCandidates: [], remoteStream: null };
+      peersRef.current.set(peerUserId, entry);
+
+      const stream = localStreamRef.current;
+      if (stream) {
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      }
 
       const addPcListener = (pc as unknown as {
         addEventListener: (e: string, cb: (event: unknown) => void) => void;
       }).addEventListener;
 
-      const markConnected = () => {
-        clearConnectTimer();
-        setStatus((current) => (current === 'active' ? current : 'active'));
-      };
+      addPcListener.call(pc, 'icecandidate', (event: unknown) => {
+        const candidate = (event as { candidate?: RTCIceCandidate | null }).candidate;
+        if (candidate) {
+          void emit('webrtc:ice-candidate', {
+            toUserId: peerUserId,
+            callId: callIdRef.current,
+            candidate,
+          });
+        }
+      });
 
-      // react-native-webrtc reliably advances `iceConnectionState`, while
-      // `connectionState` sometimes lags and never reaches "connected" — which
-      // left the call stuck on "Connecting…". Treat either signal as connected.
+      addPcListener.call(pc, 'track', (event: unknown) => {
+        const streams = (event as { streams?: MediaStream[] }).streams;
+        if (streams && streams[0]) {
+          entry.remoteStream = streams[0];
+        }
+      });
+
       addPcListener.call(pc, 'connectionstatechange', () => {
         const state = (pc as unknown as { connectionState?: string }).connectionState;
-        if (__DEV__) {
-          console.log(`[call] connectionState → ${state}`);
-        }
         if (state === 'connected') {
-          markConnected();
+          setMemberStatus(peerUserId, 'connected');
         } else if (state === 'failed' || state === 'closed') {
-          cleanup();
+          closePeer(peerUserId);
         }
       });
 
       addPcListener.call(pc, 'iceconnectionstatechange', () => {
         const state = (pc as unknown as { iceConnectionState?: string }).iceConnectionState;
-        if (__DEV__) {
-          console.log(`[call] iceConnectionState → ${state}`);
-        }
         if (state === 'connected' || state === 'completed') {
-          markConnected();
+          setMemberStatus(peerUserId, 'connected');
         } else if (state === 'failed') {
-          // A brief blip can recover via ICE restart; a hard failure cannot.
           const restart = (pc as unknown as { restartIce?: () => void }).restartIce;
           if (typeof restart === 'function') {
             try {
               restart.call(pc);
             } catch {
-              cleanup();
+              closePeer(peerUserId);
             }
           } else {
-            cleanup();
+            closePeer(peerUserId);
           }
         }
-        // Note: 'disconnected' is transient (e.g. network handover) — keep the
-        // call alive and let it recover rather than tearing down immediately.
       });
 
-      return pc;
+      return entry;
     },
-    [cleanup, clearConnectTimer, emit],
+    [emit, setMemberStatus, closePeer],
   );
 
-  const flushPendingCandidates = useCallback(async () => {
-    const pc = pcRef.current;
-    if (!pc) {
+  const flushCandidates = useCallback(async (peerUserId: string) => {
+    const entry = peersRef.current.get(peerUserId);
+    if (!entry) {
       return;
     }
-    const candidates = pendingCandidatesRef.current;
-    pendingCandidatesRef.current = [];
+    const candidates = entry.pendingCandidates;
+    entry.pendingCandidates = [];
     for (const candidate of candidates) {
       try {
         // eslint-disable-next-line no-await-in-loop
-        await pc.addIceCandidate(candidate);
+        await entry.pc.addIceCandidate(candidate);
       } catch {
         // ignore malformed candidates
       }
     }
   }, []);
 
+  // Existing participant -> newcomer: create and send an SDP offer.
+  const offerToPeer = useCallback(
+    async (peerUserId: string, info?: Partial<CallParticipant>) => {
+      const stream = await ensureLocalStream();
+      if (!stream) {
+        return;
+      }
+      setMemberStatus(peerUserId, 'connecting', info);
+      const entry = createPeer(peerUserId);
+      try {
+        const rawOffer = await entry.pc.createOffer({});
+        const offer = new RTCSessionDescription({
+          type: rawOffer.type,
+          sdp: applyLowBandwidthAudio(rawOffer.sdp),
+        } as never);
+        await entry.pc.setLocalDescription(offer);
+        await emit('webrtc:offer', { toUserId: peerUserId, callId: callIdRef.current, sdp: offer });
+      } catch {
+        closePeer(peerUserId);
+      }
+    },
+    [ensureLocalStream, setMemberStatus, createPeer, emit, closePeer],
+  );
+
   const startCall = useCallback(
     async (input: StartCallInput) => {
       if (status !== 'idle') {
         return;
       }
-
-      const granted = await requestMicPermission();
-      if (!granted) {
+      const stream = await ensureLocalStream();
+      if (!stream) {
         return;
       }
-
       await ensureIceServers();
 
       const callId = randomId();
       callIdRef.current = callId;
-      peerIdRef.current = input.userId;
-      setPeer({ userId: input.userId, name: input.name, avatarUri: input.avatarUri ?? null });
+      conversationIdRef.current = input.conversationId ?? null;
+
+      const invitee: CallParticipant = {
+        userId: input.userId,
+        name: input.name,
+        avatarUri: input.avatarUri ?? null,
+      };
+      setHost(invitee);
+      membersRef.current.set(invitee.userId, { ...invitee, status: 'ringing' });
+      syncMembers();
       setStatus('outgoing');
 
-      try {
-        const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
-        localStreamRef.current = stream;
-
-        const pc = createPeerConnection(input.userId, callId);
-        pcRef.current = pc;
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-        const rawOffer = await pc.createOffer({});
-        const offer = new RTCSessionDescription({
-          type: rawOffer.type,
-          sdp: applyLowBandwidthAudio(rawOffer.sdp),
-        } as never);
-        await pc.setLocalDescription(offer);
-
-        const me = await getStoredUser();
-        const myName = me
-          ? [me.givenName, me.surname].filter(Boolean).join(' ') ||
-            [me.firstName, me.lastName].filter(Boolean).join(' ') ||
-            me.email?.split('@')[0] ||
-            'WhereAbout user'
-          : 'WhereAbout user';
-
-        const caller = { id: me?.id ?? null, name: myName, avatarUri: me?.profilePhotoUrl ?? null };
-        outgoingInviteRef.current = { caller, sdp: offer };
-
-        await emit('call:invite', {
-          toUserId: input.userId,
-          callId,
-          conversationId: input.conversationId ?? null,
-          caller,
-          sdp: offer,
-        });
-      } catch {
-        cleanup();
-      }
+      const me = await getSelfInfo();
+      await emit('call:invite', {
+        callId,
+        conversationId: input.conversationId ?? null,
+        caller: me,
+        invitees: [invitee],
+      });
     },
-    [status, requestMicPermission, ensureIceServers, createPeerConnection, emit, cleanup],
+    [status, ensureLocalStream, ensureIceServers, getSelfInfo, emit, syncMembers],
   );
 
   const acceptCall = useCallback(async () => {
     const callId = callIdRef.current;
-    const peerUserId = peerIdRef.current;
-    const offer = pendingOfferRef.current;
-    if (!callId || !peerUserId || !offer) {
+    if (!callId) {
       return;
     }
-
-    const granted = await requestMicPermission();
-    if (!granted) {
-      await emit('call:reject', { toUserId: peerUserId, callId });
+    const stream = await ensureLocalStream();
+    if (!stream) {
+      await emit('call:reject', { callId });
       cleanup();
       return;
     }
-
+    await ensureIceServers();
     setStatus('connecting');
+    // Existing participants will now offer to us; we just answer.
+    await emit('call:accept', { callId });
+  }, [ensureLocalStream, ensureIceServers, emit, cleanup]);
 
-    try {
-      const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
-      localStreamRef.current = stream;
-
-      const pc = createPeerConnection(peerUserId, callId);
-      pcRef.current = pc;
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-      await pc.setRemoteDescription(new RTCSessionDescription(offer as never));
-      await flushPendingCandidates();
-
-      const rawAnswer = await pc.createAnswer();
-      const answer = new RTCSessionDescription({
-        type: rawAnswer.type,
-        sdp: applyLowBandwidthAudio(rawAnswer.sdp),
-      } as never);
-      await pc.setLocalDescription(answer);
-
-      await emit('call:accept', { toUserId: peerUserId, callId });
-      await emit('webrtc:answer', { toUserId: peerUserId, callId, sdp: answer });
-    } catch {
-      await emit('call:end', { toUserId: peerUserId, callId });
-      cleanup();
-    }
-  }, [requestMicPermission, createPeerConnection, flushPendingCandidates, emit, cleanup]);
-
-  // Keep a stable reference so socket handlers / notification intents can invoke
-  // the latest acceptCall without re-subscribing.
   const acceptCallRef = useRef(acceptCall);
   acceptCallRef.current = acceptCall;
 
   // The native full-screen call notification's "Accept" button deep-links into
-  // the app and emits here. Remember the call id and accept as soon as its
-  // offer arrives (it's re-sent by the server once the socket reconnects).
+  // the app and emits here. Remember the call id and accept as soon as the call
+  // (re)arrives over the socket.
   useEffect(
     () =>
       onCallAcceptIntent(({ callId }) => {
         autoAcceptCallIdRef.current = callId;
-        if (callIdRef.current === callId && pendingOfferRef.current) {
+        if (callIdRef.current === callId) {
           autoAcceptCallIdRef.current = null;
           void acceptCallRef.current();
         }
@@ -418,22 +462,41 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const rejectCall = useCallback(async () => {
     const callId = callIdRef.current;
-    const peerUserId = peerIdRef.current;
-    if (callId && peerUserId) {
-      await emit('call:reject', { toUserId: peerUserId, callId });
+    if (callId) {
+      await emit('call:reject', { callId });
     }
     cleanup();
   }, [emit, cleanup]);
 
   const endCall = useCallback(async () => {
     const callId = callIdRef.current;
-    const peerUserId = peerIdRef.current;
-    if (callId && peerUserId) {
-      const event = status === 'outgoing' || status === 'ringing' ? 'call:cancel' : 'call:end';
-      await emit(event, { toUserId: peerUserId, callId });
+    if (callId) {
+      await emit('call:leave', { callId });
     }
     cleanup();
-  }, [status, emit, cleanup]);
+  }, [emit, cleanup]);
+
+  const addParticipants = useCallback(
+    async (selected: CallParticipant[]) => {
+      const callId = callIdRef.current;
+      if (!callId || selected.length === 0) {
+        return;
+      }
+      const me = await getSelfInfo();
+      // Optimistically show the new invitees as ringing.
+      selected.forEach((p) => {
+        membersRef.current.set(p.userId, { ...p, status: 'ringing' });
+      });
+      syncMembers();
+      await emit('call:invite', {
+        callId,
+        conversationId: conversationIdRef.current,
+        caller: me,
+        invitees: selected,
+      });
+    },
+    [getSelfInfo, emit, syncMembers],
+  );
 
   const toggleMute = useCallback(() => {
     const stream = localStreamRef.current;
@@ -464,105 +527,188 @@ export function CallProvider({ children }: { children: ReactNode }) {
     type IncomingPayload = {
       fromUserId?: string;
       callId?: string;
-      caller?: { id?: string; name?: string; avatarUri?: string | null };
+      conversationId?: string | null;
+      caller?: CallParticipant;
+      roster?: CallParticipant[];
+      peer?: CallParticipant;
+      peerId?: string;
+      participants?: CallParticipant[];
+      invited?: CallParticipant[];
       sdp?: unknown;
       candidate?: unknown;
     };
 
     const onIncoming = (payload: IncomingPayload) => {
-      // Busy: already on a call — auto-reject the new one.
-      if (callIdRef.current || !payload.callId || !payload.fromUserId) {
-        if (payload.fromUserId && payload.callId) {
-          void emit('call:busy', { toUserId: payload.fromUserId, callId: payload.callId });
-        }
+      if (!payload.callId || !payload.caller) {
         return;
       }
-      callIdRef.current = payload.callId;
-      peerIdRef.current = payload.fromUserId;
-      pendingOfferRef.current = payload.sdp ?? null;
-      setPeer({
-        userId: payload.fromUserId,
-        name: payload.caller?.name ?? 'Incoming call',
-        avatarUri: payload.caller?.avatarUri ?? null,
-      });
-      setStatus('incoming');
-      // Tell the caller their device is now ringing so they see "Ringing…".
-      void emit('call:ringing', { toUserId: payload.fromUserId, callId: payload.callId });
+      // Already on a different call — auto-reject the new one.
+      if (callIdRef.current && callIdRef.current !== payload.callId) {
+        void emit('call:reject', { callId: payload.callId });
+        return;
+      }
+      // Re-delivery of the call we're already showing — ignore.
+      if (callIdRef.current === payload.callId && status !== 'idle') {
+        return;
+      }
 
-      // If the user already tapped "Accept" on the lock-screen notification,
-      // accept automatically now that the offer has arrived.
-      if (autoAcceptCallIdRef.current && autoAcceptCallIdRef.current === payload.callId) {
+      callIdRef.current = payload.callId;
+      conversationIdRef.current = payload.conversationId ?? null;
+      setHost(payload.caller);
+
+      membersRef.current.clear();
+      const roster = payload.roster ?? [payload.caller];
+      roster.forEach((p) => {
+        if (p.userId !== selfInfoRef.current?.userId) {
+          membersRef.current.set(p.userId, { ...p, status: 'connecting' });
+        }
+      });
+      syncMembers();
+      setStatus('incoming');
+
+      // Tell the caller our device is now ringing so they see "Ringing…".
+      void emit('call:ringing', { toUserId: payload.caller.userId, callId: payload.callId });
+
+      if (autoAcceptCallIdRef.current === payload.callId) {
         autoAcceptCallIdRef.current = null;
         void acceptCallRef.current();
       }
     };
 
-    // Caller side: the callee's device started ringing.
     const onRinging = (payload: IncomingPayload) => {
       if (payload.callId === callIdRef.current) {
         setStatus((current) => (current === 'outgoing' ? 'ringing' : current));
       }
     };
 
-    // Caller side: the callee's app (re)connected while the call is still
-    // ringing — re-send the original invite so the WebRTC handshake can start.
-    // This is what lets a call connect after the callee taps the incoming-call
-    // notification from a locked/backgrounded state.
-    const onReinvite = (payload: IncomingPayload) => {
-      const peerUserId = peerIdRef.current;
-      const invite = outgoingInviteRef.current;
-      if (payload.callId !== callIdRef.current || !peerUserId || !invite) {
+    // A new participant accepted — existing participants offer to them.
+    const onPeerJoined = (payload: IncomingPayload) => {
+      if (payload.callId !== callIdRef.current || !payload.peer) {
         return;
       }
-      void emit('call:resend', {
-        toUserId: peerUserId,
-        callId: callIdRef.current,
-        caller: invite.caller,
-        sdp: invite.sdp,
-      });
+      // Move off the ringing state so the connect-timeout failsafe applies; an
+      // already-active group call stays active while the newcomer connects.
+      setStatus((current) => (current === 'active' ? current : 'connecting'));
+      void offerToPeer(payload.peer.userId, payload.peer);
     };
 
-    const onAccepted = (payload: IncomingPayload) => {
-      if (payload.callId === callIdRef.current) {
-        setStatus((current) => (current === 'active' ? current : 'connecting'));
+    const onRoster = (payload: IncomingPayload) => {
+      if (payload.callId !== callIdRef.current) {
+        return;
+      }
+      const selfId = selfInfoRef.current?.userId;
+      const seen = new Set<string>();
+      (payload.participants ?? []).forEach((p) => {
+        if (p.userId === selfId) {
+          return;
+        }
+        seen.add(p.userId);
+        const current = membersRef.current.get(p.userId);
+        membersRef.current.set(p.userId, {
+          ...p,
+          status: current?.status === 'connected' ? 'connected' : 'connecting',
+        });
+      });
+      (payload.invited ?? []).forEach((p) => {
+        if (p.userId === selfId) {
+          return;
+        }
+        seen.add(p.userId);
+        const current = membersRef.current.get(p.userId);
+        if (current?.status !== 'connected') {
+          membersRef.current.set(p.userId, { ...p, status: 'ringing' });
+        }
+      });
+      // Drop members the server no longer lists.
+      for (const id of [...membersRef.current.keys()]) {
+        if (!seen.has(id)) {
+          membersRef.current.delete(id);
+          closePeer(id);
+        }
+      }
+      syncMembers();
+    };
+
+    const onPeerLeft = (payload: IncomingPayload) => {
+      if (payload.callId !== callIdRef.current || !payload.peerId) {
+        return;
+      }
+      membersRef.current.delete(payload.peerId);
+      closePeer(payload.peerId);
+      syncMembers();
+    };
+
+    const onPeerDeclined = (payload: IncomingPayload) => {
+      if (payload.callId !== callIdRef.current || !payload.peerId) {
+        return;
+      }
+      membersRef.current.delete(payload.peerId);
+      closePeer(payload.peerId);
+      syncMembers();
+    };
+
+    const onOffer = async (payload: IncomingPayload) => {
+      if (payload.callId !== callIdRef.current || !payload.fromUserId || !payload.sdp) {
+        return;
+      }
+      const stream = await ensureLocalStream();
+      if (!stream) {
+        return;
+      }
+      setMemberStatus(payload.fromUserId, 'connecting');
+      const entry = createPeer(payload.fromUserId);
+      try {
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp as never));
+        await flushCandidates(payload.fromUserId);
+        const rawAnswer = await entry.pc.createAnswer();
+        const answer = new RTCSessionDescription({
+          type: rawAnswer.type,
+          sdp: applyLowBandwidthAudio(rawAnswer.sdp),
+        } as never);
+        await entry.pc.setLocalDescription(answer);
+        await emit('webrtc:answer', { toUserId: payload.fromUserId, callId: callIdRef.current, sdp: answer });
+      } catch {
+        closePeer(payload.fromUserId);
       }
     };
 
     const onAnswer = async (payload: IncomingPayload) => {
-      if (payload.callId !== callIdRef.current || !pcRef.current || !payload.sdp) {
+      if (payload.callId !== callIdRef.current || !payload.fromUserId || !payload.sdp) {
+        return;
+      }
+      const entry = peersRef.current.get(payload.fromUserId);
+      if (!entry) {
         return;
       }
       try {
-        // The answer means the callee accepted — leave the ringing state even
-        // if the separate call:accepted event was missed.
-        setStatus((current) =>
-          current === 'outgoing' || current === 'ringing' ? 'connecting' : current,
-        );
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp as never));
-        await flushPendingCandidates();
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp as never));
+        await flushCandidates(payload.fromUserId);
       } catch {
         // ignore
       }
     };
 
     const onIceCandidate = async (payload: IncomingPayload) => {
-      if (payload.callId !== callIdRef.current || !payload.candidate) {
+      if (payload.callId !== callIdRef.current || !payload.fromUserId || !payload.candidate) {
+        return;
+      }
+      const entry = peersRef.current.get(payload.fromUserId);
+      if (!entry) {
         return;
       }
       const candidate = new RTCIceCandidate(payload.candidate as never);
-      const pc = pcRef.current;
-      if (pc && (pc as unknown as { remoteDescription?: unknown }).remoteDescription) {
+      if ((entry.pc as unknown as { remoteDescription?: unknown }).remoteDescription) {
         try {
-          await pc.addIceCandidate(candidate);
+          await entry.pc.addIceCandidate(candidate);
         } catch {
           // ignore
         }
       } else {
-        pendingCandidatesRef.current.push(candidate);
+        entry.pendingCandidates.push(candidate);
       }
     };
 
-    const onRemoteEnd = (payload: IncomingPayload) => {
+    const onEnded = (payload: IncomingPayload) => {
       if (payload.callId === callIdRef.current) {
         cleanup();
       }
@@ -575,12 +721,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
       socketRef = socket;
       socket.on('call:incoming', onIncoming);
       socket.on('call:ringing', onRinging);
-      socket.on('call:reinvite', onReinvite);
-      socket.on('call:accepted', onAccepted);
-      socket.on('call:rejected', onRemoteEnd);
-      socket.on('call:busy', onRemoteEnd);
-      socket.on('call:cancelled', onRemoteEnd);
-      socket.on('call:ended', onRemoteEnd);
+      socket.on('call:peer-joined', onPeerJoined);
+      socket.on('call:roster', onRoster);
+      socket.on('call:peer-left', onPeerLeft);
+      socket.on('call:peer-declined', onPeerDeclined);
+      socket.on('call:cancelled', onEnded);
+      socket.on('call:ended', onEnded);
+      socket.on('webrtc:offer', onOffer);
       socket.on('webrtc:answer', onAnswer);
       socket.on('webrtc:ice-candidate', onIceCandidate);
     });
@@ -590,22 +737,32 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (socketRef) {
         socketRef.off('call:incoming', onIncoming);
         socketRef.off('call:ringing', onRinging);
-        socketRef.off('call:reinvite', onReinvite);
-        socketRef.off('call:accepted', onAccepted);
-        socketRef.off('call:rejected', onRemoteEnd);
-        socketRef.off('call:busy', onRemoteEnd);
-        socketRef.off('call:cancelled', onRemoteEnd);
-        socketRef.off('call:ended', onRemoteEnd);
+        socketRef.off('call:peer-joined', onPeerJoined);
+        socketRef.off('call:roster', onRoster);
+        socketRef.off('call:peer-left', onPeerLeft);
+        socketRef.off('call:peer-declined', onPeerDeclined);
+        socketRef.off('call:cancelled', onEnded);
+        socketRef.off('call:ended', onEnded);
+        socketRef.off('webrtc:offer', onOffer);
         socketRef.off('webrtc:answer', onAnswer);
         socketRef.off('webrtc:ice-candidate', onIceCandidate);
       }
     };
-  }, [emit, cleanup, flushPendingCandidates]);
+  }, [
+    emit,
+    cleanup,
+    status,
+    syncMembers,
+    setMemberStatus,
+    createPeer,
+    closePeer,
+    offerToPeer,
+    flushCandidates,
+    ensureLocalStream,
+  ]);
 
-  // Call duration timer lives in CallOverlay so the rest of the app does not re-render every second.
-
-  // Once both sides have agreed to connect, fail the call if media never flows
-  // within the timeout (most commonly because no TURN relay is reachable).
+  // Fail the call if no peer connects within the timeout (commonly because no
+  // TURN relay is reachable).
   useEffect(() => {
     if (status !== 'connecting') {
       return;
@@ -617,8 +774,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     return () => clearConnectTimer();
   }, [status, cleanup, clearConnectTimer]);
 
-  // Ring while the call is being established (outgoing ringback / incoming ring),
-  // then stop once it connects or ends.
+  // Ring while the call is being established, then stop once it connects/ends.
   useEffect(() => {
     if (status === 'outgoing' || status === 'ringing') {
       playRingback();
@@ -630,8 +786,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
     return () => stopRings();
   }, [status]);
 
-  // When the call connects, switch from the loud ring routing to the chosen
-  // output (earpiece by default, loudspeaker if the user toggled it).
   useEffect(() => {
     if (status === 'active') {
       void setSpeakerphone(speakerOn);
@@ -640,19 +794,41 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CallContextValue>(() => ({ status, startCall }), [status, startCall]);
 
+  const totalParticipants = members.length + 1;
+  const excludedIds = useMemo(() => {
+    const ids = members.map((m) => m.userId);
+    if (selfInfoRef.current?.userId) {
+      ids.push(selfInfoRef.current.userId);
+    }
+    return ids;
+  }, [members]);
+
   return (
     <CallContext.Provider value={value}>
       {children}
       <CallOverlay
         status={status}
-        peer={peer}
+        host={host}
+        members={members}
         muted={muted}
         speakerOn={speakerOn}
+        canAdd={totalParticipants < MAX_PARTICIPANTS}
         onReject={() => void rejectCall()}
         onAccept={() => void acceptCall()}
         onEnd={() => void endCall()}
         onToggleMute={toggleMute}
         onToggleSpeaker={toggleSpeaker}
+        onAddPress={() => setAddVisible(true)}
+      />
+      <AddParticipantsModal
+        visible={addVisible}
+        remainingSlots={MAX_PARTICIPANTS - totalParticipants}
+        excludeUserIds={excludedIds}
+        onClose={() => setAddVisible(false)}
+        onConfirm={(selected) => {
+          setAddVisible(false);
+          void addParticipants(selected);
+        }}
       />
     </CallContext.Provider>
   );
@@ -660,26 +836,45 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
 type CallOverlayProps = {
   status: CallStatus;
-  peer: PeerInfo | null;
+  host: CallParticipant | null;
+  members: Member[];
   muted: boolean;
   speakerOn: boolean;
+  canAdd: boolean;
   onReject: () => void;
   onAccept: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
   onToggleSpeaker: () => void;
+  onAddPress: () => void;
 };
+
+function memberStatusLabel(status: MemberStatus): string {
+  switch (status) {
+    case 'ringing':
+      return 'Ringing…';
+    case 'connecting':
+      return 'Connecting…';
+    case 'connected':
+      return 'Connected';
+    default:
+      return '';
+  }
+}
 
 function CallOverlay({
   status,
-  peer,
+  host,
+  members,
   muted,
   speakerOn,
+  canAdd,
   onReject,
   onAccept,
   onEnd,
   onToggleMute,
   onToggleSpeaker,
+  onAddPress,
 }: CallOverlayProps) {
   const [seconds, setSeconds] = useState(0);
 
@@ -692,7 +887,7 @@ function CallOverlay({
     return () => clearInterval(interval);
   }, [status]);
 
-  const statusLabel = useMemo(() => {
+  const headerLabel = useMemo(() => {
     switch (status) {
       case 'outgoing':
         return 'Calling…';
@@ -709,75 +904,104 @@ function CallOverlay({
     }
   }, [status, seconds]);
 
-  return (
-      <Modal
-        visible={status !== 'idle'}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={onEnd}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.peerBlock}>
-            <Avatar uri={peer?.avatarUri ?? null} name={peer?.name ?? 'Call'} size={120} />
-            <Text style={styles.peerName}>{peer?.name ?? 'Call'}</Text>
-            <Text style={styles.statusLabel}>{statusLabel}</Text>
-          </View>
+  const isIncoming = status === 'incoming';
+  const isGroup = members.length > 1;
 
-          <View style={styles.controls}>
-            {status === 'incoming' ? (
-              <View style={styles.incomingRow}>
-                <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onReject}>
-                    <Ionicons name="close" size={30} color={colors.white} />
-                  </Pressable>
-                  <Text style={styles.actionLabel}>Decline</Text>
-                </View>
-                <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.acceptButton]} onPress={onAccept}>
-                    <Ionicons name="call" size={30} color={colors.white} />
-                  </Pressable>
-                  <Text style={styles.actionLabel}>Accept</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.activeRow}>
-                {status === 'active' ? (
-                  <>
-                    <View style={styles.actionWrap}>
-                      <Pressable
-                        style={[styles.roundButton, muted ? styles.mutedButton : styles.secondaryButton]}
-                        onPress={onToggleMute}
-                      >
-                        <Ionicons name={muted ? 'mic-off' : 'mic'} size={26} color={colors.white} />
-                      </Pressable>
-                      <Text style={styles.actionLabel}>{muted ? 'Unmute' : 'Mute'}</Text>
-                    </View>
-                    <View style={styles.actionWrap}>
-                      <Pressable
-                        style={[styles.roundButton, speakerOn ? styles.activeToggleButton : styles.secondaryButton]}
-                        onPress={onToggleSpeaker}
-                      >
-                        <Ionicons
-                          name={speakerOn ? 'volume-high' : 'volume-medium'}
-                          size={26}
-                          color={colors.white}
-                        />
-                      </Pressable>
-                      <Text style={styles.actionLabel}>Speaker</Text>
-                    </View>
-                  </>
-                ) : null}
-                <View style={styles.actionWrap}>
-                  <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onEnd}>
-                    <Ionicons name="call" size={30} color={colors.white} style={styles.endIcon} />
-                  </Pressable>
-                  <Text style={styles.actionLabel}>End</Text>
-                </View>
-              </View>
-            )}
+  return (
+    <Modal visible={status !== 'idle'} animationType="slide" transparent={false} onRequestClose={onEnd}>
+      <View style={styles.overlay}>
+        {isIncoming || !isGroup ? (
+          <View style={styles.peerBlock}>
+            <Avatar
+              uri={isIncoming ? host?.avatarUri ?? null : members[0]?.avatarUri ?? host?.avatarUri ?? null}
+              name={isIncoming ? host?.name ?? 'Call' : members[0]?.name ?? host?.name ?? 'Call'}
+              size={120}
+            />
+            <Text style={styles.peerName}>
+              {isIncoming ? host?.name ?? 'Call' : members[0]?.name ?? host?.name ?? 'Call'}
+            </Text>
+            <Text style={styles.statusLabel}>{headerLabel}</Text>
           </View>
+        ) : (
+          <View style={styles.groupBlock}>
+            <Text style={styles.groupHeader}>{headerLabel}</Text>
+            <ScrollView contentContainerStyle={styles.grid}>
+              {members.map((member) => (
+                <View key={member.userId} style={styles.tile}>
+                  <Avatar uri={member.avatarUri} name={member.name} size={72} />
+                  <Text style={styles.tileName} numberOfLines={1}>
+                    {member.name}
+                  </Text>
+                  <Text style={styles.tileStatus}>{memberStatusLabel(member.status)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        <View style={styles.controls}>
+          {isIncoming ? (
+            <View style={styles.incomingRow}>
+              <View style={styles.actionWrap}>
+                <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onReject}>
+                  <Ionicons name="close" size={30} color={colors.white} />
+                </Pressable>
+                <Text style={styles.actionLabel}>Decline</Text>
+              </View>
+              <View style={styles.actionWrap}>
+                <Pressable style={[styles.roundButton, styles.acceptButton]} onPress={onAccept}>
+                  <Ionicons name="call" size={30} color={colors.white} />
+                </Pressable>
+                <Text style={styles.actionLabel}>Accept</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.activeRow}>
+              {status === 'active' ? (
+                <>
+                  <View style={styles.actionWrap}>
+                    <Pressable
+                      style={[styles.roundButton, muted ? styles.mutedButton : styles.secondaryButton]}
+                      onPress={onToggleMute}
+                    >
+                      <Ionicons name={muted ? 'mic-off' : 'mic'} size={26} color={colors.white} />
+                    </Pressable>
+                    <Text style={styles.actionLabel}>{muted ? 'Unmute' : 'Mute'}</Text>
+                  </View>
+                  <View style={styles.actionWrap}>
+                    <Pressable
+                      style={[styles.roundButton, speakerOn ? styles.activeToggleButton : styles.secondaryButton]}
+                      onPress={onToggleSpeaker}
+                    >
+                      <Ionicons
+                        name={speakerOn ? 'volume-high' : 'volume-medium'}
+                        size={26}
+                        color={colors.white}
+                      />
+                    </Pressable>
+                    <Text style={styles.actionLabel}>Speaker</Text>
+                  </View>
+                  {canAdd ? (
+                    <View style={styles.actionWrap}>
+                      <Pressable style={[styles.roundButton, styles.secondaryButton]} onPress={onAddPress}>
+                        <Ionicons name="person-add" size={24} color={colors.white} />
+                      </Pressable>
+                      <Text style={styles.actionLabel}>Add</Text>
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+              <View style={styles.actionWrap}>
+                <Pressable style={[styles.roundButton, styles.declineButton]} onPress={onEnd}>
+                  <Ionicons name="call" size={30} color={colors.white} style={styles.endIcon} />
+                </Pressable>
+                <Text style={styles.actionLabel}>{status === 'outgoing' || status === 'ringing' ? 'Cancel' : 'End'}</Text>
+              </View>
+            </View>
+          )}
         </View>
-      </Modal>
+      </View>
+    </Modal>
   );
 }
 
@@ -814,6 +1038,40 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontVariant: ['tabular-nums'],
   },
+  groupBlock: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 16,
+    paddingTop: 8,
+  },
+  groupHeader: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.7)',
+    fontVariant: ['tabular-nums'],
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  tile: {
+    width: 96,
+    alignItems: 'center',
+    gap: 6,
+  },
+  tileName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.white,
+    textAlign: 'center',
+  },
+  tileStatus: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+  },
   controls: {
     width: '100%',
     paddingHorizontal: 32,
@@ -825,7 +1083,8 @@ const styles = StyleSheet.create({
   activeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 36,
+    gap: 28,
+    flexWrap: 'wrap',
   },
   actionWrap: {
     alignItems: 'center',
