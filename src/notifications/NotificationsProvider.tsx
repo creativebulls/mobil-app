@@ -116,6 +116,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (data?.type === 'incoming_call') {
+        // Bringing the app to the foreground reconnects the realtime socket;
+        // the server then asks the caller to re-send the call, and the global
+        // call overlay appears. Nothing else to navigate to.
+        return;
+      }
+
       if (data?.type === 'missed_call') {
         router.push('/call-history');
         return;

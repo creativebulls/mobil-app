@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
+import { useAppList } from '../config/ConfigProvider';
 import { WELCOME_TAGLINES } from '../constants/welcome';
 import { colors } from '../theme/colors';
 
@@ -8,9 +9,14 @@ const DISPLAY_DURATION_MS = 3200;
 const FADE_DURATION_MS = 350;
 
 export function WelcomeTaglineCarousel() {
+  const taglines = useAppList('welcome.taglines', WELCOME_TAGLINES);
   const [activeIndex, setActiveIndex] = useState(0);
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
+  // Keep the latest taglines available to the animation loop without
+  // restarting it (the array identity changes when config loads).
+  const taglinesRef = useRef(taglines);
+  taglinesRef.current = taglines;
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +40,7 @@ export function WelcomeTaglineCarousel() {
           return;
         }
 
-        setActiveIndex((current) => (current + 1) % WELCOME_TAGLINES.length);
+        setActiveIndex((current) => (current + 1) % Math.max(1, taglinesRef.current.length));
         translateY.setValue(12);
 
         Animated.parallel([
@@ -62,20 +68,22 @@ export function WelcomeTaglineCarousel() {
     };
   }, [opacity, translateY]);
 
+  const safeIndex = taglines.length > 0 ? activeIndex % taglines.length : 0;
+
   return (
     <View style={styles.container}>
       <Animated.Text
         style={[styles.text, { opacity, transform: [{ translateY }] }]}
         accessibilityLiveRegion="polite"
       >
-        {WELCOME_TAGLINES[activeIndex]}
+        {taglines[safeIndex]}
       </Animated.Text>
 
       <View style={styles.dots}>
-        {WELCOME_TAGLINES.map((tagline, index) => (
+        {taglines.map((tagline, index) => (
           <View
             key={tagline}
-            style={[styles.dot, index === activeIndex && styles.dotActive]}
+            style={[styles.dot, index === safeIndex && styles.dotActive]}
           />
         ))}
       </View>

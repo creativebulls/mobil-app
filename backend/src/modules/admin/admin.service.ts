@@ -251,14 +251,24 @@ const APP_CONFIG_KEY = 'app_config';
 // Editable, app-wide text/constants the mobile client can fetch. Seeded on first
 // read so the admin always has a starting point to edit.
 const DEFAULT_APP_CONFIG: Record<string, string> = {
+  // General
   app_name: 'WhereAbout',
   support_email: 'support@whereabout.app',
   about_text: 'WhereAbout helps you discover places and friends around you.',
-  terms_url: 'https://whereabout.app/terms',
-  privacy_url: 'https://whereabout.app/privacy',
-  welcome_tagline: 'Discover places and people around you.',
   maintenance_message: '',
   min_supported_version: '1.0.0',
+
+  // Links (URLs)
+  terms_url: 'https://whereabout.app/terms',
+  privacy_url: 'https://whereabout.app/privacy',
+  help_url: 'https://whereabout.app/help',
+  website_url: 'https://whereabout.app',
+
+  // Welcome / landing screen
+  // Multiple taglines: one per line.
+  'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
+  'welcome.new_user_button': "I'm new to WhereAbout",
+  'welcome.existing_account_button': 'I have an account',
 };
 
 function parseConfig(value: string | undefined): Record<string, string> {

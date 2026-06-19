@@ -55,14 +55,17 @@ export async function recordCallInvite(input: {
     return;
   }
 
+  const callerName = getUserDisplayName(caller);
+  const callerAvatar = caller.profilePhotoUrl ?? null;
+
   try {
     await Call.create({
       callId,
       caller: callerId,
       callee: calleeId,
       conversationId: conversationId ?? null,
-      callerName: getUserDisplayName(caller),
-      callerAvatar: caller.profilePhotoUrl ?? null,
+      callerName,
+      callerAvatar,
       calleeName: getUserDisplayName(callee),
       calleeAvatar: callee.profilePhotoUrl ?? null,
       status: 'ringing',
@@ -70,7 +73,28 @@ export async function recordCallInvite(input: {
     });
   } catch {
     // Unique index race — another signaling event already created the row.
+    return;
   }
+
+  // Ring the callee's phone even when the app is backgrounded, closed, or the
+  // device is locked. A high-priority push on the high-importance "calls"
+  // channel surfaces a heads-up notification with sound/vibration. When the app
+  // is in the foreground the client suppresses this and shows the in-app call
+  // overlay instead (delivered over the socket).
+  void sendPushToUser(calleeId, {
+    title: 'Incoming call',
+    body: `${callerName} is calling you`,
+    imageUrl: resolveAbsoluteMediaUrl(callerAvatar),
+    channelId: 'calls',
+    androidTag: `incoming-${callId}`,
+    data: {
+      type: 'incoming_call',
+      callId,
+      callerId,
+      callerName,
+      conversationId: conversationId ?? '',
+    },
+  }).catch(() => undefined);
 }
 
 /** Marks a ringing call as answered when the callee accepts. */

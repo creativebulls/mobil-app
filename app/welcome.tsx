@@ -6,6 +6,7 @@ import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafe
 import { GlossyButton } from '../src/components/GlossyButton';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { WelcomeTaglineCarousel } from '../src/components/WelcomeTaglineCarousel';
+import { useAppText } from '../src/config/ConfigProvider';
 import { markOnboardingCompleted } from '../src/storage/onboarding';
 import { markWelcomeCompleted } from '../src/storage/welcome';
 import { colors } from '../src/theme/colors';
@@ -14,6 +15,8 @@ const NEW_USER_BUTTON_COLOR = '#5E36E1';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const newUserLabel = useAppText('welcome.new_user_button');
+  const existingAccountLabel = useAppText('welcome.existing_account_button');
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
@@ -65,10 +68,10 @@ export default function WelcomeScreen() {
                 style={({ pressed }) => [styles.newButton, pressed && styles.buttonPressed]}
                 onPress={handleNewUser}
               >
-                <Text style={styles.newButtonText}>I&apos;m new to WhereAbout</Text>
+                <Text style={styles.newButtonText}>{newUserLabel}</Text>
               </Pressable>
 
-              <GlossyButton label="I have an account" onPress={handleExistingAccount} />
+              <GlossyButton label={existingAccountLabel} onPress={handleExistingAccount} />
             </View>
           </View>
         </ScreenSafeArea>

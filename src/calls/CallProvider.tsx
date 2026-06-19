@@ -113,6 +113,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const pendingOfferRef = useRef<unknown>(null);
   const iceServersRef = useRef<IceServer[]>(DEFAULT_ICE_SERVERS);
   const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The outgoing invite payload (caller info + SDP offer), kept so we can
+  // re-send it if the callee's app reconnects mid-ring (call:reinvite).
+  const outgoingInviteRef = useRef<{ caller: unknown; sdp: unknown } | null>(null);
 
   const emit = useCallback(async (event: string, payload: Record<string, unknown>) => {
     const socket = await getRealtimeSocket();
@@ -142,6 +145,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
     pendingCandidatesRef.current = [];
     pendingOfferRef.current = null;
+    outgoingInviteRef.current = null;
     peerIdRef.current = null;
     callIdRef.current = null;
     setMuted(false);
@@ -327,11 +331,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
             'WhereAbout user'
           : 'WhereAbout user';
 
+        const caller = { id: me?.id ?? null, name: myName, avatarUri: me?.profilePhotoUrl ?? null };
+        outgoingInviteRef.current = { caller, sdp: offer };
+
         await emit('call:invite', {
           toUserId: input.userId,
           callId,
           conversationId: input.conversationId ?? null,
-          caller: { id: me?.id ?? null, name: myName, avatarUri: me?.profilePhotoUrl ?? null },
+          caller,
           sdp: offer,
         });
       } catch {
@@ -465,6 +472,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Caller side: the callee's app (re)connected while the call is still
+    // ringing — re-send the original invite so the WebRTC handshake can start.
+    // This is what lets a call connect after the callee taps the incoming-call
+    // notification from a locked/backgrounded state.
+    const onReinvite = (payload: IncomingPayload) => {
+      const peerUserId = peerIdRef.current;
+      const invite = outgoingInviteRef.current;
+      if (payload.callId !== callIdRef.current || !peerUserId || !invite) {
+        return;
+      }
+      void emit('call:resend', {
+        toUserId: peerUserId,
+        callId: callIdRef.current,
+        caller: invite.caller,
+        sdp: invite.sdp,
+      });
+    };
+
     const onAccepted = (payload: IncomingPayload) => {
       if (payload.callId === callIdRef.current) {
         setStatus((current) => (current === 'active' ? current : 'connecting'));
@@ -518,6 +543,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       socketRef = socket;
       socket.on('call:incoming', onIncoming);
       socket.on('call:ringing', onRinging);
+      socket.on('call:reinvite', onReinvite);
       socket.on('call:accepted', onAccepted);
       socket.on('call:rejected', onRemoteEnd);
       socket.on('call:busy', onRemoteEnd);
@@ -532,6 +558,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (socketRef) {
         socketRef.off('call:incoming', onIncoming);
         socketRef.off('call:ringing', onRinging);
+        socketRef.off('call:reinvite', onReinvite);
         socketRef.off('call:accepted', onAccepted);
         socketRef.off('call:rejected', onRemoteEnd);
         socketRef.off('call:busy', onRemoteEnd);

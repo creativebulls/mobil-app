@@ -14,6 +14,7 @@ import { DialogProvider } from '../src/components/dialog/DialogProvider';
 import { InAppNotificationBanner } from '../src/notifications/InAppNotificationBanner';
 import { NotificationsProvider } from '../src/notifications/NotificationsProvider';
 import { PresenceProvider } from '../src/realtime/PresenceProvider';
+import { ConfigProvider } from '../src/config/ConfigProvider';
 import { resolveBackendHost } from '../src/config/api';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -78,6 +79,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="dark" />
+        <ConfigProvider>
         <DialogProvider>
           <NotificationsProvider>
             <PresenceProvider>
@@ -126,6 +128,7 @@ export default function RootLayout() {
             </PresenceProvider>
           </NotificationsProvider>
         </DialogProvider>
+        </ConfigProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

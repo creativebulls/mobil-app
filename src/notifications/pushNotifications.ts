@@ -26,6 +26,18 @@ Notifications.setNotificationHandler({
     const content = notification.request.content;
     const data = (content.data ?? {}) as Record<string, string>;
 
+    if (AppState.currentState === 'active' && data.type === 'incoming_call') {
+      // The in-app call overlay (delivered over the socket) already rings and
+      // shows the caller, so fully suppress the OS notification to avoid a
+      // duplicate ring/heads-up while the app is open.
+      return {
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+
     if (AppState.currentState === 'active' && IN_APP_BANNER_TYPES.has(data.type)) {
       // The themed in-app banner handles this; just play the sound + badge.
       return {
@@ -74,7 +86,7 @@ async function ensureAndroidChannel(): Promise<void> {
 
   await Notifications.setNotificationChannelAsync('calls', {
     name: 'Calls',
-    description: 'Missed voice calls',
+    description: 'Incoming and missed voice calls',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F36464',

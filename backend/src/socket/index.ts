@@ -28,6 +28,11 @@ const pendingSessionRooms = new Map<string, string>();
 // count is > 0, which tolerates multiple devices/tabs gracefully.
 const onlineCounts = new Map<string, number>();
 
+// In-flight calls that are still ringing, keyed by callId. Lets the server ask
+// the caller to re-send the call invite once the callee's app reconnects (e.g.
+// after tapping the incoming-call notification from a locked/background state).
+const ringingCalls = new Map<string, { callerId: string; calleeId: string }>();
+
 export function isUserOnline(userId: string): boolean {
   return (onlineCounts.get(userId) ?? 0) > 0;
 }
@@ -133,6 +138,16 @@ export function initializeSocket(httpServer: HttpServer): Server {
       void getFriendIds(userId).then((friendIds) => {
         socket.emit('presence:list', { online: friendIds.filter(isUserOnline) });
       });
+
+      // If this user is the callee of a still-ringing call, their app likely
+      // just reconnected after tapping the incoming-call notification (the
+      // socket had dropped in the background). Ask the caller to re-send the
+      // call so the WebRTC handshake can complete.
+      for (const [callId, parties] of ringingCalls) {
+        if (parties.calleeId === userId) {
+          io?.to(`user:${parties.callerId}`).emit('call:reinvite', { callId, toUserId: userId });
+        }
+      }
     }
 
     socket.emit('connection:ready', {
@@ -185,12 +200,22 @@ export function initializeSocket(httpServer: HttpServer): Server {
     // Caller -> callee: incoming call invitation.
     socket.on('call:invite', (payload: { toUserId?: string; callId?: string; conversationId?: string; caller?: unknown }) => {
       relayToUser('call:incoming', payload);
+      if (payload.callId && payload.toUserId) {
+        ringingCalls.set(payload.callId, { callerId: userId, calleeId: payload.toUserId });
+      }
       void recordCallInvite({
         callId: payload.callId,
         callerId: userId,
         calleeId: payload.toUserId,
         conversationId: payload.conversationId ?? null,
       });
+    });
+
+    // Caller -> callee: re-delivery of an in-flight call after the callee's app
+    // reconnects (so WebRTC can negotiate). Unlike call:invite this does not
+    // record a new call or re-send a push — it only re-shows the incoming UI.
+    socket.on('call:resend', (payload: { toUserId?: string; callId?: string; caller?: unknown; sdp?: unknown }) => {
+      relayToUser('call:incoming', payload);
     });
 
     // Callee -> caller: the callee's device is now ringing.
@@ -201,24 +226,29 @@ export function initializeSocket(httpServer: HttpServer): Server {
     // Callee -> caller: accepted / rejected / busy.
     socket.on('call:accept', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:accepted', payload);
+      if (payload.callId) ringingCalls.delete(payload.callId);
       void markCallAnswered(payload.callId);
     });
     socket.on('call:reject', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:rejected', payload);
+      if (payload.callId) ringingCalls.delete(payload.callId);
       void finalizeCall(payload.callId, 'rejected').then(notifyHistoryUpdated);
     });
     socket.on('call:busy', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:busy', payload);
+      if (payload.callId) ringingCalls.delete(payload.callId);
       void finalizeCall(payload.callId, 'busy').then(notifyHistoryUpdated);
     });
 
     // Either party: cancel a ringing call or hang up an active one.
     socket.on('call:cancel', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:cancelled', payload);
+      if (payload.callId) ringingCalls.delete(payload.callId);
       void finalizeCall(payload.callId, 'cancelled').then(notifyHistoryUpdated);
     });
     socket.on('call:end', (payload: { toUserId?: string; callId?: string }) => {
       relayToUser('call:ended', payload);
+      if (payload.callId) ringingCalls.delete(payload.callId);
       void finalizeCall(payload.callId, 'end').then(notifyHistoryUpdated);
     });
 
@@ -302,6 +332,14 @@ export function initializeSocket(httpServer: HttpServer): Server {
         if (previous <= 1) {
           onlineCounts.delete(userId);
           void broadcastPresence(userId, false);
+
+          // Drop any ringing calls this user initiated so the map can't leak if
+          // the caller's app dies before sending an explicit cancel.
+          for (const [callId, parties] of ringingCalls) {
+            if (parties.callerId === userId) {
+              ringingCalls.delete(callId);
+            }
+          }
         } else {
           onlineCounts.set(userId, previous - 1);
         }
