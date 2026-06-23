@@ -3,7 +3,7 @@ import { getPlaceDetails } from '../places/places.service';
 import { PlaceLike } from '../places/place-engagement.model';
 import { Post } from '../posts/post.model';
 import { serializePost } from '../posts/post.service';
-import { getFriendsCount, getFriendshipStatus } from '../friends/friends.service';
+import { getFriendsCount, getFriendshipStatus, getMutualFriends } from '../friends/friends.service';
 import { getRelationState } from '../relations/relations.service';
 import {
   DEFAULT_PUSH_PREFERENCES,
@@ -194,11 +194,13 @@ export async function getPublicUserProfile(viewerId: string, targetUserId: strin
         friendRequestId: null,
         ...relationState,
       },
+      mutualFriends: { count: 0, preview: [] },
       posts: [],
     };
   }
 
   const relationship = await getFriendshipStatus(viewerId, targetUserId);
+  const mutualFriends = await getMutualFriends(viewerId, targetUserId);
 
   // Private accounts only reveal their posts, status, and stats to friends.
   const isLockedPrivate = (user.isPrivate ?? false) && !relationship.isFriend && viewerId !== targetUserId;
@@ -227,6 +229,7 @@ export async function getPublicUserProfile(viewerId: string, targetUserId: strin
       isPrivate: user.isPrivate ?? false,
       isLocked: isLockedPrivate,
     },
+    mutualFriends,
     posts: postsResult.posts,
   };
 }

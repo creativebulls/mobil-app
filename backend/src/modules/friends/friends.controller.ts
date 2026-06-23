@@ -42,6 +42,12 @@ export const getMeetPeople = asyncHandler(async (req: AuthenticatedRequest, res:
   sendSuccess(res, result);
 });
 
+export const listUserFriends = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const params = userIdParamSchema.parse(req.params);
+  const result = await friendsService.listFriendsOfUser(req.auth!.userId, params.userId);
+  sendSuccess(res, result);
+});
+
 export const sendFriendRequest = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const params = userIdParamSchema.parse(req.params);
   const result = await friendsService.sendFriendRequest(req.auth!.userId, params.userId);

@@ -15,6 +15,7 @@ import {
 
 import {
   acceptFriendRequest,
+  fetchUserFriends,
   fetchUserProfile,
   rejectFriendRequest,
   sendFriendRequest,
@@ -26,16 +27,33 @@ import {
   unblockUser,
   unrestrictUser,
 } from '../../src/api/messagesApi';
-import type { PublicUserProfile, UserRelationship } from '../../src/api/types';
+import type { MutualFriends, PublicUserProfile, UserRelationship } from '../../src/api/types';
 import { getErrorMessage, type Post } from '../../src/api/types';
 import { Avatar } from '../../src/components/Avatar';
 import { StackScreenLayout } from '../../src/components/StackScreenLayout';
 import { BrandButton } from '../../src/components/BrandButton';
 import { FeedPostCard } from '../../src/components/FeedPostCard';
+import { UserListSheet } from '../../src/components/UserListSheet';
 import { useDialog } from '../../src/components/dialog/DialogProvider';
 import { getStoredUser } from '../../src/storage/authSession';
 import { openUserProfile } from '../../src/utils/openUserProfile';
 import { colors } from '../../src/theme/colors';
+
+function formatMutualText(mutual: MutualFriends): string {
+  const first = mutual.preview[0]?.name?.split(' ')[0];
+  const count = mutual.count;
+
+  if (count === 1) {
+    return first ? `${first} is a mutual friend` : '1 mutual friend';
+  }
+
+  if (first) {
+    const others = count - 1;
+    return `${first} and ${others} other mutual friend${others === 1 ? '' : 's'}`;
+  }
+
+  return `${count} mutual friends`;
+}
 
 export default function UserProfileScreen() {
   const router = useRouter();
@@ -43,6 +61,8 @@ export default function UserProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [relationship, setRelationship] = useState<UserRelationship | null>(null);
+  const [mutualFriends, setMutualFriends] = useState<MutualFriends | null>(null);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +87,7 @@ export default function UserProfileScreen() {
 
       setProfile(result.user);
       setRelationship(result.relationship);
+      setMutualFriends(result.mutualFriends ?? null);
       setPosts(result.posts);
       setError('');
     } catch (loadError) {
@@ -372,10 +393,20 @@ export default function UserProfileScreen() {
                 <Text style={styles.statLabel}>Points</Text>
               </View>
               <View style={styles.statDivider} />
-              <View style={styles.statItem}>
+              <Pressable
+                style={({ pressed }) => [styles.statItem, pressed && styles.pressed]}
+                onPress={() => {
+                  if (profile.friendsCount > 0) {
+                    setFriendsOpen(true);
+                  }
+                }}
+                disabled={profile.friendsCount === 0}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${profile.friendsCount} friends`}
+              >
                 <Text style={styles.statValue}>{profile.friendsCount}</Text>
                 <Text style={styles.statLabel}>Friends</Text>
-              </View>
+              </Pressable>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{profile.postsCount}</Text>
@@ -412,6 +443,29 @@ export default function UserProfileScreen() {
                 ) : null}
               </>
             )}
+
+            {mutualFriends && mutualFriends.count > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.mutualRow, pressed && styles.pressed]}
+                onPress={() => setFriendsOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`${mutualFriends.count} mutual friends`}
+              >
+                <View style={styles.mutualAvatars}>
+                  {mutualFriends.preview.slice(0, 3).map((friend, index) => (
+                    <View
+                      key={friend.id}
+                      style={[styles.mutualAvatarWrap, index > 0 && styles.mutualAvatarOverlap]}
+                    >
+                      <Avatar uri={friend.avatarUri} name={friend.name} size={28} />
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.mutualText} numberOfLines={1}>
+                  {formatMutualText(mutualFriends)}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <View style={styles.postsSection}>
               <Text style={styles.postsTitle}>Posts</Text>
@@ -472,6 +526,29 @@ export default function UserProfileScreen() {
             </View>
           </Pressable>
         </Modal>
+
+        {userId ? (
+          <UserListSheet
+            visible={friendsOpen}
+            title={`${username}'s friends`}
+            reloadKey={userId}
+            load={async () => {
+              const { friends } = await fetchUserFriends(userId);
+              return friends.map((friend) => ({
+                id: friend.id,
+                name: friend.name,
+                avatarUri: friend.avatarUri,
+                subtitle: friend.statusText ?? null,
+              }));
+            }}
+            onClose={() => setFriendsOpen(false)}
+            onUserPress={(id) => {
+              setFriendsOpen(false);
+              openUserProfile(router, id, currentUserId);
+            }}
+            emptyText="No friends to show."
+          />
+        ) : null}
     </StackScreenLayout>
   );
 }
@@ -607,6 +684,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.primary,
+  },
+  mutualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 20,
+    paddingVertical: 8,
+  },
+  mutualAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mutualAvatarWrap: {
+    borderWidth: 2,
+    borderColor: colors.white,
+    borderRadius: 16,
+  },
+  mutualAvatarOverlap: {
+    marginLeft: -12,
+  },
+  mutualText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   postsSection: {
     marginTop: 28,

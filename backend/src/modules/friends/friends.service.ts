@@ -170,6 +170,67 @@ export async function listFriends(userId: string, limit = 50) {
 }
 
 /**
+ * Lists a target user's friends, visible to the viewer. Friends the viewer has
+ * blocked (or who blocked the viewer) are filtered out, and a block between the
+ * viewer and the target hides the list entirely.
+ */
+export async function listFriendsOfUser(viewerId: string, targetUserId: string, limit = 100) {
+  const target = await User.findById(targetUserId).select('registrationCompleted');
+  if (!target || !target.registrationCompleted) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  if (viewerId !== targetUserId && (await isBlockedBetween(viewerId, targetUserId))) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  const [{ friends }, blocked] = await Promise.all([
+    listFriends(targetUserId, limit),
+    getBlockedUserIds(viewerId),
+  ]);
+
+  return { friends: friends.filter((friend) => !blocked.has(friend.id)) };
+}
+
+/**
+ * Friends shared between the viewer and the target user, with a small preview
+ * list for inline display plus the total count.
+ */
+export async function getMutualFriends(viewerId: string, targetUserId: string, previewLimit = 8) {
+  const empty = { count: 0, preview: [] as ReturnType<typeof serializeAuthor>[] };
+
+  if (viewerId === targetUserId) {
+    return empty;
+  }
+
+  const [viewerFriends, targetFriends] = await Promise.all([
+    getFriendUserIds(viewerId),
+    getFriendUserIds(targetUserId),
+  ]);
+
+  const mutualIds: string[] = [];
+  for (const id of viewerFriends) {
+    if (targetFriends.has(id)) {
+      mutualIds.push(id);
+    }
+  }
+
+  if (mutualIds.length === 0) {
+    return empty;
+  }
+
+  const previewUsers = await User.find({
+    _id: { $in: mutualIds.slice(0, previewLimit) },
+    registrationCompleted: true,
+  }).select(AUTHOR_FIELDS);
+
+  return {
+    count: mutualIds.length,
+    preview: previewUsers.map((user) => serializeAuthor(user as Parameters<typeof serializeAuthor>[0])),
+  };
+}
+
+/**
  * Suggests people to connect with, ranked by relevance:
  *  - mutual friends (friends-of-friends who aren't already friends)
  *  - people who have visited the same places as the viewer

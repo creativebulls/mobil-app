@@ -321,9 +321,15 @@ export type PublicUserProfile = {
   postsCount: number;
 };
 
+export type MutualFriends = {
+  count: number;
+  preview: AuthorSummary[];
+};
+
 export type UserProfileResponse = {
   user: PublicUserProfile;
   relationship: UserRelationship;
+  mutualFriends?: MutualFriends;
   posts: Post[];
 };
 

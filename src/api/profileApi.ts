@@ -72,6 +72,10 @@ export async function fetchFriends(): Promise<{ friends: FriendSummary[] }> {
   return apiRequest<{ friends: FriendSummary[] }>('/friends');
 }
 
+export async function fetchUserFriends(userId: string): Promise<{ friends: FriendSummary[] }> {
+  return apiRequest<{ friends: FriendSummary[] }>(`/friends/${userId}/friends`);
+}
+
 export type MeetPerson = {
   id: string;
   name: string;
