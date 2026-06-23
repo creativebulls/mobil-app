@@ -241,7 +241,7 @@ export function initializeSocket(httpServer: HttpServer): Server {
     socket.emit('connection:ready', {
       userId,
       tokenType,
-      message: 'Connected to WhereAbout realtime service',
+      message: 'Connected to CRAVE realtime service',
     });
 
     // A client can ask for the current online set (e.g. after a screen mounts).

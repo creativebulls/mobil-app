@@ -18,7 +18,7 @@ async function bootstrap() {
 
   // Bind to 0.0.0.0 so physical devices on the LAN can reach the dev server.
   server.listen(env.PORT, '0.0.0.0', () => {
-    console.info(`[server] WhereAbout API listening on ${env.APP_URL} (0.0.0.0:${env.PORT})`);
+    console.info(`[server] CRAVE API listening on ${env.APP_URL} (0.0.0.0:${env.PORT})`);
     console.info(`[server] Socket.IO available at ${env.APP_URL}/socket.io`);
   });
 

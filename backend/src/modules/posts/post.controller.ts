@@ -15,6 +15,7 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
   const body = createPostSchema.parse({
     text: req.body.text,
     placeName: req.body.placeName,
+    placeImageUrl: req.body.placeImageUrl,
     placeDistanceKm: req.body.placeDistanceKm,
     reaction: req.body.reaction,
   });
@@ -28,6 +29,7 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
     imageFilenames,
     reaction: body.reaction,
     placeName: body.placeName,
+    placeImageUrl: body.placeImageUrl,
     placeDistanceKm: body.placeDistanceKm,
   });
 

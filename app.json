@@ -1,21 +1,16 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "CRAVE",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "mobileapp",
-    "splash": {
-      "image": "./assets/splash-screen-logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#9447B3"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "WhereAbout uses your location to show awesome places near you.",
+        "NSLocationWhenInUseUsageDescription": "CRAVE uses your location to show awesome places near you.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.mohit9313.mobileapp",
@@ -26,9 +21,8 @@
       "usesCleartextTraffic": true,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#9447B3",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -61,7 +55,19 @@
       ],
       "expo-router",
       "expo-status-bar",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/app-icons/crave-black.png",
+          "imageWidth": 300,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/app-icons/crave-full.png",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
       "./plugins/withWhereaboutNetworkSecurity",
       [
         "@react-native-community/datetimepicker",
@@ -93,14 +99,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow WhereAbout to access your photos to set a profile picture.",
-          "cameraPermission": "Allow WhereAbout to use the camera for your profile picture."
+          "photosPermission": "Allow CRAVE to access your photos to set a profile picture.",
+          "cameraPermission": "Allow CRAVE to use the camera for your profile picture."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow WhereAbout to use your location to show places near you."
+          "locationWhenInUsePermission": "Allow CRAVE to use your location to show places near you."
         }
       ],
       [
@@ -112,7 +118,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow WhereAbout to use the camera to scan a friend's connect code."
+          "cameraPermission": "Allow CRAVE to use the camera to scan a friend's connect code."
         }
       ],
       "expo-audio",

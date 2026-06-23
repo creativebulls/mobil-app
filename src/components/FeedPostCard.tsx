@@ -160,7 +160,7 @@ export function FeedPostCard({
     const url = `https://whereabout.app/post/${post.id}`;
     try {
       await Share.share({
-        message: `Check out ${post.author.name}'s post on WhereAbout: ${url}`,
+        message: `Check out ${post.author.name}'s post on CRAVE: ${url}`,
         url,
       });
     } catch {

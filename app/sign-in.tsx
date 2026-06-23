@@ -151,7 +151,7 @@ export default function SignInScreen() {
               source={require('../assets/black-logo.png')}
               style={styles.logo}
               resizeMode="contain"
-              accessibilityLabel="WhereAbout logo"
+              accessibilityLabel="CRAVE logo"
             />
           </View>
         </View>

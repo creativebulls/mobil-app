@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createPostSchema = z.object({
   text: z.string().trim().max(2000).optional(),
   placeName: z.string().trim().max(120).optional(),
+  placeImageUrl: z.string().trim().max(2000).optional(),
   placeDistanceKm: z.coerce.number().min(0).max(100000).optional(),
   reaction: z.enum(['like', 'dislike', 'love']).optional(),
 });

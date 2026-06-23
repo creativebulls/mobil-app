@@ -40,7 +40,7 @@ type PostMediaItem = { uri: string; type: 'image' | 'video' };
 export default function CreatePostScreen() {
   const router = useRouter();
   const dialog = useDialog();
-  const params = useLocalSearchParams<{ placeName?: string }>();
+  const params = useLocalSearchParams<{ placeName?: string; placeImageUrl?: string }>();
   const isPlaceMode = Boolean(params.placeName);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [text, setText] = useState('');
@@ -156,6 +156,7 @@ export default function CreatePostScreen() {
         media,
         reaction: isPlaceMode ? reaction : null,
         placeName: placeName.trim() || undefined,
+        placeImageUrl: params.placeImageUrl || undefined,
       });
       router.back();
     } catch (submitError) {

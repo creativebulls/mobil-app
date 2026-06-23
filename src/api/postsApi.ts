@@ -30,6 +30,7 @@ export async function createPost(input: {
   media?: { uri: string; type: 'image' | 'video' }[];
   reaction?: PostReaction | null;
   placeName?: string;
+  placeImageUrl?: string;
   placeDistanceKm?: number;
 }): Promise<Post> {
   const formData = new FormData();
@@ -44,6 +45,10 @@ export async function createPost(input: {
 
   if (input.placeName) {
     formData.append('placeName', input.placeName);
+  }
+
+  if (input.placeImageUrl) {
+    formData.append('placeImageUrl', input.placeImageUrl);
   }
 
   if (typeof input.placeDistanceKm === 'number') {

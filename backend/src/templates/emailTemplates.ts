@@ -41,11 +41,11 @@ export function buildVerificationEmail(input: {
   });
 
   const text = [
-    'Verify your WhereAbout email',
+    'Verify your CRAVE email',
     '',
     `Hi,`,
     '',
-    `Welcome to WhereAbout. Please verify ${input.userEmail} to continue registration.`,
+    `Welcome to CRAVE. Please verify ${input.userEmail} to continue registration.`,
     '',
     `Verify your email: ${input.verifyUrl}`,
     '',
@@ -53,7 +53,7 @@ export function buildVerificationEmail(input: {
     '',
     `This link expires in ${input.expiresHours} hours.`,
     '',
-    'If you did not create a WhereAbout account, you can ignore this email.',
+    'If you did not create a CRAVE account, you can ignore this email.',
   ].join('\n');
 
   return {
@@ -98,13 +98,13 @@ export function buildPasswordResetEmail(input: {
   });
 
   const text = [
-    'Reset your WhereAbout password',
+    'Reset your CRAVE password',
     '',
     `We received a request to reset the password for ${input.userEmail}.`,
     '',
     `Your verification code: ${input.resetCode}`,
     '',
-    `Enter this code in the WhereAbout app to continue.`,
+    `Enter this code in the CRAVE app to continue.`,
     '',
     `This code expires in ${input.expiresMinutes} minutes.`,
     '',

@@ -118,6 +118,7 @@ export async function createPost(input: {
   imageFilenames?: string[];
   reaction?: 'like' | 'dislike' | 'love';
   placeName?: string;
+  placeImageUrl?: string;
   placeDistanceKm?: number;
 }) {
   const imageFilenames = input.imageFilenames ?? [];
@@ -142,8 +143,11 @@ export async function createPost(input: {
     reaction: input.reaction,
     place: input.placeName
       ? {
+          // Use the place's own photo (e.g. from Google Places), not the
+          // author's profile picture. Falls back to undefined when the place
+          // has no image, so the UI shows the place's initials instead.
           name: input.placeName,
-          logoUrl: author.profilePhotoUrl,
+          logoUrl: input.placeImageUrl,
           distanceKm: input.placeDistanceKm,
         }
       : undefined,

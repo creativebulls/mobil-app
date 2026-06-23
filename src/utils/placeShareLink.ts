@@ -1,5 +1,5 @@
 /**
- * Public base URL for WhereAbout. Shared place links point here; opening one
+ * Public base URL for CRAVE. Shared place links point here; opening one
  * deep-links into the place detail screen inside the app.
  */
 export const WEB_BASE_URL = 'https://mobilevps.tech';
@@ -9,5 +9,5 @@ export function buildPlaceShareUrl(placeId: string): string {
 }
 
 export function buildPlaceShareMessage(name: string, placeId: string): string {
-  return `Check out ${name} on WhereAbout!\n${buildPlaceShareUrl(placeId)}`;
+  return `Check out ${name} on CRAVE!\n${buildPlaceShareUrl(placeId)}`;
 }

@@ -1,29 +1,36 @@
-import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AppImage } from './AppImage';
-import { GradientBackground } from './GradientBackground';
 import { colors } from '../theme/colors';
 
 type AppSplashScreenProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
 };
 
+// Black wordmark (with teal dot) reads on the white light-theme background;
+// the white wordmark is used on the dark-theme background.
+const LIGHT_LOGO = require('../../assets/app-icons/crave-black.png');
+const DARK_LOGO = require('../../assets/app-icons/crave-full.png');
+
 export function AppSplashScreen({ onLayout }: AppSplashScreenProps) {
+  const isDark = useColorScheme() === 'dark';
+
+  const backgroundColor = isDark ? '#000000' : colors.white;
+  const textColor = isDark ? '#FFFFFF' : '#000000';
+  const logo = isDark ? DARK_LOGO : LIGHT_LOGO;
+
   return (
-    <GradientBackground variant="screen">
-      <View style={styles.container} onLayout={onLayout}>
-        <View style={styles.content}>
-          <AppImage
-            source={require('../../assets/splash-screen-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="WhereAbout logo"
-          />
-          <Text style={styles.title}>WhereAbout</Text>
-          <Text style={styles.subtitle}>where people come together</Text>
-        </View>
+    <View style={[styles.container, { backgroundColor }]} onLayout={onLayout}>
+      <View style={styles.content}>
+        <AppImage
+          source={logo}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="CRAVE logo"
+        />
+        <Text style={[styles.subtitle, { color: textColor }]}>where people come together</Text>
       </View>
-    </GradientBackground>
+    </View>
   );
 }
 
@@ -32,29 +39,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
   },
   content: {
     alignItems: 'center',
     gap: 16,
   },
   logo: {
-    width: 220,
-    height: 220,
+    width: 300,
+    aspectRatio: 590 / 167,
     marginBottom: 8,
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: colors.textOnGradient,
-    letterSpacing: 0.4,
-    textAlign: 'center',
   },
   subtitle: {
     fontSize: 17,
-    color: 'rgba(255, 255, 255, 0.88)',
     textAlign: 'center',
     lineHeight: 24,
     letterSpacing: 0.2,
+    paddingHorizontal: 32,
   },
 });

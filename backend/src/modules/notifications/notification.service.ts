@@ -158,7 +158,7 @@ export async function createNotification(input: {
       title: actorSummary.name,
       body: pushBody.length > 180 ? `${pushBody.slice(0, 180)}…` : pushBody,
       imageUrl: resolveAbsoluteMediaUrl(actor.profilePhotoUrl ?? null),
-      subtitle: 'WhereAbout',
+      subtitle: 'CRAVE',
       data: {
         type: input.type,
         postId: input.postId ?? null,

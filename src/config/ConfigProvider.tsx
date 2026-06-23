@@ -20,9 +20,9 @@ const CACHE_KEY = '@whereabout/app_config';
  * Keep this in sync with DEFAULT_APP_CONFIG in the backend admin.service.
  */
 export const DEFAULT_APP_TEXT: Record<string, string> = {
-  app_name: 'WhereAbout',
+  app_name: 'CRAVE',
   support_email: 'support@whereabout.app',
-  about_text: 'WhereAbout helps you discover places and friends around you.',
+  about_text: 'CRAVE helps you discover places and friends around you.',
   maintenance_message: '',
   min_supported_version: '1.0.0',
 
@@ -32,7 +32,7 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   website_url: 'https://whereabout.app',
 
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
-  'welcome.new_user_button': "I'm new to WhereAbout",
+  'welcome.new_user_button': "I'm new to CRAVE",
   'welcome.existing_account_button': 'I have an account',
 
   'home.meet_friends_title': 'Meet Friends',

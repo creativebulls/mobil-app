@@ -181,7 +181,10 @@ export default function PlaceDetailScreen() {
   }
 
   function openCreatePost() {
-    router.push({ pathname: '/create-post', params: { placeName: name } });
+    router.push({
+      pathname: '/create-post',
+      params: { placeName: name, ...(imageUrl ? { placeImageUrl: imageUrl } : {}) },
+    });
   }
 
   function openInMaps() {

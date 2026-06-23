@@ -225,7 +225,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Microphone access',
-          message: 'WhereAbout needs your microphone for voice calls.',
+          message: 'CRAVE needs your microphone for voice calls.',
           buttonPositive: 'Allow',
         },
       );
@@ -244,8 +244,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       ? [me.givenName, me.surname].filter(Boolean).join(' ') ||
         [me.firstName, me.lastName].filter(Boolean).join(' ') ||
         me.email?.split('@')[0] ||
-        'WhereAbout user'
-      : 'WhereAbout user';
+        'CRAVE user'
+      : 'CRAVE user';
     const info: CallParticipant = {
       userId: me?.id ?? '',
       name,

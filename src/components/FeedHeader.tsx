@@ -48,7 +48,7 @@ export function FeedHeader({
         source={require('../../assets/black-logo.png')}
         style={styles.logo}
         resizeMode="contain"
-        accessibilityLabel="WhereAbout logo"
+        accessibilityLabel="CRAVE logo"
       />
 
       {alignTitleLeft ? (
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   logo: {
-    width: 40,
-    height: 40,
+    width: 32,
+    height: 32,
   },
   title: {
     position: 'absolute',

@@ -65,7 +65,7 @@ export default function PlacesScreen() {
   const loadingMoreRef = useRef(false);
   const activeQueryRef = useRef('');
 
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 10;
 
   const fetchPage = useCallback(async (search: string, offset: number) => {
     const coords = coordsRef.current;
@@ -221,13 +221,6 @@ export default function PlacesScreen() {
                     </Text>
                   ) : null}
                 </View>
-
-                {typeof item.rating === 'number' ? (
-                  <View style={styles.ratingPill}>
-                    <Ionicons name="star" size={12} color={colors.brand} />
-                    <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-                  </View>
-                ) : null}
               </Pressable>
             )}
             ListEmptyComponent={
@@ -319,20 +312,6 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,
-  },
-  ratingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#FFF0F0',
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.brand,
   },
   empty: {
     alignItems: 'center',
