@@ -1,4 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getMessaging,
+  getToken,
+  isDeviceRegisteredForRemoteMessages,
+  onTokenRefresh,
+  registerDeviceForRemoteMessages,
+} from '@react-native-firebase/messaging';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
@@ -111,6 +118,56 @@ export async function ensureNotificationChannels(): Promise<void> {
   await ensureAndroidChannel();
 }
 
+let tokenRefreshSubscribed = false;
+
+/** Sends a freshly issued token to our backend and caches it for deregistration. */
+async function persistPushToken(token: string): Promise<void> {
+  await registerPushToken(token);
+  await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
+}
+
+/**
+ * Returns the platform push token registered with FCM.
+ *
+ * - Android: Expo's device token is already the FCM registration token.
+ * - iOS: Expo's device token is the raw APNs token, which firebase-admin can't
+ *   target. We use the Firebase iOS SDK (@react-native-firebase/messaging) to
+ *   exchange it for an FCM token so the same backend send path works for both.
+ */
+async function getPlatformPushToken(): Promise<string | null> {
+  if (Platform.OS === 'ios') {
+    const messaging = getMessaging();
+
+    if (!isDeviceRegisteredForRemoteMessages(messaging)) {
+      await registerDeviceForRemoteMessages(messaging);
+    }
+
+    const fcmToken = await getToken(messaging);
+    return typeof fcmToken === 'string' && fcmToken.length > 0 ? fcmToken : null;
+  }
+
+  const tokenResponse = await Notifications.getDevicePushTokenAsync();
+  const token = tokenResponse.data;
+  return typeof token === 'string' && token.length > 0 ? token : null;
+}
+
+/**
+ * iOS FCM tokens can rotate, so subscribe once to re-send a refreshed token to
+ * the backend. Registered lazily after the first successful registration.
+ */
+function ensureTokenRefreshListener(): void {
+  if (tokenRefreshSubscribed || Platform.OS !== 'ios') {
+    return;
+  }
+
+  tokenRefreshSubscribed = true;
+  onTokenRefresh(getMessaging(), (token) => {
+    if (typeof token === 'string' && token.length > 0) {
+      void persistPushToken(token);
+    }
+  });
+}
+
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
     return null;
@@ -136,17 +193,14 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    // Native FCM device token (Android). Sent straight to our own backend,
-    // which delivers via Firebase Cloud Messaging — no Expo push service.
-    const tokenResponse = await Notifications.getDevicePushTokenAsync();
-    const token = tokenResponse.data;
+    const token = await getPlatformPushToken();
 
-    if (typeof token !== 'string' || token.length === 0) {
+    if (!token) {
       return null;
     }
 
-    await registerPushToken(token);
-    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
+    await persistPushToken(token);
+    ensureTokenRefreshListener();
     return token;
   } catch {
     return null;

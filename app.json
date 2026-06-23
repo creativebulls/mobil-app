@@ -18,7 +18,9 @@
         "NSLocationWhenInUseUsageDescription": "WhereAbout uses your location to show awesome places near you.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.mohit9313.mobileapp"
+      "bundleIdentifier": "com.mohit9313.mobileapp",
+      "buildNumber": "6",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "usesCleartextTraffic": true,
@@ -47,6 +49,16 @@
     },
     "plugins": [
       "expo-dev-client",
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "forceStaticLinking": ["RNFBApp", "RNFBMessaging"]
+          }
+        }
+      ],
       "expo-router",
       "expo-status-bar",
       "expo-splash-screen",
