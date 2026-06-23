@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { fetchPlaces } from '../api/placesApi';
 import { getErrorMessage, type Place } from '../api/types';
@@ -23,6 +24,16 @@ type UsePlacesState = {
   error: string | null;
   /** True when results are based on the user's current location. */
   locationBased: boolean;
+  /**
+   * Whether the user has granted location access. Places are only shown when
+   * this is true; when false the feed hides places entirely.
+   */
+  locationGranted: boolean;
+  /**
+   * The user's resolved coordinates, if location access is granted and a fix
+   * was obtained. Exposed primarily for debug tooling.
+   */
+  coords: { lat: number; lon: number } | null;
   /** Human-readable name of the user's area (e.g. city), if resolved. */
   placeName: string | null;
   refresh: () => void;
@@ -71,6 +82,8 @@ export function usePlaces(limit = 12): UsePlacesState {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationBased, setLocationBased] = useState(false);
+  const [locationGranted, setLocationGranted] = useState(true);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -93,6 +106,28 @@ export function usePlaces(limit = 12): UsePlacesState {
       setError(null);
       offsetRef.current = 0;
 
+      // Places are location-gated: without location access we show nothing.
+      const granted = await hasLocationAccess();
+      if (!cancelled) {
+        setLocationGranted(granted);
+      }
+
+      if (!granted) {
+        if (!cancelled) {
+          coordsRef.current = null;
+          offsetRef.current = 0;
+          hasMoreRef.current = false;
+          setPlaces([]);
+          setLocationBased(false);
+          setCoords(null);
+          setPlaceName(null);
+          setHasMore(false);
+          setError(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       // Show the last-known places instantly (and keep them if we're offline).
       const cached = await readCache<CachedPlaces>(cacheKey);
       if (!cancelled && cached) {
@@ -107,6 +142,9 @@ export function usePlaces(limit = 12): UsePlacesState {
       try {
         const coords = await resolveCoords();
         coordsRef.current = coords;
+        if (!cancelled) {
+          setCoords(coords);
+        }
         const [response, resolvedName] = await Promise.all([
           fetchPlaces({ lat: coords?.lat, lon: coords?.lon, limit, offset: 0 }),
           coords ? resolvePlaceName(coords) : Promise.resolve(null),
@@ -154,6 +192,18 @@ export function usePlaces(limit = 12): UsePlacesState {
     };
   }, [limit, reloadKey, cacheKey]);
 
+  // Re-check when the app returns to the foreground so granting (or revoking)
+  // location access in Settings is reflected without restarting the app.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refresh();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [refresh]);
+
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMoreRef.current) {
       return;
@@ -192,6 +242,8 @@ export function usePlaces(limit = 12): UsePlacesState {
     hasMore,
     error,
     locationBased,
+    locationGranted,
+    coords,
     placeName,
     refresh,
     loadMore,

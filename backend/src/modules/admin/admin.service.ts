@@ -462,6 +462,19 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
   'welcome.new_user_button': "I'm new to WhereAbout",
   'welcome.existing_account_button': 'I have an account',
+
+  // Home feed section titles & labels
+  'home.meet_friends_title': 'Meet Friends',
+  // Discover section has three variants depending on location; use {place} as a
+  // placeholder for the resolved area name in the "in place" variant.
+  'home.discover_title': 'Discover Top Places',
+  'home.discover_near_title': 'Discover Places Near You',
+  'home.discover_in_place_title': 'Discover Places in {place}',
+  'home.latest_posts_title': 'Latest Posts',
+  'home.recommended_places_title': 'Recommended Places by Friend',
+  'home.meet_people_title': 'Meet People',
+  'home.view_all_label': 'View all',
+  'home.search_placeholder': 'Search friends, places, posts…',
 };
 
 function parseConfig(value: string | undefined): Record<string, string> {
@@ -492,7 +505,10 @@ export async function getAppConfig(): Promise<{ config: Record<string, string>; 
     return { config: { ...DEFAULT_APP_CONFIG }, updatedAt: created.updatedAt };
   }
 
-  return { config: parseConfig(doc.value), updatedAt: doc.updatedAt };
+  // Merge defaults under the stored config so newly added default keys (e.g.
+  // home screen labels shipped in a later release) always surface in the admin
+  // panel and to the app, while any admin overrides still take precedence.
+  return { config: { ...DEFAULT_APP_CONFIG, ...parseConfig(doc.value) }, updatedAt: doc.updatedAt };
 }
 
 export async function setAppConfig(config: Record<string, string>) {

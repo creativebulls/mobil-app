@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFriends, fetchMeetPeople, type FriendSummary, type MeetPerson } from '../api/profileApi';
+import { useAppText } from '../config/ConfigProvider';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { usePlaces } from '../hooks/usePlaces';
 import { onHomeReselect } from '../navigation/tabEvents';
@@ -30,9 +31,22 @@ const SEARCH_REGION_HEIGHT = 60;
 // view on scroll down and slides back in on scroll up.
 const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
 
+// On iOS the top bar stays static (always visible) instead of collapsing on
+// scroll. Android keeps the show-on-scroll-up collapsing behavior.
+const IS_IOS = Platform.OS === 'ios';
+
 export function MyFeedScreen() {
   const router = useRouter();
-  const { places, isLoading, isLoadingMore, locationBased, placeName, loadMore } = usePlaces(16);
+  const {
+    places,
+    isLoading,
+    isLoadingMore,
+    locationBased,
+    locationGranted,
+    coords,
+    placeName,
+    loadMore,
+  } = usePlaces(16);
 
   const [query, setQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -40,6 +54,16 @@ export function MyFeedScreen() {
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [meetPeople, setMeetPeople] = useState<MeetPerson[]>([]);
   const debouncedQuery = useDebouncedValue(query, 300);
+
+  // Admin-editable home screen labels.
+  const meetFriendsTitle = useAppText('home.meet_friends_title', 'Meet Friends');
+  const latestPostsTitle = useAppText('home.latest_posts_title', 'Latest Posts');
+  const recommendedTitle = useAppText('home.recommended_places_title', 'Recommended Places by Friend');
+  const meetPeopleTitle = useAppText('home.meet_people_title', 'Meet People');
+  const discoverTopTitle = useAppText('home.discover_title', 'Discover Top Places');
+  const discoverNearTitle = useAppText('home.discover_near_title', 'Discover Places Near You');
+  const discoverInPlaceTemplate = useAppText('home.discover_in_place_title', 'Discover Places in {place}');
+  const searchPlaceholder = useAppText('home.search_placeholder', 'Search friends, places, posts…');
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -164,9 +188,9 @@ export function MyFeedScreen() {
 
   const discoverTitle = locationBased
     ? placeName
-      ? `Discover Places in ${placeName}`
-      : 'Discover Places Near You'
-    : 'Discover Top Places';
+      ? discoverInPlaceTemplate.replace('{place}', placeName)
+      : discoverNearTitle
+    : discoverTopTitle;
 
   const discoverPlaces = useMemo(() => places.map(placeToDiscoverPlace), [places]);
 
@@ -183,7 +207,7 @@ export function MyFeedScreen() {
               value={query}
               onChangeText={setQuery}
               autoFocus
-              placeholder="Search friends, places, posts…"
+              placeholder={searchPlaceholder}
             />
           </View>
           <Pressable onPress={closeSearch} hitSlop={8} style={styles.cancelButton}>
@@ -202,35 +226,56 @@ export function MyFeedScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        // iOS adds the safe-area inset to scroll content automatically; the
+        // screen is already wrapped in a SafeAreaView, so let the layout own the
+        // inset to avoid duplicated/growing top spacing on pull-to-refresh.
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: true,
         })}
       >
+        {__DEV__ && locationGranted && coords ? (
+          <View style={styles.debugLocation}>
+            <Ionicons name="location" size={14} color={colors.brand} />
+            <Text style={styles.debugLocationText}>
+              {`Lat ${coords.lat.toFixed(5)}, Lon ${coords.lon.toFixed(5)}`}
+              {placeName ? ` · ${placeName}` : ''}
+            </Text>
+          </View>
+        ) : null}
         <MeetFriendsSection
+          title={meetFriendsTitle}
           friends={meetFriends}
           onViewAllPress={() => router.push('/friends')}
           onFriendPress={(friend) => openUserProfile(router, friend.id, currentUserId)}
         />
-        <DiscoverPlacesSection
-          title={discoverTitle}
-          places={discoverPlaces}
-          isLoading={isLoading}
-          isLoadingMore={isLoadingMore}
-          emptyText="No places found nearby."
-          onViewAllPress={() => openPlaces(discoverTitle)}
-          onPlacePress={openPlaceDetail}
-          onEndReached={loadMore}
-        />
-        <LatestPostsSection />
-        <RecommendedPlacesByFriendsSection
-          places={recommendedPlaces}
-          isLoading={isLoading}
-          emptyText="No recommendations yet."
-          onViewAllPress={() => openPlaces('Recommended Places')}
-          onPlacePress={openPlaceDetail}
-        />
+        {locationGranted ? (
+          <DiscoverPlacesSection
+            title={discoverTitle}
+            places={discoverPlaces}
+            isLoading={isLoading}
+            isLoadingMore={isLoadingMore}
+            emptyText="No places found nearby."
+            onViewAllPress={() => openPlaces(discoverTitle)}
+            onPlacePress={openPlaceDetail}
+            onEndReached={loadMore}
+          />
+        ) : null}
+        <LatestPostsSection title={latestPostsTitle} />
+        {locationGranted ? (
+          <RecommendedPlacesByFriendsSection
+            title={recommendedTitle}
+            places={recommendedPlaces}
+            isLoading={isLoading}
+            emptyText="No recommendations yet."
+            onViewAllPress={() => openPlaces(recommendedTitle)}
+            onPlacePress={openPlaceDetail}
+          />
+        ) : null}
         <MeetPeopleSection
+          title={meetPeopleTitle}
           people={meetPeopleItems}
           onViewAllPress={() => router.push('/add-friends')}
           onPersonPress={(person) => openUserProfile(router, person.id, currentUserId)}
@@ -239,14 +284,17 @@ export function MyFeedScreen() {
 
       <View style={styles.topBarClip} pointerEvents="box-none">
         <Animated.View
-          style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
+          style={[
+            styles.topBar,
+            { transform: [{ translateY: IS_IOS ? 0 : headerTranslateY }] },
+          ]}
           pointerEvents="box-none"
         >
           <FeedHeader />
           <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
             <View style={styles.searchTriggerInner}>
               <Ionicons name="search-outline" size={20} color={colors.labelGray} />
-              <Text style={styles.searchTriggerText}>Search friends, places, posts…</Text>
+              <Text style={styles.searchTriggerText}>{searchPlaceholder}</Text>
             </View>
           </Pressable>
           <Animated.View
@@ -268,6 +316,25 @@ const styles = StyleSheet.create({
     paddingTop: TOP_BAR_HEIGHT + 8,
     paddingBottom: 32,
     gap: 28,
+  },
+  // Dev-only readout of the resolved location. Stripped from release builds via
+  // the `__DEV__` guard at the call site.
+  debugLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 20,
+    marginTop: -8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.inputGray,
+  },
+  debugLocationText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.labelGray,
   },
   // Clipping window pinned to the safe-area top edge. The header slides within
   // it and is clipped before it can reach the system status bar.

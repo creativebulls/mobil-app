@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAppText } from '../config/ConfigProvider';
 import { colors } from '../theme/colors';
 
 type SectionHeaderProps = {
@@ -13,9 +14,13 @@ type SectionHeaderProps = {
 export function SectionHeader({
   title,
   onViewAllPress,
-  viewAllLabel = 'View all',
+  viewAllLabel,
   accessibilityLabel = 'View all',
 }: SectionHeaderProps) {
+  // Admin-editable default; an explicit prop still wins when provided.
+  const defaultViewAllLabel = useAppText('home.view_all_label', 'View all');
+  const resolvedViewAllLabel = viewAllLabel ?? defaultViewAllLabel;
+
   return (
     <View style={styles.container}>
       <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
@@ -28,7 +33,7 @@ export function SectionHeader({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
       >
-        <Text style={styles.viewAllText}>{viewAllLabel}</Text>
+        <Text style={styles.viewAllText}>{resolvedViewAllLabel}</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.brand} />
       </Pressable>
     </View>

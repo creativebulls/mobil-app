@@ -34,6 +34,16 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
   'welcome.new_user_button': "I'm new to WhereAbout",
   'welcome.existing_account_button': 'I have an account',
+
+  'home.meet_friends_title': 'Meet Friends',
+  'home.discover_title': 'Discover Top Places',
+  'home.discover_near_title': 'Discover Places Near You',
+  'home.discover_in_place_title': 'Discover Places in {place}',
+  'home.latest_posts_title': 'Latest Posts',
+  'home.recommended_places_title': 'Recommended Places by Friend',
+  'home.meet_people_title': 'Meet People',
+  'home.view_all_label': 'View all',
+  'home.search_placeholder': 'Search friends, places, posts…',
 };
 
 // Module-level snapshot so non-React code (e.g. event handlers, utilities) can
