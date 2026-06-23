@@ -263,6 +263,31 @@ export async function getPost(currentUserId: string, postId: string) {
   return serializePost(post, currentUserId);
 }
 
+export async function listPostLikers(currentUserId: string, postId: string) {
+  const post = await Post.findById(postId);
+
+  if (!post) {
+    throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
+  }
+
+  await assertCanSeePost(currentUserId, post.author.toString());
+
+  const likerIds = post.likes.map((id) => id.toString());
+
+  if (likerIds.length === 0) {
+    return { users: [] };
+  }
+
+  const users = (await User.find({ _id: { $in: post.likes } })
+    .select(AUTHOR_FIELDS)
+    .lean()) as unknown as PopulatedUser[];
+
+  const summaries = users.map((user) => serializeUserSummary(user));
+  summaries.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { users: summaries };
+}
+
 export async function toggleLike(currentUserId: string, postId: string) {
   const post = await Post.findById(postId);
 

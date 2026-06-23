@@ -17,6 +17,7 @@ import { toggleLike as toggleLikeRequest, deletePost as deletePostRequest } from
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
 import { PostImageViewer } from './PostImageViewer';
+import { PostLikersModal } from './PostLikersModal';
 import { PostVideoModal, PostVideoTile, isVideoUrl } from './PostVideo';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
@@ -74,6 +75,7 @@ export function FeedPostCard({
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [videoViewerUri, setVideoViewerUri] = useState<string | null>(null);
+  const [likersVisible, setLikersVisible] = useState(false);
 
   const menuButtonRef = useRef<View>(null);
   const dialog = useDialog();
@@ -382,21 +384,37 @@ export function FeedPostCard({
         ) : null}
 
         <View style={styles.footerRow}>
-          <Pressable
-            onPress={handleLikePress}
-            style={({ pressed }) => [styles.footerAction, pressed && styles.iconPressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`${likesCount} likes`}
-          >
-            <Ionicons
-              name={likedByMe ? 'heart' : 'heart-outline'}
-              size={18}
-              color={likedByMe ? colors.brand : colors.textSecondary}
-            />
-            <Text style={[styles.footerText, likedByMe && styles.footerTextActive]}>
-              {likesCount} {likesCount === 1 ? 'Like' : 'Likes'}
-            </Text>
-          </Pressable>
+          <View style={styles.footerAction}>
+            <Pressable
+              onPress={handleLikePress}
+              style={({ pressed }) => [styles.likeIcon, pressed && styles.iconPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={likedByMe ? 'Unlike post' : 'Like post'}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={likedByMe ? 'heart' : 'heart-outline'}
+                size={18}
+                color={likedByMe ? colors.brand : colors.textSecondary}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (likesCount > 0) {
+                  setLikersVisible(true);
+                }
+              }}
+              disabled={likesCount === 0}
+              style={({ pressed }) => pressed && styles.iconPressed}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${likesCount} likes`}
+              hitSlop={8}
+            >
+              <Text style={[styles.footerText, likedByMe && styles.footerTextActive]}>
+                {likesCount} {likesCount === 1 ? 'Like' : 'Likes'}
+              </Text>
+            </Pressable>
+          </View>
 
           <Pressable
             onPress={() => onCommentPress?.(post)}
@@ -429,6 +447,16 @@ export function FeedPostCard({
       ) : null}
 
       <PostVideoModal uri={videoViewerUri} onClose={() => setVideoViewerUri(null)} />
+
+      <PostLikersModal
+        visible={likersVisible}
+        postId={post.id}
+        onClose={() => setLikersVisible(false)}
+        onUserPress={(userId) => {
+          setLikersVisible(false);
+          onAuthorPress?.(userId);
+        }}
+      />
     </View>
   );
 }
@@ -561,6 +589,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  likeIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   footerText: {
     fontSize: 13,

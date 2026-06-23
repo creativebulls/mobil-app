@@ -58,6 +58,11 @@ export const toggleLike = asyncHandler(async (req: AuthenticatedRequest, res: Re
   sendSuccess(res, result);
 });
 
+export const listPostLikers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await postService.listPostLikers(req.auth!.userId, String(req.params.id));
+  sendSuccess(res, result);
+});
+
 export const listComments = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = feedQuerySchema.parse(req.query);
   const result = await postService.listComments(

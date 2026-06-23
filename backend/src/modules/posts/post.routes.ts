@@ -12,6 +12,7 @@ postRouter.get('/search', postController.searchPosts);
 postRouter.get('/:id', postController.getPost);
 postRouter.delete('/:id', postController.deletePost);
 postRouter.post('/:id/like', postController.toggleLike);
+postRouter.get('/:id/likes', postController.listPostLikers);
 postRouter.get('/:id/comments', postController.listComments);
 postRouter.post('/:id/comments', postController.addComment);
 

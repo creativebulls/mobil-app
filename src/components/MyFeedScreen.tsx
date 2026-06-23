@@ -92,6 +92,23 @@ export function MyFeedScreen() {
       }),
     [scrollY],
   );
+  // iOS: hide only the logo/actions row on scroll while the search bar stays
+  // pinned at the top (just below the system status bar). diffClamp tracks
+  // scroll direction over the header height, so scrolling down slides the logo
+  // row up/out and scrolling up animates it back down.
+  const iosClampedScroll = useMemo(
+    () => Animated.diffClamp(scrollY, 0, FEED_HEADER_HEIGHT),
+    [scrollY],
+  );
+  const iosHeaderTranslateY = useMemo(
+    () =>
+      iosClampedScroll.interpolate({
+        inputRange: [0, FEED_HEADER_HEIGHT],
+        outputRange: [0, -FEED_HEADER_HEIGHT],
+        extrapolate: 'clamp',
+      }),
+    [iosClampedScroll],
+  );
 
   useEffect(() => {
     void getStoredUser().then((user) => setCurrentUserId(user?.id ?? null));
@@ -286,7 +303,7 @@ export function MyFeedScreen() {
         <Animated.View
           style={[
             styles.topBar,
-            { transform: [{ translateY: IS_IOS ? 0 : headerTranslateY }] },
+            { transform: [{ translateY: IS_IOS ? iosHeaderTranslateY : headerTranslateY }] },
           ]}
           pointerEvents="box-none"
         >

@@ -1,6 +1,7 @@
 import { apiRequest } from './client';
 import type {
   AddCommentResponse,
+  AuthorSummary,
   CommentsResponse,
   FeedResponse,
   Post,
@@ -76,6 +77,10 @@ export async function fetchPost(postId: string): Promise<Post> {
 
 export async function toggleLike(postId: string): Promise<Post> {
   return apiRequest<Post>(`/posts/${postId}/like`, { method: 'POST', body: {} });
+}
+
+export async function fetchPostLikers(postId: string): Promise<{ users: AuthorSummary[] }> {
+  return apiRequest<{ users: AuthorSummary[] }>(`/posts/${postId}/likes`);
 }
 
 export async function fetchComments(postId: string, cursor?: string | null): Promise<CommentsResponse> {
