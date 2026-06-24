@@ -120,7 +120,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
             defaultVibrateTimings: true,
             ...(imageUrl ? { imageUrl } : {}),
             ...(payload.androidTag ? { tag: payload.androidTag } : {}),
-            color: '#F36464',
+            color: '#52BAD7',
           },
         },
         apns: {

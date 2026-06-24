@@ -7,6 +7,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { Platform, StyleSheet, View } from 'react-native';
 
 import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
+import { getRefreshToken, getStoredUser } from '../src/storage/authSession';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { CallProvider } from '../src/calls/CallProvider';
 import { LiveAudioProvider } from '../src/calls/LiveAudioProvider';
@@ -47,6 +48,27 @@ function SessionGuard() {
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
+
+  // Proactive gate: whenever navigation lands on a non-public (authenticated)
+  // route, confirm a stored session exists. A logged-out user who somehow
+  // reaches a protected screen (deep link, stale stack, back navigation) is
+  // bounced straight to sign-in so they can never see authenticated pages.
+  useEffect(() => {
+    if (PUBLIC_ROUTES.includes(pathname)) {
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all([getRefreshToken(), getStoredUser()]).then(([refreshToken, user]) => {
+      if (!cancelled && (!refreshToken || !user)) {
+        router.replace('/sign-in');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router]);
 
   useEffect(
     () =>

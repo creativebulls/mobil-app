@@ -75,13 +75,13 @@
           "android": {
             "datePicker": {
               "colorAccent": {
-                "light": "#F36464"
+                "light": "#52BAD7"
               },
               "colorControlActivated": {
-                "light": "#F36464"
+                "light": "#52BAD7"
               },
               "colorControlHighlight": {
-                "light": "#33F36464"
+                "light": "#3352BAD7"
               },
               "textColorPrimary": {
                 "light": "#2D1A35"
@@ -112,7 +112,7 @@
       [
         "expo-notifications",
         {
-          "color": "#F36464"
+          "color": "#52BAD7"
         }
       ],
       [

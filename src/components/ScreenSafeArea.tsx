@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, ViewProps, ViewStyle } from 'react-native';
 import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors } from '../theme/colors';
@@ -14,15 +14,17 @@ type ScreenSafeAreaProps = {
   children: ReactNode;
   edges?: Edge[];
   style?: StyleProp<ViewStyle>;
+  pointerEvents?: ViewProps['pointerEvents'];
 };
 
 export function ScreenSafeArea({
   children,
   edges = TAB_SCREEN_EDGES,
   style,
+  pointerEvents,
 }: ScreenSafeAreaProps) {
   return (
-    <SafeAreaView style={[styles.container, style]} edges={edges}>
+    <SafeAreaView style={[styles.container, style]} edges={edges} pointerEvents={pointerEvents}>
       {children}
     </SafeAreaView>
   );
