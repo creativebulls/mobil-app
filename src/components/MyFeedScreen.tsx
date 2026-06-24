@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFriends, fetchMeetPeople, type FriendSummary, type MeetPerson } from '../api/profileApi';
 import { useAppText } from '../config/ConfigProvider';
@@ -27,13 +27,9 @@ import { SearchResults } from './SearchResults';
 const FEED_HEADER_HEIGHT = 56;
 // Search bar region height (input + its bottom padding).
 const SEARCH_REGION_HEIGHT = 60;
-// Full collapsible header (logo row + search). The whole thing slides up out of
-// view on scroll down and slides back in on scroll up.
+// Full top bar (logo row + search) that scrolls up out of view as the page
+// scrolls down and returns when scrolled back to the top.
 const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
-
-// On iOS the top bar stays static (always visible) instead of collapsing on
-// scroll. Android keeps the show-on-scroll-up collapsing behavior.
-const IS_IOS = Platform.OS === 'ios';
 
 export function MyFeedScreen() {
   const router = useRouter();
@@ -67,21 +63,17 @@ export function MyFeedScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
-  // diffClamp tracks scroll direction: scrolling down pushes the value toward
-  // TOP_BAR_HEIGHT (header slides up/out), scrolling up pulls it back to 0
-  // (header slides back in). This gives the show-on-scroll-up animation.
-  const clampedScroll = useMemo(
-    () => Animated.diffClamp(scrollY, 0, TOP_BAR_HEIGHT),
-    [scrollY],
-  );
+  // The logo row scrolls up out of view as the page scrolls down, but the bar
+  // only travels by the logo-row height — so the search bar stays pinned to the
+  // top once scrolled. At the very top everything sits in its natural position.
   const headerTranslateY = useMemo(
     () =>
-      clampedScroll.interpolate({
-        inputRange: [0, TOP_BAR_HEIGHT],
-        outputRange: [0, -TOP_BAR_HEIGHT],
+      scrollY.interpolate({
+        inputRange: [0, FEED_HEADER_HEIGHT],
+        outputRange: [0, -FEED_HEADER_HEIGHT],
         extrapolate: 'clamp',
       }),
-    [clampedScroll],
+    [scrollY],
   );
   const dividerOpacity = useMemo(
     () =>
@@ -91,23 +83,6 @@ export function MyFeedScreen() {
         extrapolate: 'clamp',
       }),
     [scrollY],
-  );
-  // iOS: hide only the logo/actions row on scroll while the search bar stays
-  // pinned at the top (just below the system status bar). diffClamp tracks
-  // scroll direction over the header height, so scrolling down slides the logo
-  // row up/out and scrolling up animates it back down.
-  const iosClampedScroll = useMemo(
-    () => Animated.diffClamp(scrollY, 0, FEED_HEADER_HEIGHT),
-    [scrollY],
-  );
-  const iosHeaderTranslateY = useMemo(
-    () =>
-      iosClampedScroll.interpolate({
-        inputRange: [0, FEED_HEADER_HEIGHT],
-        outputRange: [0, -FEED_HEADER_HEIGHT],
-        extrapolate: 'clamp',
-      }),
-    [iosClampedScroll],
   );
 
   useEffect(() => {
@@ -301,10 +276,7 @@ export function MyFeedScreen() {
 
       <View style={styles.topBarClip} pointerEvents="box-none">
         <Animated.View
-          style={[
-            styles.topBar,
-            { transform: [{ translateY: IS_IOS ? iosHeaderTranslateY : headerTranslateY }] },
-          ]}
+          style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
           pointerEvents="box-none"
         >
           <FeedHeader />

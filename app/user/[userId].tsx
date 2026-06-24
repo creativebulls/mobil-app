@@ -347,7 +347,7 @@ export default function UserProfileScreen() {
     );
   }
 
-  const username = profile?.name.split(' ')[0] ?? 'User';
+  const username = profile?.name.split(' ')[1] ?? 'User';
 
   return (
     <StackScreenLayout>

@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppImage } from '../src/components/AppImage';
+import { ImageGalleryViewer } from '../src/components/ImageGalleryViewer';
 
 import {
   addPlaceComment,
@@ -82,6 +83,8 @@ export default function PlaceDetailScreen() {
   const [postsLoading, setPostsLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [shareVisible, setShareVisible] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -148,6 +151,13 @@ export default function PlaceDetailScreen() {
   const imageUrl = detail?.imageUrl ?? params.imageUrl;
   // Extra photos beyond the hero image, for the gallery strip.
   const galleryPhotos = (detail?.photos ?? []).filter((url) => url && url !== imageUrl);
+  // Hero first, then the gallery strip — the order the fullscreen viewer pages through.
+  const allImages = [imageUrl, ...galleryPhotos].filter((url): url is string => Boolean(url));
+
+  function openViewer(index: number) {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }
 
   const metaParts: string[] = [];
   if (typeof detail?.distanceKm === 'number') {
@@ -246,11 +256,13 @@ export default function PlaceDetailScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
             {imageUrl ? (
-              <AppImage source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+              <Pressable onPress={() => openViewer(0)} accessibilityLabel="View photo">
+                <AppImage source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+              </Pressable>
             ) : (
               <View style={[styles.heroImage, styles.heroPlaceholder]} />
             )}
-            <View style={styles.heroScrim} />
+            <View style={styles.heroScrim} pointerEvents="none" />
 
             <SafeAreaView edges={['top']} style={styles.heroBar}>
               <Pressable onPress={() => router.back()} style={styles.iconButton} hitSlop={8} accessibilityLabel="Back">
@@ -269,8 +281,14 @@ export default function PlaceDetailScreen() {
               style={styles.gallery}
               contentContainerStyle={styles.galleryContent}
             >
-              {galleryPhotos.map((url) => (
-                <AppImage key={url} source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+              {galleryPhotos.map((url, index) => (
+                <Pressable
+                  key={url}
+                  onPress={() => openViewer(index + 1)}
+                  accessibilityLabel="View photo"
+                >
+                  <AppImage source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+                </Pressable>
               ))}
             </ScrollView>
           ) : null}
@@ -500,6 +518,13 @@ export default function PlaceDetailScreen() {
         visible={shareVisible}
         place={{ placeId, name, imageUrl: imageUrl ?? null }}
         onClose={() => setShareVisible(false)}
+      />
+
+      <ImageGalleryViewer
+        visible={viewerVisible}
+        images={allImages}
+        initialIndex={viewerIndex}
+        onClose={() => setViewerVisible(false)}
       />
     </View>
   );
