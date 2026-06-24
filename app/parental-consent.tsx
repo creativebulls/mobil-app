@@ -106,7 +106,7 @@ export default function ParentalConsentScreen() {
           <ConsentCheckbox
             checked={consent}
             onToggle={() => setConsent((prev) => !prev)}
-            label="I have consent of my parents to create CRAVE account"
+            label="I have consent of my parents to create Crave account"
           />
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}

@@ -112,7 +112,7 @@ export default function QrConnectScreen() {
         }
 
         const confirmed = await dialog.confirm({
-          title: 'Connect on CRAVE?',
+          title: 'Connect on Crave?',
           message: `Send a connection request to ${target.name}?`,
           confirmText: 'Send request',
           cancelText: 'Cancel',
@@ -155,7 +155,7 @@ export default function QrConnectScreen() {
         <Avatar uri={user?.profilePhotoUrl ?? null} name={displayName(user)} size={64} />
         <Text style={styles.myName}>{displayName(user)}</Text>
         <Text style={styles.hint}>
-          Let another CRAVE user scan this code to send you a connection request.
+          Let another Crave user scan this code to send you a connection request.
         </Text>
       </View>
     );
@@ -200,7 +200,7 @@ export default function QrConnectScreen() {
         <View style={styles.overlay} pointerEvents="none">
           <View style={styles.reticle} />
           <Text style={styles.scanHint}>
-            Point your camera at a CRAVE connect code
+            Point your camera at a Crave connect code
           </Text>
         </View>
         {processing ? (

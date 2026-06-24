@@ -4,14 +4,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/build-ios-common.sh
 source "$ROOT/scripts/build-ios-common.sh"
+# shellcheck source=scripts/build-ios-auth.sh
+source "$ROOT/scripts/build-ios-auth.sh"
 
 build_ios_prepare "$ROOT"
 build_ios_resolve_xcode "$ROOT"
+build_ios_auth_args
 
-EXPORT_METHOD="${IOS_EXPORT_METHOD:-development}"
+EXPORT_METHOD="${IOS_EXPORT_METHOD:-app-store}"
 ARCHIVE_PATH="$ROOT/ios/build/${IOS_SCHEME}.xcarchive"
 EXPORT_PATH="$ROOT/ios/build/export"
 EXPORT_PLIST="$ROOT/ios/build/ExportOptions.plist"
+
+TEAM_XML=""
+if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
+  TEAM_XML="  <key>teamID</key>
+  <string>${DEVELOPMENT_TEAM}</string>"
+fi
 
 cat > "$EXPORT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,6 +33,9 @@ cat > "$EXPORT_PLIST" <<EOF
   <string>automatic</string>
   <key>stripSwiftSymbols</key>
   <true/>
+  <key>uploadSymbols</key>
+  <true/>
+${TEAM_XML}
 </dict>
 </plist>
 EOF
@@ -31,14 +43,13 @@ EOF
 echo ""
 echo "Building release IPA"
 echo "  Scheme: $IOS_SCHEME"
-echo "  Export method: $EXPORT_METHOD (override with IOS_EXPORT_METHOD=app-store|ad-hoc|development)"
-if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
-  echo "  Team: $DEVELOPMENT_TEAM"
-else
-  echo "  Team: (automatic — set DEVELOPMENT_TEAM=XXXXXXXXXX if signing fails)"
-fi
+echo "  Export method: $EXPORT_METHOD"
+echo "  Team: ${DEVELOPMENT_TEAM:-automatic}"
 
 XCODE_SIGN_ARGS=(-allowProvisioningUpdates)
+if ((${#AUTH_ARGS[@]})); then
+  XCODE_SIGN_ARGS+=("${AUTH_ARGS[@]}")
+fi
 if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
   XCODE_SIGN_ARGS+=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
 fi

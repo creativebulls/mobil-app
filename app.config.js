@@ -27,7 +27,6 @@ module.exports = ({ config }) => {
   config.plugins = [
     ...(config.plugins ?? []),
     './plugins/withNotificationSound.js',
-    './plugins/withFirebaseManifestMergeFix.js',
     [
       '@evennit/notifee-expo-plugin',
       {
@@ -36,8 +35,10 @@ module.exports = ({ config }) => {
         enableCommunicationNotifications: true,
         appleDevTeamId: '45P2ZV9AZW',
         backgroundModes: ['remote-notification'],
+        customNotificationServiceFilePath: './plugins/ios/NotificationService.m',
       },
     ],
+    './plugins/withFirebaseManifestMergeFix.js',
   ];
 
   config.ios = {

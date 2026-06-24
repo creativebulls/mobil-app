@@ -1,4 +1,4 @@
-import { LayoutChangeEvent, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, useColorScheme, View } from 'react-native';
 
 import { AppImage } from './AppImage';
 import { colors } from '../theme/colors';
@@ -16,20 +16,16 @@ export function AppSplashScreen({ onLayout }: AppSplashScreenProps) {
   const isDark = useColorScheme() === 'dark';
 
   const backgroundColor = isDark ? '#000000' : colors.white;
-  const textColor = isDark ? '#FFFFFF' : '#000000';
   const logo = isDark ? DARK_LOGO : LIGHT_LOGO;
 
   return (
     <View style={[styles.container, { backgroundColor }]} onLayout={onLayout}>
-      <View style={styles.content}>
-        <AppImage
-          source={logo}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="CRAVE logo"
-        />
-        <Text style={[styles.subtitle, { color: textColor }]}>where people come together</Text>
-      </View>
+      <AppImage
+        source={logo}
+        style={styles.logo}
+        resizeMode="contain"
+        accessibilityLabel="Crave logo"
+      />
     </View>
   );
 }
@@ -40,20 +36,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: {
-    alignItems: 'center',
-    gap: 16,
-  },
   logo: {
     width: 300,
     aspectRatio: 590 / 167,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 17,
-    textAlign: 'center',
-    lineHeight: 24,
-    letterSpacing: 0.2,
-    paddingHorizontal: 32,
   },
 });

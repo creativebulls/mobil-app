@@ -32,7 +32,7 @@ export function AuthScreenLayout({
                 source={require('../../assets/black-logo.png')}
                 style={authStyles.logo}
                 resizeMode="contain"
-                accessibilityLabel="CRAVE logo"
+                accessibilityLabel="Crave logo"
               />
             )}
           </View>

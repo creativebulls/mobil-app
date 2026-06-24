@@ -1,43 +1,65 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { FullscreenVideoPlayer } from './FullscreenVideoPlayer';
+import { AppImage } from './AppImage';
 import { useMediaUrl } from '../hooks/useMediaUrl';
 import { colors } from '../theme/colors';
+import { createVideoThumbnail } from '../utils/videoThumbnail';
 
-const VIDEO_EXTENSIONS = /\.(mp4|mov|m4v|webm|3gp|mkv|avi)(\?|$)/i;
+export { isVideoMediaUrl as isVideoUrl } from '../utils/postMedia';
 
-export function isVideoUrl(url?: string | null): boolean {
-  return !!url && VIDEO_EXTENSIONS.test(url);
-}
-
-/** Inline preview tile for a post video — shows the first frame with a play overlay. */
+/** Inline preview tile for a post video — shows a poster frame with a play overlay. */
 export function PostVideoTile({
   uri,
+  posterUri,
   style,
   onPress,
 }: {
   uri: string;
+  posterUri?: string | null;
   style?: StyleProp<ViewStyle>;
   onPress: () => void;
 }) {
-  const resolved = useMediaUrl(uri);
-  const player = useVideoPlayer(resolved ?? '', (instance) => {
-    instance.loop = false;
-    instance.muted = true;
-  });
+  const resolvedVideo = useMediaUrl(uri);
+  const resolvedPoster = useMediaUrl(posterUri);
+  const [fallbackPoster, setFallbackPoster] = useState<string | null>(null);
+  const [loadingPoster, setLoadingPoster] = useState(!resolvedPoster);
+
+  useEffect(() => {
+    if (resolvedPoster) {
+      setLoadingPoster(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPoster(true);
+
+    const source = resolvedVideo ?? uri;
+    void createVideoThumbnail(source).then((thumb) => {
+      if (!cancelled) {
+        setFallbackPoster(thumb);
+        setLoadingPoster(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, resolvedVideo, resolvedPoster]);
+
+  const displayPoster = resolvedPoster ?? fallbackPoster;
 
   return (
     <Pressable onPress={onPress} style={style} accessibilityRole="button" accessibilityLabel="Play video">
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <VideoView
-          player={player}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          nativeControls={false}
-        />
-      </View>
+      {displayPoster ? (
+        <AppImage source={{ uri: displayPoster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <View style={styles.placeholder}>
+          {loadingPoster ? <ActivityIndicator color={colors.white} /> : null}
+        </View>
+      )}
       <View style={styles.overlay}>
         <View style={styles.playCircle}>
           <Ionicons name="play" size={28} color={colors.white} />
@@ -65,6 +87,12 @@ export function PostVideoModal({ uri, onClose }: { uri: string | null; onClose: 
 }
 
 const styles = StyleSheet.create({
+  placeholder: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A1024',
+  },
   overlay: {
     position: 'absolute',
     top: 0,

@@ -11,12 +11,13 @@ import {
   View,
 } from 'react-native';
 
-import { fetchCurrentUser, logoutAccount } from '../src/api/authApi';
+import { fetchCurrentUser } from '../src/api/authApi';
 import { fetchMyAppeal, submitAppeal } from '../src/api/moderationApi';
 import { getErrorMessage, type MyAppeal } from '../src/api/types';
+import { logoutUser } from '../src/auth/logoutUser';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useDialog } from '../src/components/dialog/DialogProvider';
-import { clearSession, getRefreshToken, getStoredUser, updateStoredUser } from '../src/storage/authSession';
+import { getStoredUser, updateStoredUser } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
 
 export default function AccountSuspendedScreen() {
@@ -103,13 +104,8 @@ export default function AccountSuspendedScreen() {
   }
 
   async function handleLogout() {
-    try {
-      const refreshToken = await getRefreshToken();
-      await logoutAccount(refreshToken).catch(() => undefined);
-    } finally {
-      await clearSession();
-      router.replace('/sign-in');
-    }
+    await logoutUser();
+    router.replace('/welcome');
   }
 
   const appealPending = appeal?.status === 'pending';

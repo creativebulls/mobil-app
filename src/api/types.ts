@@ -93,6 +93,8 @@ export type Post = {
   text: string | null;
   imageUri: string | null;
   imageUris: string[];
+  /** Parallel to imageUris — poster JPEG for each video slot, otherwise null. */
+  videoPosterUris?: (string | null)[];
   reaction: PostReaction | null;
   place: PostPlace | null;
   likesCount: number;

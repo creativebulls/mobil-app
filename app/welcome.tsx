@@ -25,9 +25,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const AUTO_ADVANCE_MS = 3800;
 
 const SLIDES = [
-  { image: require('../assets/welcome.jpg'), text: 'Discover new places' },
-  { image: require('../assets/welcome-2.jpg'), text: 'Meet new friends' },
-  { image: require('../assets/welcome-3.png'), text: 'Explore new spots' },
+  { image: require('../assets/welcome.jpg'), text: 'Discover what you crave.' },
+  { image: require('../assets/welcome-2.jpg'), text: 'See what your friends crave.' },
+  { image: require('../assets/welcome-3.png'), text: 'Find your next craving.' },
 ];
 
 export default function WelcomeScreen() {

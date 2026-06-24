@@ -23,6 +23,7 @@ import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { getStoredUser } from '../src/storage/authSession';
 import type { PostReaction, UserProfile } from '../src/api/types';
 import { colors } from '../src/theme/colors';
+import { createVideoThumbnail } from '../src/utils/videoThumbnail';
 
 const REACTIONS: {
   key: PostReaction;
@@ -35,7 +36,50 @@ const REACTIONS: {
   { key: 'love', label: 'I love it', icon: 'heart-outline', activeIcon: 'heart' },
 ];
 
-type PostMediaItem = { uri: string; type: 'image' | 'video' };
+type PostMediaItem = { uri: string; type: 'image' | 'video'; thumbnailUri?: string | null };
+
+async function assetToMediaItem(asset: ImagePicker.ImagePickerAsset): Promise<PostMediaItem> {
+  const type = asset.type === 'video' ? 'video' : 'image';
+  const thumbnailUri = type === 'video' ? await createVideoThumbnail(asset.uri) : null;
+  return { uri: asset.uri, type, thumbnailUri };
+}
+
+function CreatePostMediaTile({
+  item,
+  onRemove,
+}: {
+  item: PostMediaItem;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={styles.tileWrap}>
+      {item.type === 'video' ? (
+        <View style={styles.tileImage}>
+          {item.thumbnailUri ? (
+            <AppImage source={{ uri: item.thumbnailUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, styles.videoTile]}>
+              <ActivityIndicator color={colors.white} />
+            </View>
+          )}
+          <View style={styles.videoTileOverlay}>
+            <Ionicons name="play-circle" size={34} color={colors.white} />
+          </View>
+        </View>
+      ) : (
+        <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+      )}
+      <Pressable
+        onPress={onRemove}
+        style={styles.removeImageButton}
+        accessibilityLabel="Remove"
+        hitSlop={8}
+      >
+        <Ionicons name="close-circle" size={24} color={colors.white} />
+      </Pressable>
+    </View>
+  );
+}
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -94,10 +138,7 @@ export default function CreatePostScreen() {
     });
 
     if (!result.canceled) {
-      const picked: PostMediaItem[] = result.assets.map((asset) => ({
-        uri: asset.uri,
-        type: asset.type === 'video' ? 'video' : 'image',
-      }));
+      const picked = await Promise.all(result.assets.map(assetToMediaItem));
       setMedia((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
     }
   }
@@ -128,13 +169,8 @@ export default function CreatePostScreen() {
     });
 
     if (!result.canceled && result.assets?.length) {
-      const asset = result.assets[0];
-      setMedia((prev) =>
-        [...prev, { uri: asset.uri, type: asset.type === 'video' ? 'video' : 'image' }].slice(
-          0,
-          MAX_IMAGES,
-        ) as PostMediaItem[],
-      );
+      const item = await assetToMediaItem(result.assets[0]);
+      setMedia((prev) => [...prev, item].slice(0, MAX_IMAGES));
     }
   }
 
@@ -244,24 +280,11 @@ export default function CreatePostScreen() {
                 ) : (
                   <View style={styles.tilesGrid}>
                     {media.map((item) => (
-                      <View key={item.uri} style={styles.tileWrap}>
-                        {item.type === 'video' ? (
-                          <View style={[styles.tileImage, styles.videoTile]}>
-                            <Ionicons name="play-circle" size={34} color={colors.white} />
-                            <Text style={styles.videoTileLabel}>Video</Text>
-                          </View>
-                        ) : (
-                          <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
-                        )}
-                        <Pressable
-                          onPress={() => removeMedia(item.uri)}
-                          style={styles.removeImageButton}
-                          accessibilityLabel="Remove"
-                          hitSlop={8}
-                        >
-                          <Ionicons name="close-circle" size={24} color={colors.white} />
-                        </Pressable>
-                      </View>
+                      <CreatePostMediaTile
+                        key={item.uri}
+                        item={item}
+                        onRemove={() => removeMedia(item.uri)}
+                      />
                     ))}
 
                     {media.length < MAX_IMAGES ? (
@@ -331,24 +354,11 @@ export default function CreatePostScreen() {
                 {media.length > 0 ? (
                   <View style={styles.tilesGrid}>
                     {media.map((item) => (
-                      <View key={item.uri} style={styles.tileWrap}>
-                        {item.type === 'video' ? (
-                          <View style={[styles.tileImage, styles.videoTile]}>
-                            <Ionicons name="play-circle" size={34} color={colors.white} />
-                            <Text style={styles.videoTileLabel}>Video</Text>
-                          </View>
-                        ) : (
-                          <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
-                        )}
-                        <Pressable
-                          onPress={() => removeMedia(item.uri)}
-                          style={styles.removeImageButton}
-                          accessibilityLabel="Remove"
-                          hitSlop={8}
-                        >
-                          <Ionicons name="close-circle" size={24} color={colors.white} />
-                        </Pressable>
-                      </View>
+                      <CreatePostMediaTile
+                        key={item.uri}
+                        item={item}
+                        onRemove={() => removeMedia(item.uri)}
+                      />
                     ))}
                   </View>
                 ) : null}
@@ -572,13 +582,13 @@ const styles = StyleSheet.create({
   videoTile: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
     backgroundColor: '#1f2530',
   },
-  videoTileLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.white,
+  videoTileOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   removeImageButton: {
     position: 'absolute',

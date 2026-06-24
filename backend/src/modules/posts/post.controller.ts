@@ -20,13 +20,17 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
     reaction: req.body.reaction,
   });
 
-  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-  const imageFilenames = files.map((file) => file.filename);
+  const uploaded = req.files as
+    | { images?: Express.Multer.File[]; videoPosters?: Express.Multer.File[] }
+    | undefined;
+  const imageFiles = uploaded?.images ?? [];
+  const posterFiles = uploaded?.videoPosters ?? [];
 
   const result = await postService.createPost({
     authorId: req.auth!.userId,
     text: body.text,
-    imageFilenames,
+    imageFiles,
+    posterFiles,
     reaction: body.reaction,
     placeName: body.placeName,
     placeImageUrl: body.placeImageUrl,
@@ -106,5 +110,8 @@ export const deletePost = asyncHandler(async (req: AuthenticatedRequest, res: Re
   sendSuccess(res, result);
 });
 
-export const createPostMiddleware = postImageUpload.array('images', MAX_POST_IMAGES);
+export const createPostMiddleware = postImageUpload.fields([
+  { name: 'images', maxCount: MAX_POST_IMAGES },
+  { name: 'videoPosters', maxCount: MAX_POST_IMAGES },
+]);
 export const postGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];

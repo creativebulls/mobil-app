@@ -313,7 +313,7 @@ export async function sendTestPush(email: string) {
   }
 
   await sendPushToUser(user._id.toString(), {
-    title: 'CRAVE test',
+    title: 'Crave test',
     body: 'Push notifications are working.',
     channelId: 'default',
     data: { type: 'test' },
@@ -445,9 +445,9 @@ const APP_CONFIG_KEY = 'app_config';
 // read so the admin always has a starting point to edit.
 const DEFAULT_APP_CONFIG: Record<string, string> = {
   // General
-  app_name: 'CRAVE',
+  app_name: 'Crave',
   support_email: 'support@whereabout.app',
-  about_text: 'CRAVE helps you discover places and friends around you.',
+  about_text: 'Crave helps you discover places and friends around you.',
   maintenance_message: '',
   min_supported_version: '1.0.0',
 
@@ -465,7 +465,7 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   // Welcome / landing screen
   // Multiple taglines: one per line.
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
-  'welcome.new_user_button': "I'm new to CRAVE",
+  'welcome.new_user_button': "I'm new to Crave",
   'welcome.existing_account_button': 'I have an account',
 
   // Home feed section titles & labels

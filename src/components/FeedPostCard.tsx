@@ -19,6 +19,7 @@ import { MediaImage } from './MediaImage';
 import { PostImageViewer } from './PostImageViewer';
 import { PostLikersModal } from './PostLikersModal';
 import { PostVideoModal, PostVideoTile, isVideoUrl } from './PostVideo';
+import { getVideoPosterForUri } from '../utils/postMedia';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
 import { colors } from '../theme/colors';
@@ -162,7 +163,7 @@ export function FeedPostCard({
     const url = `https://whereabout.app/post/${post.id}`;
     try {
       await Share.share({
-        message: `Check out ${post.author.name}'s post on CRAVE: ${url}`,
+        message: `Check out ${post.author.name}'s post on Crave: ${url}`,
         url,
       });
     } catch {
@@ -312,6 +313,7 @@ export function FeedPostCard({
           isVideoUrl(postImages[0]) ? (
             <PostVideoTile
               uri={postImages[0]}
+              posterUri={getVideoPosterForUri(postImages, post.videoPosterUris, postImages[0])}
               style={styles.postImage}
               onPress={() => openMedia(postImages[0])}
             />
@@ -343,6 +345,7 @@ export function FeedPostCard({
                 isVideoUrl(item) ? (
                   <PostVideoTile
                     uri={item}
+                    posterUri={getVideoPosterForUri(postImages, post.videoPosterUris, item)}
                     style={styles.carouselImage}
                     onPress={() => openMedia(item)}
                   />

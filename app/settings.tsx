@@ -3,14 +3,12 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { fetchCurrentUser, logoutAccount } from '../src/api/authApi';
+import { fetchCurrentUser } from '../src/api/authApi';
 import { fetchSettings, updateSettings } from '../src/api/profileApi';
 import type { PushPreferences, UserSettings } from '../src/api/types';
+import { logoutUser } from '../src/auth/logoutUser';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
-import { unregisterPushNotifications } from '../src/notifications/pushNotifications';
-import { disconnectRealtimeSocket } from '../src/realtime/socket';
-import { clearSession, getRefreshToken } from '../src/storage/authSession';
 import { colors } from '../src/theme/colors';
 
 const PUSH_OPTIONS: { key: keyof PushPreferences; label: string; description: string }[] = [
@@ -82,16 +80,8 @@ export default function SettingsScreen() {
   async function performLogout() {
     setIsLoggingOut(true);
     try {
-      const refreshToken = await getRefreshToken();
-      try {
-        await logoutAccount(refreshToken);
-      } catch {
-        // best-effort
-      }
-      await unregisterPushNotifications();
-      await clearSession();
-      disconnectRealtimeSocket();
-      router.replace('/sign-in');
+      await logoutUser();
+      router.replace('/welcome');
     } finally {
       setIsLoggingOut(false);
     }

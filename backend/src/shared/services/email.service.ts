@@ -72,7 +72,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
 
   await deliverMail({
     to: email,
-    subject: 'Verify your CRAVE email',
+    subject: 'Verify your Crave email',
     text: content.text,
     html: content.html,
   });
@@ -109,13 +109,13 @@ export function renderVerificationErrorPage(): string {
 export async function sendPasswordResetCode(email: string, code: string): Promise<void> {
   await deliverMail({
     to: email,
-    subject: 'Your CRAVE password reset code',
+    subject: 'Your Crave password reset code',
     text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
         <div style="height:4px;background:linear-gradient(90deg,#9447B3,#F36464);border-radius:4px;margin-bottom:24px;"></div>
         <h2 style="color:#2D1A35;margin:0 0 12px;">Password reset code</h2>
-        <p style="color:#7A6288;line-height:1.6;">Use this code to reset your CRAVE password:</p>
+        <p style="color:#7A6288;line-height:1.6;">Use this code to reset your Crave password:</p>
         <p style="font-size:32px;font-weight:800;letter-spacing:8px;color:#F36464;margin:24px 0;">${code}</p>
         <p style="color:#9CA3AF;font-size:14px;">This code expires in 10 minutes.</p>
       </div>

@@ -13,6 +13,8 @@ export interface IPost {
   text?: string;
   imageUrl?: string;
   images: string[];
+  /** Maps post video URL → JPEG poster URL for feed previews. */
+  videoThumbnails?: Record<string, string>;
   reaction?: PostReaction;
   place?: IPostPlace;
   likes: Types.ObjectId[];
@@ -38,6 +40,7 @@ const postSchema = new Schema<PostDocument>(
     text: { type: String, trim: true, maxlength: 2000 },
     imageUrl: { type: String },
     images: { type: [String], default: [] },
+    videoThumbnails: { type: Schema.Types.Mixed, default: {} },
     reaction: { type: String, enum: ['like', 'dislike', 'love'] },
     place: { type: postPlaceSchema },
     likes: { type: [Schema.Types.ObjectId], ref: 'User', default: [] },

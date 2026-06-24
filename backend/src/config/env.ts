@@ -30,7 +30,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default('CRAVE <noreply@whereabout.app>'),
+  SMTP_FROM: z.string().default('Crave <noreply@whereabout.app>'),
   UPLOAD_DIR: z.string().default('uploads'),
   MINIMUM_ACCOUNT_AGE: z.coerce.number().default(16),
   // Places integration (swappable provider: foursquare | opentripmap | sample | google)

@@ -23,6 +23,11 @@ if [[ -f "$GRADLE_WRAPPER" ]]; then
   sed -i '' 's|gradle-9\.[0-9.]*-bin\.zip|gradle-8.14.3-bin.zip|g' "$GRADLE_WRAPPER"
 fi
 
+MANIFEST="$ROOT/android/app/src/main/AndroidManifest.xml"
+if [[ -f "$MANIFEST" ]]; then
+  sed -i '' 's|android:resource="@color/notification_icon_color"/>|android:resource="@color/notification_icon_color" tools:replace="android:resource"/>|g' "$MANIFEST"
+fi
+
 # Gradle 9 cannot resolve org.jitsi:webrtc:124.+; pin to the latest release.
 WEBRTC_GRADLE="$ROOT/node_modules/react-native-webrtc/android/build.gradle"
 if [[ -f "$WEBRTC_GRADLE" ]]; then

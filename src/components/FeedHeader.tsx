@@ -48,7 +48,7 @@ export function FeedHeader({
         source={require('../../assets/black-logo.png')}
         style={styles.logo}
         resizeMode="contain"
-        accessibilityLabel="CRAVE logo"
+        accessibilityLabel="Crave logo"
       />
 
       {alignTitleLeft ? (

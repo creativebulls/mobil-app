@@ -77,7 +77,7 @@ function postMediaFilter(
 export const postImageUpload = multer({
   storage: createDiskStorage(postImageDir),
   fileFilter: postMediaFilter,
-  limits: { fileSize: 50 * 1024 * 1024, files: MAX_POST_IMAGES },
+  limits: { fileSize: 50 * 1024 * 1024, files: MAX_POST_IMAGES * 2 },
 });
 
 // Common document/file types allowed as chat attachments (in addition to

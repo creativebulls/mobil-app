@@ -28,7 +28,7 @@ export async function searchPosts(query: string): Promise<{ posts: Post[] }> {
 
 export async function createPost(input: {
   text?: string;
-  media?: { uri: string; type: 'image' | 'video' }[];
+  media?: { uri: string; type: 'image' | 'video'; thumbnailUri?: string | null }[];
   reaction?: PostReaction | null;
   placeName?: string;
   placeImageUrl?: string;
@@ -63,6 +63,16 @@ export async function createPost(input: {
       name: `post-${index}.${isVideo ? 'mp4' : 'jpg'}`,
       type: isVideo ? 'video/mp4' : 'image/jpeg',
     } as unknown as Blob);
+  });
+
+  (input.media ?? []).forEach((item, index) => {
+    if (item.type === 'video' && item.thumbnailUri) {
+      formData.append('videoPosters', {
+        uri: item.thumbnailUri,
+        name: `poster-${index}.jpg`,
+        type: 'image/jpeg',
+      } as unknown as Blob);
+    }
   });
 
   return apiRequest<Post>('/posts', {

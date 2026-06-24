@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
-import { onAccountSuspended, onSessionCleared } from '../src/auth/sessionEvents';
+import { onAccountSuspended, onSessionCleared, consumeLogoutNavigation } from '../src/auth/sessionEvents';
 import { getRefreshToken, getStoredUser } from '../src/storage/authSession';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { CallProvider } from '../src/calls/CallProvider';
@@ -39,8 +39,7 @@ const PUBLIC_ROUTES = [
 
 /**
  * Watches for the session being cleared (invalid refresh token or explicit
- * logout) and immediately routes the user to sign-in, so they never sit on an
- * authenticated screen showing blank data.
+ * logout) and immediately routes the user away from authenticated screens.
  */
 function SessionGuard() {
   const router = useRouter();
@@ -73,7 +72,7 @@ function SessionGuard() {
     () =>
       onSessionCleared(() => {
         if (!PUBLIC_ROUTES.includes(pathnameRef.current)) {
-          router.replace('/sign-in');
+          router.replace(consumeLogoutNavigation() ? '/welcome' : '/sign-in');
         }
       }),
     [router],

@@ -114,7 +114,7 @@ export function SearchResults({ query, currentUserId }: SearchResultsProps) {
     return (
       <View style={styles.hint}>
         <Ionicons name="search" size={40} color={colors.labelGray} />
-        <Text style={styles.hintTitle}>Search CRAVE</Text>
+        <Text style={styles.hintTitle}>Search Crave</Text>
         <Text style={styles.hintText}>
           Find friends, places, and posts. Type at least {MIN_QUERY} characters to begin.
         </Text>

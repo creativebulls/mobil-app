@@ -14,6 +14,19 @@ function resolvePostImageUrl(filename: string): string {
   return `/uploads/posts/${filename}`;
 }
 
+const VIDEO_EXTENSIONS = /\.(mp4|mov|m4v|webm|3gp|mkv|avi)(\?|$)/i;
+
+function isVideoMediaUrl(url: string): boolean {
+  return VIDEO_EXTENSIONS.test(url);
+}
+
+function buildVideoPosterUris(
+  imageUris: string[],
+  videoThumbnails: Record<string, string> | undefined,
+): (string | null)[] {
+  return imageUris.map((uri) => (isVideoMediaUrl(uri) ? videoThumbnails?.[uri] ?? null : null));
+}
+
 type PopulatedUser = {
   _id: Types.ObjectId;
   givenName?: string;
@@ -53,6 +66,7 @@ export function serializePost(post: PostDocument, currentUserId: string) {
     text: post.text ?? null,
     imageUri: imageUris[0] ?? null,
     imageUris,
+    videoPosterUris: buildVideoPosterUris(imageUris, post.videoThumbnails),
     reaction: post.reaction ?? null,
     place: post.place
       ? {
@@ -115,15 +129,17 @@ async function assertCanSeePost(viewerId: string, authorId: string): Promise<voi
 export async function createPost(input: {
   authorId: string;
   text?: string;
-  imageFilenames?: string[];
+  imageFiles?: Express.Multer.File[];
+  posterFiles?: Express.Multer.File[];
   reaction?: 'like' | 'dislike' | 'love';
   placeName?: string;
   placeImageUrl?: string;
   placeDistanceKm?: number;
 }) {
-  const imageFilenames = input.imageFilenames ?? [];
+  const imageFiles = input.imageFiles ?? [];
+  const posterFiles = input.posterFiles ?? [];
 
-  if (!input.text && imageFilenames.length === 0) {
+  if (!input.text && imageFiles.length === 0) {
     throw new AppError(422, 'A post must include text or an image', 'EMPTY_POST');
   }
 
@@ -133,13 +149,26 @@ export async function createPost(input: {
     throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
   }
 
-  const images = imageFilenames.map(resolvePostImageUrl);
+  const images = imageFiles.map((file) => resolvePostImageUrl(file.filename));
+
+  const videoThumbnails: Record<string, string> = {};
+  let posterIndex = 0;
+  for (const file of imageFiles) {
+    if (file.mimetype.startsWith('video/')) {
+      const poster = posterFiles[posterIndex];
+      if (poster) {
+        videoThumbnails[resolvePostImageUrl(file.filename)] = resolvePostImageUrl(poster.filename);
+      }
+      posterIndex += 1;
+    }
+  }
 
   const post = await Post.create({
     author: input.authorId,
     text: input.text,
     imageUrl: images[0],
     images,
+    videoThumbnails,
     reaction: input.reaction,
     place: input.placeName
       ? {
