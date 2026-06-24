@@ -12,6 +12,7 @@ build_ios_prepare() {
   export LC_ALL="${LC_ALL:-en_US.UTF-8}"
   export EXPO_PUBLIC_API_URL="${EXPO_PUBLIC_API_URL:-https://mobilevps.tech}"
   export APP_VARIANT=production
+  export EAS_BUILD_PROFILE=production
 
   echo "Preparing iOS project"
   echo "  API: $EXPO_PUBLIC_API_URL"
@@ -24,7 +25,7 @@ build_ios_prepare() {
     npx expo prebuild --platform ios
   fi
 
-  if [[ -f "$root/ios/Podfile" ]] && [[ ! -d "$root/ios/Pods" ]]; then
+  if [[ -f "$root/ios/Podfile" ]]; then
     echo "Installing CocoaPods..."
     (cd "$root/ios" && pod install)
   fi

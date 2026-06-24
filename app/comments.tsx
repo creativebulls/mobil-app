@@ -26,6 +26,7 @@ import { CommentItem } from '../src/components/CommentItem';
 import { FeedPostCard } from '../src/components/FeedPostCard';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
+import { useKeyboardInset } from '../src/hooks/useKeyboardInset';
 import { getStoredUser } from '../src/storage/authSession';
 import { hidePost } from '../src/storage/hiddenPosts';
 import { openUserProfile } from '../src/utils/openUserProfile';
@@ -55,6 +56,7 @@ export default function PostDetailScreen() {
   const inputRef = useRef<TextInput>(null);
   const listRef = useRef<FlatList<PostComment>>(null);
   const didHighlightRef = useRef(false);
+  const { bottomInset: androidKeyboardInset } = useKeyboardInset();
 
   const load = useCallback(async () => {
     if (!postId) {
@@ -253,7 +255,12 @@ export default function PostDetailScreen() {
         </View>
 
         <KeyboardAvoidingView
-          style={styles.flex}
+          style={[
+            styles.flex,
+            Platform.OS === 'android' && androidKeyboardInset > 0
+              ? { paddingBottom: androidKeyboardInset }
+              : null,
+          ]}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >

@@ -3,6 +3,7 @@ import type { MulticastMessage } from 'firebase-admin/messaging';
 import { isDevelopment } from '../../config/env';
 import { User } from '../../modules/users/user.model';
 import { getFirebaseMessaging } from './firebase';
+import { buildBadgedNotificationAvatar } from './notificationAvatar.service';
 
 export type PushCommunication = {
   /** Thread / conversation id used to group notifications. */
@@ -79,10 +80,16 @@ function toStringData(data?: Record<string, unknown>): Record<string, string> {
   return result;
 }
 
-function buildNotifeeOptions(payload: PushPayload, imageUrl?: string) {
+function buildNotifeeOptions(
+  payload: PushPayload,
+  androidIconUrl?: string,
+  iosAvatarUrl?: string,
+) {
   const communication = payload.communication;
   const useTelegramStyle = Boolean(communication);
   const channelId = payload.channelId ?? 'default';
+  const androidLargeIcon = androidIconUrl?.trim() || undefined;
+  const iosAvatar = iosAvatarUrl?.trim() || undefined;
 
   const ios: Record<string, unknown> = {
     sound: NOTIFICATION_SOUND_IOS,
@@ -102,7 +109,7 @@ function buildNotifeeOptions(payload: PushPayload, imageUrl?: string) {
       sender: {
         id: communication.senderId,
         displayName: communication.senderName,
-        ...(imageUrl ? { avatar: imageUrl } : {}),
+        ...(iosAvatar ? { avatar: iosAvatar } : {}),
       },
     };
   }
@@ -115,15 +122,15 @@ function buildNotifeeOptions(payload: PushPayload, imageUrl?: string) {
     ...(payload.androidTag ? { tag: payload.androidTag, groupId: payload.androidTag } : {}),
   };
 
-  if (imageUrl) {
-    android.largeIcon = imageUrl;
+  if (androidLargeIcon) {
+    android.largeIcon = androidLargeIcon;
     android.circularLargeIcon = true;
   }
 
   if (useTelegramStyle && communication) {
     const person = {
       name: communication.senderName,
-      ...(imageUrl ? { icon: imageUrl } : {}),
+      ...(androidLargeIcon ? { icon: androidLargeIcon } : {}),
     };
     android.style = {
       type: ANDROID_STYLE_MESSAGING,
@@ -141,7 +148,7 @@ function buildNotifeeOptions(payload: PushPayload, imageUrl?: string) {
   return {
     title: payload.title,
     body: payload.body,
-    ...(imageUrl ? { image: imageUrl } : {}),
+    ...(iosAvatar ? { image: iosAvatar } : {}),
     ios,
     android,
   };
@@ -202,7 +209,10 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   const channelId = payload.channelId ?? 'default';
   const imageUrl = payload.imageUrl?.trim() || undefined;
   const useTelegramStyle = Boolean(payload.communication);
-  const notifeeOptions = buildNotifeeOptions(payload, imageUrl);
+  const androidIconUrl = useTelegramStyle
+    ? await buildBadgedNotificationAvatar(imageUrl)
+    : imageUrl;
+  const notifeeOptions = buildNotifeeOptions(payload, androidIconUrl ?? undefined, imageUrl);
 
   const data = toStringData({
     ...payload.data,

@@ -12,7 +12,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -51,6 +50,7 @@ import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { useIsOnline } from '../src/realtime/PresenceProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
+import { useKeyboardInset } from '../src/hooks/useKeyboardInset';
 import { getRealtimeSocket } from '../src/realtime/socket';
 import { getStoredUser } from '../src/storage/authSession';
 import { readCache, writeCache } from '../src/storage/offlineCache';
@@ -219,22 +219,8 @@ export default function ChatScreen() {
     [],
   );
 
-  // The native MainActivity applies the keyboard (IME) inset as padding on
-  // Android 15 edge-to-edge, so the input bar floats above the keyboard. We
-  // still track keyboard visibility to drop the safe-area padding (which the
-  // keyboard now covers) for a snug fit.
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  // Android edge-to-edge: lift the composer with keyboard height. iOS uses KeyboardAvoidingView.
+  const { bottomInset: androidKeyboardInset, isOpen: keyboardOpen } = useKeyboardInset();
 
   // When the keyboard covers the navigation bar, drop the safe-area padding.
   const inputBottomInset = keyboardOpen ? 14 : Math.max(insets.bottom, 8) + 12;
@@ -841,7 +827,12 @@ export default function ChatScreen() {
     <>
       <StackScreenLayout edges={TAB_SCREEN_EDGES} style={styles.container}>
         <KeyboardAvoidingView
-          style={styles.flex}
+          style={[
+            styles.flex,
+            Platform.OS === 'android' && androidKeyboardInset > 0
+              ? { paddingBottom: androidKeyboardInset }
+              : null,
+          ]}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
         {selectionMode ? (

@@ -1,15 +1,13 @@
 /**
- * Copies the custom notification sound into native projects on prebuild.
- * - Android: res/raw/notification_recived_sount.mp3
- * - iOS: {AppName}/notification_recived_sount.mp3 (bundle resource for APNs)
+ * Copies the custom notification sound into the Android project on prebuild.
+ * iOS uses the expo-notifications plugin `sounds` entry in app.json.
  */
-const { withDangerousMod, IOSConfig } = require('@expo/config-plugins');
+const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 const SOURCE = path.join('assets', 'notification_recived_sount.mp3');
 const ANDROID_NAME = 'notification_recived_sount.mp3';
-const IOS_NAME = 'notification_recived_sount.mp3';
 
 function copySound(projectRoot, destination) {
   const sourcePath = path.join(projectRoot, SOURCE);
@@ -21,7 +19,7 @@ function copySound(projectRoot, destination) {
 }
 
 function withNotificationSound(config) {
-  config = withDangerousMod(config, [
+  return withDangerousMod(config, [
     'android',
     (config) => {
       const { projectRoot, platformProjectRoot } = config.modRequest;
@@ -30,21 +28,6 @@ function withNotificationSound(config) {
       return config;
     },
   ]);
-
-  config = withDangerousMod(config, [
-    'ios',
-    (config) => {
-      const { projectRoot, platformProjectRoot } = config.modRequest;
-      const projectName = IOSConfig.XcodeUtils.getProjectName(platformProjectRoot);
-      copySound(
-        projectRoot,
-        path.join(platformProjectRoot, projectName, IOS_NAME),
-      );
-      return config;
-    },
-  ]);
-
-  return config;
 }
 
 module.exports = withNotificationSound;

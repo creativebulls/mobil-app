@@ -27,6 +27,7 @@ module.exports = ({ config }) => {
   config.plugins = [
     ...(config.plugins ?? []),
     './plugins/withNotificationSound.js',
+    './plugins/withFirebaseManifestMergeFix.js',
     [
       '@evennit/notifee-expo-plugin',
       {

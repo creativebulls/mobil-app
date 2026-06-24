@@ -17,6 +17,12 @@ if [[ ! -d "$ROOT/android" ]] || [[ "${PREBUILD_CLEAN:-1}" == "1" ]]; then
   CI=1 npx expo prebuild --platform android --clean
 fi
 
+# Expo SDK 56 prebuild ships Gradle 9.x; RN's foojay toolchain plugin needs 8.x locally.
+GRADLE_WRAPPER="$ROOT/android/gradle/wrapper/gradle-wrapper.properties"
+if [[ -f "$GRADLE_WRAPPER" ]]; then
+  sed -i '' 's|gradle-9\.[0-9.]*-bin\.zip|gradle-8.14.3-bin.zip|g' "$GRADLE_WRAPPER"
+fi
+
 # Gradle 9 cannot resolve org.jitsi:webrtc:124.+; pin to the latest release.
 WEBRTC_GRADLE="$ROOT/node_modules/react-native-webrtc/android/build.gradle"
 if [[ -f "$WEBRTC_GRADLE" ]]; then
