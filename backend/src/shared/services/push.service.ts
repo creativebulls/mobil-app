@@ -151,8 +151,16 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     if (response.failureCount > 0) {
       const invalidTokens: string[] = [];
       response.responses.forEach((result, index) => {
-        if (!result.success && result.error && INVALID_TOKEN_CODES.has(result.error.code)) {
-          invalidTokens.push(tokens[index]!);
+        if (!result.success && result.error) {
+          // Always log the underlying FCM/APNs error so delivery problems are
+          // diagnosable in production (e.g. a missing APNs auth key surfaces as
+          // `messaging/third-party-auth-error`).
+          console.warn(
+            `[push] FCM delivery failed for user ${userId} (token …${tokens[index]?.slice(-8)}): ${result.error.code} - ${result.error.message}`,
+          );
+          if (INVALID_TOKEN_CODES.has(result.error.code)) {
+            invalidTokens.push(tokens[index]!);
+          }
         }
       });
 
@@ -160,9 +168,11 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
         await removeInvalidTokens(invalidTokens);
       }
     }
-  } catch (error) {
-    if (isDevelopment) {
-      console.warn('[push] Failed to send FCM message', error);
+
+    if (response.successCount > 0 && isDevelopment) {
+      console.log(`[push] Sent to ${response.successCount}/${tokens.length} device(s) for user ${userId}`);
     }
+  } catch (error) {
+    console.warn('[push] Failed to send FCM message', error);
   }
 }
