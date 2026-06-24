@@ -153,12 +153,21 @@ export async function createNotification(input: {
   };
 
   if (preferences[PUSH_CATEGORY_BY_TYPE[input.type]]) {
-    const pushBody = input.preview ? `${message}: ${input.preview}` : message;
+    const avatarUrl = resolveAbsoluteMediaUrl(actor.profilePhotoUrl ?? null);
+    const actionBody = message.startsWith(`${actorSummary.name} `)
+      ? message.slice(actorSummary.name.length + 1)
+      : message;
+    const pushBody = input.preview ? `${actionBody}: ${input.preview}` : actionBody;
+
     await sendPushToUser(input.recipientId, {
       title: actorSummary.name,
       body: pushBody.length > 180 ? `${pushBody.slice(0, 180)}…` : pushBody,
-      imageUrl: resolveAbsoluteMediaUrl(actor.profilePhotoUrl ?? null),
-      subtitle: 'CRAVE',
+      imageUrl: avatarUrl,
+      communication: {
+        conversationId: input.postId ?? input.friendRequestId ?? notification._id.toString(),
+        senderId: actorSummary.id,
+        senderName: actorSummary.name,
+      },
       data: {
         type: input.type,
         postId: input.postId ?? null,
@@ -169,6 +178,7 @@ export async function createNotification(input: {
         actorName: actorSummary.name,
       },
       channelId: 'default',
+      androidTag: input.postId ? `post-${input.postId}` : `notif-${notification._id.toString()}`,
     });
   }
 }

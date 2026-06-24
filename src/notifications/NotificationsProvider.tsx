@@ -17,7 +17,7 @@ import { emitLiveRequest } from '../calls/liveAudioBus';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
 import { playMessageChime } from '../sounds/sounds';
 import { getAccessToken, getStoredUser } from '../storage/authSession';
-import { ensureNotificationChannels, registerForPushNotifications } from './pushNotifications';
+import { ensureNotificationChannels, registerForPushNotifications, setupRemotePushHandlers } from './pushNotifications';
 
 type NotificationsContextValue = {
   unreadCount: number;
@@ -63,6 +63,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [refreshUnreadCount]);
 
   useEffect(() => {
+    setupRemotePushHandlers();
     void ensureNotificationChannels();
     void syncPushNotifications();
   }, [syncPushNotifications]);

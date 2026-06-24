@@ -112,7 +112,8 @@
       [
         "expo-notifications",
         {
-          "color": "#52BAD7"
+          "color": "#52BAD7",
+          "sounds": ["./assets/notification-recived-sount.mp3"]
         }
       ],
       [

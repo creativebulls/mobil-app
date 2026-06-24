@@ -22,5 +22,34 @@ module.exports = ({ config }) => {
     });
   }
 
+  // Telegram-style push (sender avatar + app badge) uses iOS Communication
+  // Notifications via Notifee + a Notification Service Extension.
+  config.plugins = [
+    ...(config.plugins ?? []),
+    './plugins/withNotificationSound.js',
+    [
+      '@evennit/notifee-expo-plugin',
+      {
+        iosDeploymentTarget: '15.1',
+        apsEnvMode: IS_PRODUCTION ? 'production' : 'development',
+        enableCommunicationNotifications: true,
+        appleDevTeamId: '45P2ZV9AZW',
+        backgroundModes: ['remote-notification'],
+      },
+    ],
+  ];
+
+  config.ios = {
+    ...(config.ios ?? {}),
+    entitlements: {
+      ...(config.ios?.entitlements ?? {}),
+      'com.apple.developer.usernotifications.communication': true,
+    },
+    infoPlist: {
+      ...(config.ios?.infoPlist ?? {}),
+      NSUserActivityTypes: ['INSendMessageIntent'],
+    },
+  };
+
   return config;
 };

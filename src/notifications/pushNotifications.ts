@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee, { AndroidImportance } from '@notifee/react-native';
 import {
   getMessaging,
   getToken,
   isDeviceRegisteredForRemoteMessages,
+  onMessage,
   onTokenRefresh,
   registerDeviceForRemoteMessages,
 } from '@react-native-firebase/messaging';
@@ -10,8 +12,10 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 
+import { NOTIFICATION_SOUND_ANDROID } from '../constants/notificationSound';
 import { registerPushToken, removePushToken } from '../api/notificationsApi';
 import { getAccessToken } from '../storage/authSession';
+import { displayNotifeePush } from './displayNotifeePush';
 
 const PUSH_TOKEN_KEY = '@whereabout/fcm_push_token';
 
@@ -34,9 +38,6 @@ Notifications.setNotificationHandler({
     const data = (content.data ?? {}) as Record<string, string>;
 
     if (AppState.currentState === 'active' && data.type === 'incoming_call') {
-      // The in-app call overlay (delivered over the socket) already rings and
-      // shows the caller, so fully suppress the OS notification to avoid a
-      // duplicate ring/heads-up while the app is open.
       return {
         shouldPlaySound: false,
         shouldSetBadge: false,
@@ -46,7 +47,6 @@ Notifications.setNotificationHandler({
     }
 
     if (AppState.currentState === 'active' && IN_APP_BANNER_TYPES.has(data.type)) {
-      // The themed in-app banner handles this; just play the sound + badge.
       return {
         shouldPlaySound: true,
         shouldSetBadge: true,
@@ -69,53 +69,89 @@ async function ensureAndroidChannel(): Promise<void> {
     return;
   }
 
-  await Notifications.setNotificationChannelAsync('default', {
-    name: 'Activity',
-    description: 'Likes, comments, and friend requests',
+  const channelBase = {
     importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
+    vibrationPattern: [0, 250, 250, 250] as [number, number, number, number],
     lightColor: '#52BAD7',
-    sound: 'default',
+    sound: NOTIFICATION_SOUND_ANDROID,
     enableVibrate: true,
     showBadge: true,
+  };
+
+  await Notifications.setNotificationChannelAsync('default', {
+    ...channelBase,
+    name: 'Activity',
+    description: 'Likes, comments, and friend requests',
   });
 
   await Notifications.setNotificationChannelAsync('messages', {
+    ...channelBase,
     name: 'Messages',
     description: 'Direct messages and group chats',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#52BAD7',
-    sound: 'default',
-    enableVibrate: true,
-    showBadge: true,
   });
 
   await Notifications.setNotificationChannelAsync('calls', {
+    ...channelBase,
     name: 'Calls',
     description: 'Incoming and missed voice calls',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#52BAD7',
     sound: 'default',
-    enableVibrate: true,
-    showBadge: true,
   });
 
   await Notifications.setNotificationChannelAsync('live-audio', {
+    ...channelBase,
     name: 'Information sharing',
     description: 'Information sharing requests and active sessions',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#52BAD7',
     sound: 'default',
-    enableVibrate: true,
-    showBadge: true,
   });
 }
 
 export async function ensureNotificationChannels(): Promise<void> {
   await ensureAndroidChannel();
+  await ensureNotifeeSetup();
+}
+
+async function ensureNotifeeSetup(): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+
+  const channelBase = {
+    importance: AndroidImportance.HIGH,
+    sound: NOTIFICATION_SOUND_ANDROID,
+  };
+
+  await notifee.createChannel({ id: 'default', name: 'Activity', ...channelBase });
+  await notifee.createChannel({ id: 'messages', name: 'Messages', ...channelBase });
+  await notifee.createChannel({ id: 'calls', name: 'Calls', importance: AndroidImportance.HIGH });
+  await notifee.createChannel({
+    id: 'live-audio',
+    name: 'Information sharing',
+    importance: AndroidImportance.HIGH,
+  });
+}
+
+let remoteHandlersSubscribed = false;
+
+/** Foreground FCM handler: renders Telegram-style notifications via Notifee. */
+export function setupRemotePushHandlers(): void {
+  if (remoteHandlersSubscribed) {
+    return;
+  }
+  remoteHandlersSubscribed = true;
+
+  onMessage(getMessaging(), async (remoteMessage) => {
+    const raw = remoteMessage.data?.notifee;
+    if (!raw || typeof raw !== 'string') {
+      return;
+    }
+
+    const data = (remoteMessage.data ?? {}) as Record<string, string>;
+    if (AppState.currentState === 'active' && data.type && IN_APP_BANNER_TYPES.has(data.type)) {
+      return;
+    }
+
+    await displayNotifeePush(raw);
+  });
 }
 
 let tokenRefreshSubscribed = false;

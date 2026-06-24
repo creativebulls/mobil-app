@@ -12,11 +12,27 @@
 import '@expo/metro-runtime';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
 import { registerRootComponent } from 'expo';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState, type ComponentType } from 'react';
+import { Platform } from 'react-native';
 
 import { applyBrandColor } from './src/theme/colors';
+import { displayNotifeePush } from './src/notifications/displayNotifeePush';
+
+// Android: Telegram-style pushes arrive as data-only FCM messages with a
+// Notifee JSON blob. Always render through Notifee so MessagingStyle + custom
+// sound are applied consistently (background + killed state).
+if (Platform.OS === 'android') {
+  setBackgroundMessageHandler(getMessaging(), async (remoteMessage) => {
+    const raw = remoteMessage.data?.notifee;
+    if (!raw || typeof raw !== 'string') {
+      return;
+    }
+    await displayNotifeePush(raw);
+  });
+}
 
 // Keep the native splash up until we've applied the colour and mounted the app.
 SplashScreen.preventAutoHideAsync().catch(() => undefined);

@@ -290,7 +290,11 @@ async function deliverToConversation(
       title,
       body: body.length > 140 ? `${body.slice(0, 140)}…` : body,
       imageUrl: resolveAbsoluteMediaUrl(serialized.senderAvatar),
-      subtitle: conversation.isGroup ? senderName : null,
+      communication: {
+        conversationId: conversation._id.toString(),
+        senderId,
+        senderName,
+      },
       data: {
         type: 'message',
         conversationId: conversation._id.toString(),

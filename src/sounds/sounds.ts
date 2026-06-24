@@ -3,7 +3,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-aud
 // Static requires so Metro bundles the audio assets into the app.
 const ringbackSource = require('../../assets/sounds/diler-end.mp3');
 const incomingRingSource = require('../../assets/sounds/reciver-end.mp3');
-const messageSource = require('../../assets/sounds/msgrecived.mp3');
+const messageSource = require('../../assets/notification-recived-sount.mp3');
 
 let ringbackPlayer: AudioPlayer | null = null;
 let incomingPlayer: AudioPlayer | null = null;
