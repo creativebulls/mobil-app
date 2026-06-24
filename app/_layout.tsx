@@ -25,7 +25,6 @@ SplashScreen.preventAutoHideAsync().catch(() => undefined);
 const PUBLIC_ROUTES = [
   '/',
   '/welcome',
-  '/onboarding',
   '/sign-in',
   '/sign-up',
   '/check-email',
@@ -114,7 +113,6 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="welcome" options={{ gestureEnabled: false }} />
-              <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
               <Stack.Screen name="sign-in" options={{ gestureEnabled: false }} />
               <Stack.Screen name="sign-up" />
               <Stack.Screen name="check-email" />

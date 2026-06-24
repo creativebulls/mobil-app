@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -839,6 +840,10 @@ export default function ChatScreen() {
   return (
     <>
       <StackScreenLayout edges={TAB_SCREEN_EDGES} style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
         {selectionMode ? (
           <View style={styles.header}>
             <Pressable onPress={exitSelection} hitSlop={8}>
@@ -1097,6 +1102,7 @@ export default function ChatScreen() {
             )}
           </View>
         </View>
+        </KeyboardAvoidingView>
       </StackScreenLayout>
       <MediaViewerModal media={viewerMedia} onClose={() => setViewerMedia(null)} />
       <ForwardMessageModal

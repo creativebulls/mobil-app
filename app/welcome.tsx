@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlossyButton } from '../src/components/GlossyButton';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
 import { useAppText } from '../src/config/ConfigProvider';
-import { markOnboardingCompleted } from '../src/storage/onboarding';
 import { markWelcomeCompleted } from '../src/storage/welcome';
 import { colors } from '../src/theme/colors';
 
@@ -90,7 +89,6 @@ export default function WelcomeScreen() {
 
     try {
       await markWelcomeCompleted();
-      await markOnboardingCompleted();
     } catch {
       // Navigation should still work even if persistence fails.
     }

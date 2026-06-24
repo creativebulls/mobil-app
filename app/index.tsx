@@ -6,7 +6,6 @@ import { fetchCurrentUser } from '../src/api/authApi';
 import { ApiError } from '../src/api/types';
 import { AppSplashScreen } from '../src/components/AppSplashScreen';
 import { getAccessToken, getRefreshToken, getStoredUser, updateStoredUser } from '../src/storage/authSession';
-import { isOnboardingCompleted } from '../src/storage/onboarding';
 import { isWelcomeCompleted } from '../src/storage/welcome';
 
 const SPLASH_MIN_DURATION_MS = 3000;
@@ -62,17 +61,12 @@ export default function Index() {
     async function run() {
       const startTime = Date.now();
 
-      const [welcomeDone, onboardingDone] = await Promise.all([
-        isWelcomeCompleted(),
-        isOnboardingCompleted(),
-      ]);
+      const welcomeDone = await isWelcomeCompleted();
 
-      let destination: '/welcome' | '/onboarding' | SessionRoute;
+      let destination: '/welcome' | SessionRoute;
 
       if (!welcomeDone) {
         destination = '/welcome';
-      } else if (!onboardingDone) {
-        destination = '/onboarding';
       } else {
         destination = await resolveActiveSessionRoute();
       }
