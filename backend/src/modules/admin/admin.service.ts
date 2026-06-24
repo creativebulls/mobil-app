@@ -451,6 +451,11 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   maintenance_message: '',
   min_supported_version: '1.0.0',
 
+  // Theme
+  // Brand / accent colour used for buttons, links and gradients across the app.
+  // Must be a 6-digit hex string (e.g. #52BAD7). Takes effect on next app launch.
+  'theme.brand_color': '#52BAD7',
+
   // Links (URLs)
   terms_url: 'https://whereabout.app/terms',
   privacy_url: 'https://whereabout.app/privacy',
