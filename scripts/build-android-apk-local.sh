@@ -5,10 +5,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
 export EXPO_PUBLIC_API_URL="${EXPO_PUBLIC_API_URL:-https://mobilevps.tech}"
 export APP_VARIANT=production
+export EAS_BUILD_PROFILE=production
 
 echo "Building release APK"
 echo "  API: $EXPO_PUBLIC_API_URL"
 echo "  JAVA_HOME: $JAVA_HOME"
+
+cd "$ROOT"
+if [[ ! -d "$ROOT/android" ]] || [[ "${PREBUILD_CLEAN:-1}" == "1" ]]; then
+  echo "Generating native Android project (expo prebuild)..."
+  CI=1 npx expo prebuild --platform android --clean
+fi
 
 # Gradle 9 cannot resolve org.jitsi:webrtc:124.+; pin to the latest release.
 WEBRTC_GRADLE="$ROOT/node_modules/react-native-webrtc/android/build.gradle"

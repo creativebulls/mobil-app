@@ -1,15 +1,15 @@
 /**
  * Copies the custom notification sound into native projects on prebuild.
  * - Android: res/raw/notification_recived_sount.mp3
- * - iOS: {AppName}/notification-recived-sount.mp3 (bundle resource for APNs)
+ * - iOS: {AppName}/notification_recived_sount.mp3 (bundle resource for APNs)
  */
 const { withDangerousMod, IOSConfig } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
-const SOURCE = path.join('assets', 'notification-recived-sount.mp3');
+const SOURCE = path.join('assets', 'notification_recived_sount.mp3');
 const ANDROID_NAME = 'notification_recived_sount.mp3';
-const IOS_NAME = 'notification-recived-sount.mp3';
+const IOS_NAME = 'notification_recived_sount.mp3';
 
 function copySound(projectRoot, destination) {
   const sourcePath = path.join(projectRoot, SOURCE);

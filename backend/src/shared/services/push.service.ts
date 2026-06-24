@@ -37,7 +37,7 @@ export type PushPayload = {
 };
 
 const COMMUNICATION_CATEGORY_ID = 'communication';
-const NOTIFICATION_SOUND_IOS = 'notification-recived-sount.mp3';
+const NOTIFICATION_SOUND_IOS = 'notification_recived_sount.mp3';
 const NOTIFICATION_SOUND_ANDROID = 'notification_recived_sount';
 /** Notifee `AndroidStyle.MESSAGING` enum value. */
 const ANDROID_STYLE_MESSAGING = 1;
