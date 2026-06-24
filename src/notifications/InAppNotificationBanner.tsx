@@ -5,7 +5,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ChatMessage } from '../api/types';
-import { Avatar } from '../components/Avatar';
+import { NotificationAvatarWithBadge } from '../components/NotificationAvatarWithBadge';
 import { getStoredUser } from '../storage/authSession';
 import { colors } from '../theme/colors';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
@@ -216,10 +216,11 @@ export function InAppNotificationBanner() {
         accessibilityRole="button"
       >
         <View style={styles.avatarWrap}>
-          <Avatar uri={banner.avatarUri} name={banner.avatarName} size={46} />
-          <View style={styles.iconBadge}>
-            <Ionicons name={banner.icon} size={12} color={colors.white} />
-          </View>
+          <NotificationAvatarWithBadge
+            uri={banner.avatarUri}
+            name={banner.avatarName}
+            size={46}
+          />
         </View>
         <View style={styles.textWrap}>
           <Text style={styles.title} numberOfLines={1}>
@@ -267,21 +268,8 @@ const styles = StyleSheet.create({
     opacity: 0.92,
   },
   avatarWrap: {
-    width: 46,
-    height: 46,
-  },
-  iconBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brand,
-    borderWidth: 2,
-    borderColor: colors.white,
+    width: 50,
+    height: 50,
   },
   textWrap: {
     flex: 1,

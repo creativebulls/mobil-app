@@ -40,8 +40,6 @@ export type PushPayload = {
 const COMMUNICATION_CATEGORY_ID = 'communication';
 const NOTIFICATION_SOUND_IOS = 'notification_recived_sount.mp3';
 const NOTIFICATION_SOUND_ANDROID = 'notification_recived_sount';
-/** Notifee `AndroidStyle.MESSAGING` enum value. */
-const ANDROID_STYLE_MESSAGING = 1;
 
 // FCM error codes that mean a token is permanently invalid and should be purged.
 const INVALID_TOKEN_CODES = new Set([
@@ -128,27 +126,16 @@ function buildNotifeeOptions(
   }
 
   if (useTelegramStyle && communication) {
-    const person = {
-      name: communication.senderName,
-      ...(androidLargeIcon ? { icon: androidLargeIcon } : {}),
-    };
-    android.style = {
-      type: ANDROID_STYLE_MESSAGING,
-      person,
-      messages: [
-        {
-          text: payload.body,
-          timestamp: Date.now(),
-          person,
-        },
-      ],
-    };
+    // Messenger-style layout: composited avatar (profile + app badge) as the icon,
+    // sender name as title, message as body. Avoid MessagingStyle so the badged
+    // avatar stays visible in the collapsed notification tray.
+    android.category = 'msg';
+    android.showTimestamp = true;
   }
 
   return {
     title: payload.title,
     body: payload.body,
-    ...(iosAvatar ? { image: iosAvatar } : {}),
     ios,
     android,
   };

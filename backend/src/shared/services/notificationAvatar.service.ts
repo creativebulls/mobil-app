@@ -7,10 +7,15 @@ import sharp from 'sharp';
 import { env, uploadsRoot } from '../../config/env';
 import { resolveAbsoluteMediaUrl } from '../utils/mediaUrl';
 
+/** Bump when badge artwork/layout changes so cached PNGs regenerate. */
+const BADGE_LAYOUT_VERSION = 'v2';
+
 const AVATAR_SIZE = 256;
-const BADGE_SIZE = 64;
-const BADGE_ICON_SIZE = 36;
-const BADGE_OFFSET = 8;
+const BADGE_SIZE = 58;
+const BADGE_ICON_SIZE = 34;
+const BADGE_RADIUS = 14;
+/** How far the badge overlaps the avatar circle at the bottom-right corner. */
+const BADGE_OVERLAP = 12;
 const BRAND_RGB = { r: 82, g: 186, b: 215 };
 
 const BADGE_ASSET = path.join(__dirname, '../../assets/notification-app-badge.png');
@@ -27,9 +32,18 @@ function circleMaskSvg(size: number): Buffer {
   );
 }
 
+function roundedRectMaskSvg(width: number, height: number, radius: number): Buffer {
+  return Buffer.from(
+    `<svg width="${width}" height="${height}"><rect width="${width}" height="${height}" rx="${radius}" ry="${radius}" fill="#fff"/></svg>`,
+  );
+}
+
 async function buildBadgeLayer(): Promise<Buffer> {
   const icon = await sharp(BADGE_ASSET)
-    .resize(BADGE_ICON_SIZE, BADGE_ICON_SIZE, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(BADGE_ICON_SIZE, BADGE_ICON_SIZE, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png()
     .toBuffer();
 
@@ -58,13 +72,20 @@ async function buildBadgeLayer(): Promise<Buffer> {
 
   return sharp(ring)
     .resize(BADGE_SIZE, BADGE_SIZE)
-    .composite([{ input: circleMaskSvg(BADGE_SIZE), blend: 'dest-in' }])
+    .composite([{ input: roundedRectMaskSvg(BADGE_SIZE, BADGE_SIZE, BADGE_RADIUS), blend: 'dest-in' }])
     .png()
     .toBuffer();
 }
 
+function badgePosition(): { top: number; left: number } {
+  return {
+    top: AVATAR_SIZE - BADGE_SIZE + BADGE_OVERLAP,
+    left: AVATAR_SIZE - BADGE_SIZE + BADGE_OVERLAP,
+  };
+}
+
 async function buildDefaultBadgedIcon(): Promise<string> {
-  const filename = 'default-app-icon.png';
+  const filename = `${BADGE_LAYOUT_VERSION}-default-app-icon.png`;
   const outPath = path.join(OUTPUT_DIR, filename);
   const cachedUrl = publicAvatarUrl(filename);
 
@@ -77,26 +98,17 @@ async function buildDefaultBadgedIcon(): Promise<string> {
 
   await fs.mkdir(OUTPUT_DIR, { recursive: true });
   const badge = await buildBadgeLayer();
-  const padded = await sharp(badge)
-    .extend({
-      top: AVATAR_SIZE - BADGE_SIZE - BADGE_OFFSET,
-      bottom: BADGE_OFFSET,
-      left: AVATAR_SIZE - BADGE_SIZE - BADGE_OFFSET,
-      right: BADGE_OFFSET,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png()
-    .toBuffer();
+  const { top, left } = badgePosition();
 
   await sharp({
     create: {
       width: AVATAR_SIZE,
       height: AVATAR_SIZE,
       channels: 4,
-      background: { r: 240, g: 244, b: 248, alpha: 1 },
+      background: { r: 228, g: 236, b: 242, alpha: 1 },
     },
   })
-    .composite([{ input: padded, gravity: 'south-east' }])
+    .composite([{ input: badge, top, left }])
     .png()
     .toFile(outPath);
 
@@ -105,7 +117,7 @@ async function buildDefaultBadgedIcon(): Promise<string> {
 
 /**
  * Builds a circular profile photo with the CRAVE app badge at the bottom-right,
- * like Telegram / the in-app notification banner. Cached on disk by avatar URL.
+ * matching the messenger-style notification mock (rounded avatar + corner logo).
  */
 export async function buildBadgedNotificationAvatar(
   avatarUrl: string | null | undefined,
@@ -115,8 +127,12 @@ export async function buildBadgedNotificationAvatar(
     return buildDefaultBadgedIcon();
   }
 
-  const hash = crypto.createHash('sha256').update(absolute).digest('hex').slice(0, 20);
-  const filename = `${hash}.png`;
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${BADGE_LAYOUT_VERSION}:${absolute}`)
+    .digest('hex')
+    .slice(0, 20);
+  const filename = `${BADGE_LAYOUT_VERSION}-${hash}.png`;
   const outPath = path.join(OUTPUT_DIR, filename);
   const cachedUrl = publicAvatarUrl(filename);
 
@@ -143,18 +159,13 @@ export async function buildBadgedNotificationAvatar(
       .toBuffer();
 
     const badge = await buildBadgeLayer();
-    const composed = await sharp(avatarCircle)
-      .composite([
-        {
-          input: badge,
-          top: AVATAR_SIZE - BADGE_SIZE - BADGE_OFFSET,
-          left: AVATAR_SIZE - BADGE_SIZE - BADGE_OFFSET,
-        },
-      ])
+    const { top, left } = badgePosition();
+
+    await sharp(avatarCircle)
+      .composite([{ input: badge, top, left }])
       .png()
       .toFile(outPath);
 
-    void composed;
     return cachedUrl;
   } catch {
     return absolute;
