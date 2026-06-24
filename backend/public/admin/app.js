@@ -372,14 +372,22 @@ function renderConfigList() {
     return;
   }
   list.innerHTML = configEntries
-    .map(
-      (entry, index) => `
+    .map((entry, index) => {
+      const isColor =
+        /colou?r/i.test(entry.key) && /^#?[0-9a-fA-F]{6}$/.test((entry.value || '').trim());
+      const colorSwatch = isColor
+        ? `<input class="config-color" type="color" value="#${(entry.value || '')
+            .replace('#', '')
+            .toLowerCase()}" data-index="${index}" title="Pick colour" oninput="this.closest('.config-row').querySelector('.config-value').value = this.value.toUpperCase()" />`
+        : '';
+      return `
       <div class="config-row" data-index="${index}">
         <input class="input config-key" type="text" placeholder="key" value="${escapeAttr(entry.key)}" data-index="${index}" />
+        ${colorSwatch}
         <textarea class="input config-value" rows="1" placeholder="value" data-index="${index}">${escapeHtml(entry.value)}</textarea>
         <button type="button" class="btn btn-destructive btn-sm config-remove" data-index="${index}" aria-label="Remove">✕</button>
-      </div>`,
-    )
+      </div>`;
+    })
     .join('');
 }
 

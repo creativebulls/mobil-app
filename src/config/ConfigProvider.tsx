@@ -26,6 +26,9 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   maintenance_message: '',
   min_supported_version: '1.0.0',
 
+  // Brand / accent colour (hex). Applied at startup from cache; see index.js.
+  'theme.brand_color': '#52BAD7',
+
   terms_url: 'https://whereabout.app/terms',
   privacy_url: 'https://whereabout.app/privacy',
   help_url: 'https://whereabout.app/help',
