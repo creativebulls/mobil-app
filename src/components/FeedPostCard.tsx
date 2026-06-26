@@ -14,11 +14,14 @@ import {
 
 import type { Post, PostReaction } from '../api/types';
 import { toggleLike as toggleLikeRequest, deletePost as deletePostRequest } from '../api/postsApi';
+import { useFeedVideoPlayback } from '../feed/FeedVideoPlaybackContext';
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
 import { PostImageViewer } from './PostImageViewer';
+import { PostLikesPreview } from './PostLikesPreview';
 import { PostLikersModal } from './PostLikersModal';
-import { PostVideoModal, PostVideoTile, isVideoUrl } from './PostVideo';
+import { FeedPostVideoPlayer, PostVideoModal, isVideoUrl } from './PostVideo';
+import { FeedVideoViewportAnchor } from '../feed/FeedVideoPlaybackContext';
 import { getVideoPosterForUri } from '../utils/postMedia';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
@@ -26,8 +29,9 @@ import { colors } from '../theme/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TEXT_PREVIEW_LENGTH = 120;
-const CAROUSEL_WIDTH = SCREEN_WIDTH - 40;
-const CAROUSEL_HEIGHT = CAROUSEL_WIDTH * 0.62;
+const POST_HORIZONTAL_PADDING = 12;
+const MEDIA_WIDTH = SCREEN_WIDTH;
+const MEDIA_HEIGHT = MEDIA_WIDTH; // 1:1 — classic Instagram feed square
 
 type FeedPostCardProps = {
   post: Post;
@@ -38,6 +42,10 @@ type FeedPostCardProps = {
   onCommentPress?: (post: Post) => void;
   onSharePress?: (post: Post) => void;
   onAuthorPress?: (authorId: string) => void;
+  /** Enables scroll-driven autoplay for in-feed videos. */
+  enableVideoAutoplay?: boolean;
+  /** Light gray section bg for posts linked to a place (home feed). */
+  placePostTheme?: boolean;
 };
 
 const REACTION_META: Record<
@@ -65,10 +73,15 @@ export function FeedPostCard({
   onCommentPress,
   onSharePress,
   onAuthorPress,
+  enableVideoAutoplay = false,
+  placePostTheme = false,
 }: FeedPostCardProps) {
+  const { requestEvaluate } = useFeedVideoPlayback();
+  const isPlaceTheme = placePostTheme && post.place != null;
   const [isExpanded, setIsExpanded] = useState(false);
   const [likedByMe, setLikedByMe] = useState(post.likedByMe);
   const [likesCount, setLikesCount] = useState(post.likesCount);
+  const [recentLikers, setRecentLikers] = useState(post.recentLikers ?? []);
   const [isLiking, setIsLiking] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -109,6 +122,7 @@ export function FeedPostCard({
       const updated = await toggleLikeRequest(post.id);
       setLikedByMe(updated.likedByMe);
       setLikesCount(updated.likesCount);
+      setRecentLikers(updated.recentLikers ?? []);
       onChanged?.(updated);
     } catch {
       setLikedByMe(previousLiked);
@@ -192,8 +206,31 @@ export function FeedPostCard({
   }
 
   function handleImageScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(event.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    const index = Math.round(event.nativeEvent.contentOffset.x / MEDIA_WIDTH);
     setActiveImageIndex(index);
+    if (enableVideoAutoplay) {
+      requestEvaluate();
+    }
+  }
+
+  function renderFeedVideo(uri: string, mediaIndex: number, mediaStyle: typeof styles.postMedia) {
+    const videoId = `${post.id}:${mediaIndex}`;
+    const player = (
+      <FeedPostVideoPlayer
+        uri={uri}
+        posterUri={getVideoPosterForUri(postImages, post.videoPosterUris, uri)}
+        style={mediaStyle}
+        videoId={enableVideoAutoplay ? videoId : undefined}
+        forcePaused={videoViewerUri !== null}
+        onFullscreen={() => openMedia(uri)}
+      />
+    );
+
+    if (!enableVideoAutoplay) {
+      return player;
+    }
+
+    return <FeedVideoViewportAnchor videoId={videoId}>{player}</FeedVideoViewportAnchor>;
   }
 
   function openViewer(index: number) {
@@ -230,7 +267,7 @@ export function FeedPostCard({
   ];
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isPlaceTheme && styles.cardPlaceThemed]}>
       <View style={styles.userRow}>
         <Pressable
           onPress={() => onAuthorPress?.(post.author.id)}
@@ -239,7 +276,7 @@ export function FeedPostCard({
           accessibilityRole={onAuthorPress ? 'button' : undefined}
           accessibilityLabel={onAuthorPress ? `View ${post.author.name}'s profile` : undefined}
         >
-          <Avatar uri={post.author.avatarUri} name={post.author.name} size={44} />
+          <Avatar uri={post.author.avatarUri} name={post.author.name} size={36} />
         </Pressable>
 
         <Pressable
@@ -282,110 +319,83 @@ export function FeedPostCard({
         onClose={() => setMenuVisible(false)}
       />
 
-      <View style={styles.postBody}>
-        {post.place ? (
-          <View style={styles.placeRow}>
-            <Avatar uri={post.place.logoUri} name={post.place.name} size={40} style={styles.placeLogo} />
+      <View style={isPlaceTheme ? styles.placePostSection : undefined}>
+      {post.place ? (
+        <View style={styles.placeRow}>
+          <Avatar uri={post.place.logoUri} name={post.place.name} size={32} style={styles.placeLogo} />
 
-            <View style={styles.placeText}>
-              <Text style={styles.placeName} numberOfLines={1} ellipsizeMode="tail">
-                {post.place.name}
-              </Text>
-              {distance ? (
-                <Text style={styles.placeDistance} numberOfLines={1} ellipsizeMode="tail">
-                  {distance}
-                </Text>
-              ) : null}
-            </View>
-
-            <Pressable
-              onPress={() => onSharePress?.(post)}
-              style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Share post"
-            >
-              <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-        ) : null}
-
-        {postImages.length === 1 ? (
-          isVideoUrl(postImages[0]) ? (
-            <PostVideoTile
-              uri={postImages[0]}
-              posterUri={getVideoPosterForUri(postImages, post.videoPosterUris, postImages[0])}
-              style={styles.postImage}
-              onPress={() => openMedia(postImages[0])}
-            />
-          ) : (
-            <Pressable onPress={() => openMedia(postImages[0])} accessibilityRole="imagebutton">
-              <MediaImage uri={postImages[0]} style={styles.postImage} resizeMode="cover" />
-            </Pressable>
-          )
-        ) : postImages.length > 1 ? (
-          <View style={styles.carouselWrap}>
-            <FlatList
-              data={postImages}
-              keyExtractor={(uri, index) => `${uri}-${index}`}
-              horizontal
-              pagingEnabled
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              bounces={false}
-              decelerationRate="fast"
-              snapToInterval={CAROUSEL_WIDTH}
-              snapToAlignment="start"
-              onMomentumScrollEnd={handleImageScrollEnd}
-              getItemLayout={(_, index) => ({
-                length: CAROUSEL_WIDTH,
-                offset: CAROUSEL_WIDTH * index,
-                index,
-              })}
-              renderItem={({ item }) =>
-                isVideoUrl(item) ? (
-                  <PostVideoTile
-                    uri={item}
-                    posterUri={getVideoPosterForUri(postImages, post.videoPosterUris, item)}
-                    style={styles.carouselImage}
-                    onPress={() => openMedia(item)}
-                  />
-                ) : (
-                  <Pressable onPress={() => openMedia(item)} accessibilityRole="imagebutton">
-                    <MediaImage uri={item} style={styles.carouselImage} resizeMode="cover" />
-                  </Pressable>
-                )
-              }
-            />
-
-            <View style={styles.carouselDots}>
-              {postImages.map((uri, index) => (
-                <View
-                  key={`${uri}-dot-${index}`}
-                  style={[styles.carouselDot, index === activeImageIndex && styles.carouselDotActive]}
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {post.text ? (
-          <View style={styles.textBlock}>
-            <Text
-              style={styles.postText}
-              numberOfLines={isExpanded ? undefined : 3}
-              ellipsizeMode="tail"
-            >
-              {post.text}
+          <View style={styles.placeText}>
+            <Text style={styles.placeName} numberOfLines={1} ellipsizeMode="tail">
+              {post.place.name}
             </Text>
-
-            {showReadMore && !isExpanded ? (
-              <Pressable onPress={() => setIsExpanded(true)} accessibilityRole="button">
-                <Text style={styles.readMore}>Read more</Text>
-              </Pressable>
+            {distance ? (
+              <Text style={styles.placeDistance} numberOfLines={1} ellipsizeMode="tail">
+                {distance}
+              </Text>
             ) : null}
           </View>
-        ) : null}
 
+          <Pressable
+            onPress={() => onSharePress?.(post)}
+            style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Share post"
+          >
+            <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {postImages.length === 1 ? (
+        isVideoUrl(postImages[0]) ? (
+          renderFeedVideo(postImages[0], 0, styles.postMedia)
+        ) : (
+          <Pressable onPress={() => openMedia(postImages[0])} accessibilityRole="imagebutton">
+            <MediaImage uri={postImages[0]} style={styles.postMedia} resizeMode="cover" />
+          </Pressable>
+        )
+      ) : postImages.length > 1 ? (
+        <View style={styles.carouselWrap}>
+          <FlatList
+            data={postImages}
+            keyExtractor={(uri, index) => `${uri}-${index}`}
+            horizontal
+            pagingEnabled
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            decelerationRate="fast"
+            snapToInterval={MEDIA_WIDTH}
+            snapToAlignment="start"
+            onMomentumScrollEnd={handleImageScrollEnd}
+            getItemLayout={(_, index) => ({
+              length: MEDIA_WIDTH,
+              offset: MEDIA_WIDTH * index,
+              index,
+            })}
+            renderItem={({ item, index }) =>
+              isVideoUrl(item) ? (
+                renderFeedVideo(item, index, styles.carouselMedia)
+              ) : (
+                <Pressable onPress={() => openMedia(item)} accessibilityRole="imagebutton">
+                  <MediaImage uri={item} style={styles.carouselMedia} resizeMode="cover" />
+                </Pressable>
+              )
+            }
+          />
+
+          <View style={styles.carouselDots}>
+            {postImages.map((uri, index) => (
+              <View
+                key={`${uri}-dot-${index}`}
+                style={[styles.carouselDot, index === activeImageIndex && styles.carouselDotActive]}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.contentBlock}>
         <View style={styles.footerRow}>
           <View style={styles.footerAction}>
             <Pressable
@@ -397,40 +407,72 @@ export function FeedPostCard({
             >
               <Ionicons
                 name={likedByMe ? 'heart' : 'heart-outline'}
-                size={18}
-                color={likedByMe ? colors.brand : colors.textSecondary}
+                size={24}
+                color={likedByMe ? colors.brand : colors.text}
               />
             </Pressable>
             <Pressable
-              onPress={() => {
-                if (likesCount > 0) {
-                  setLikersVisible(true);
-                }
-              }}
-              disabled={likesCount === 0}
-              style={({ pressed }) => pressed && styles.iconPressed}
+              onPress={() => onCommentPress?.(post)}
+              style={({ pressed }) => [styles.footerAction, pressed && styles.iconPressed]}
               accessibilityRole="button"
-              accessibilityLabel={`View ${likesCount} likes`}
+              accessibilityLabel={`${post.commentsCount} comments`}
               hitSlop={8}
             >
-              <Text style={[styles.footerText, likedByMe && styles.footerTextActive]}>
-                {likesCount} {likesCount === 1 ? 'Like' : 'Likes'}
-              </Text>
+              <Ionicons name="chatbubble-outline" size={22} color={colors.text} />
             </Pressable>
           </View>
 
           <Pressable
-            onPress={() => onCommentPress?.(post)}
-            style={({ pressed }) => [styles.footerAction, pressed && styles.iconPressed]}
+            onPress={handleShare}
+            style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
             accessibilityRole="button"
-            accessibilityLabel={`${post.commentsCount} comments`}
+            accessibilityLabel="Share post"
+            hitSlop={8}
           >
-            <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
-            <Text style={styles.footerText}>
-              {post.commentsCount} {post.commentsCount === 1 ? 'Comment' : 'Comments'}
-            </Text>
+            <Ionicons name="paper-plane-outline" size={22} color={colors.text} />
           </Pressable>
         </View>
+
+        {likesCount > 0 ? (
+          <PostLikesPreview
+            likesCount={likesCount}
+            recentLikers={recentLikers}
+            onPress={() => setLikersVisible(true)}
+          />
+        ) : null}
+
+        {post.text ? (
+          <View style={styles.textBlock}>
+            <Text
+              style={styles.postText}
+              numberOfLines={isExpanded ? undefined : 3}
+              ellipsizeMode="tail"
+            >
+              <Text style={styles.captionAuthor}>{post.author.name} </Text>
+              {post.text}
+            </Text>
+
+            {showReadMore && !isExpanded ? (
+              <Pressable onPress={() => setIsExpanded(true)} accessibilityRole="button">
+                <Text style={styles.readMore}>more</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {post.commentsCount > 0 ? (
+          <Pressable
+            onPress={() => onCommentPress?.(post)}
+            style={({ pressed }) => pressed && styles.iconPressed}
+            accessibilityRole="button"
+            accessibilityLabel={`View all ${post.commentsCount} comments`}
+          >
+            <Text style={styles.viewComments}>
+              View all {post.commentsCount} {post.commentsCount === 1 ? 'comment' : 'comments'}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
       </View>
 
       {viewerVisible ? (
@@ -466,147 +508,152 @@ export function FeedPostCard({
 
 const styles = StyleSheet.create({
   card: {
-    gap: 14,
-    paddingBottom: 20,
+    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  cardPlaceThemed: {
+    paddingBottom: 0,
+  },
+  placePostSection: {
+    backgroundColor: colors.surfaceMuted,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.surfaceMutedBorder,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: POST_HORIZONTAL_PADDING,
+    paddingVertical: 10,
+    gap: 10,
   },
   authorTap: {
-    borderRadius: 22,
+    borderRadius: 18,
   },
   userText: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   userName: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.text,
   },
   postedAgo: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '400',
     color: colors.textSecondary,
   },
   menuButton: {
     padding: 4,
   },
-  postBody: {
-    marginHorizontal: 20,
-    backgroundColor: colors.inputGray,
-    borderRadius: 14,
-    overflow: 'hidden',
-    gap: 12,
-    paddingBottom: 14,
-  },
   placeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingTop: 14,
+    gap: 10,
+    paddingHorizontal: POST_HORIZONTAL_PADDING,
+    paddingBottom: 8,
+    paddingTop: 2,
   },
   placeLogo: {
-    borderRadius: 10,
-    backgroundColor: colors.white,
+    borderRadius: 8,
+    backgroundColor: colors.inputGray,
   },
   placeText: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   placeName: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.text,
   },
   placeDistance: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '400',
     color: colors.textSecondary,
   },
   actionIcon: {
     padding: 4,
   },
-  postImage: {
-    width: '100%',
-    height: CAROUSEL_HEIGHT,
-    backgroundColor: colors.white,
+  postMedia: {
+    width: MEDIA_WIDTH,
+    height: MEDIA_HEIGHT,
+    backgroundColor: colors.inputGray,
   },
   carouselWrap: {
-    gap: 8,
+    position: 'relative',
   },
-  carouselImage: {
-    width: CAROUSEL_WIDTH,
-    height: CAROUSEL_HEIGHT,
+  carouselMedia: {
+    width: MEDIA_WIDTH,
+    height: MEDIA_HEIGHT,
     backgroundColor: colors.inputGray,
   },
   carouselDots: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingBottom: 2,
+    gap: 5,
   },
   carouselDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   carouselDotActive: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.white,
+  },
+  contentBlock: {
+    paddingHorizontal: POST_HORIZONTAL_PADDING,
+    paddingTop: 8,
+    gap: 6,
   },
   textBlock: {
-    paddingHorizontal: 14,
-    gap: 6,
+    gap: 2,
   },
   postText: {
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 20,
     color: colors.text,
+  },
+  captionAuthor: {
+    fontWeight: '700',
   },
   readMore: {
     fontSize: 14,
-    fontWeight: '700',
-    color: colors.brand,
+    fontWeight: '400',
+    color: colors.textSecondary,
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 2,
   },
   footerAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 16,
   },
   likeIcon: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  footerText: {
-    fontSize: 13,
-    fontWeight: '700',
+  viewComments: {
+    fontSize: 14,
     color: colors.textSecondary,
   },
-  footerTextActive: {
-    color: colors.brand,
-  },
   reactionPhrase: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
   },

@@ -110,6 +110,38 @@ export default function CreatePostScreen() {
   const MAX_IMAGES = 6;
   const canPost = (text.trim().length > 0 || media.length > 0) && !isSubmitting;
 
+  async function handlePickVideo() {
+    if (media.length >= MAX_IMAGES) {
+      await dialog.alert({
+        title: 'Limit reached',
+        message: `You can add up to ${MAX_IMAGES} items.`,
+      });
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      await dialog.alert({
+        title: 'Permission required',
+        message: 'Please allow photo access to add videos.',
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_IMAGES - media.length,
+      videoMaxDuration: 60,
+      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
+    });
+
+    if (!result.canceled) {
+      const picked = await Promise.all(result.assets.map(assetToMediaItem));
+      setMedia((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
+    }
+  }
+
   async function handlePickImage() {
     if (media.length >= MAX_IMAGES) {
       await dialog.alert({
@@ -271,10 +303,19 @@ export default function CreatePostScreen() {
                       onPress={handlePickImage}
                       style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
                       accessibilityRole="button"
-                      accessibilityLabel="Add from gallery"
+                      accessibilityLabel="Add photo from gallery"
                     >
                       <Ionicons name="images" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Gallery</Text>
+                      <Text style={styles.addTileText}>Photos</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void handlePickVideo()}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add video from gallery"
+                    >
+                      <Ionicons name="videocam" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Video</Text>
                     </Pressable>
                   </View>
                 ) : (
@@ -306,7 +347,18 @@ export default function CreatePostScreen() {
                         accessibilityLabel="Add from gallery"
                       >
                         <Ionicons name="images" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Gallery</Text>
+                        <Text style={styles.addTileText}>Photos</Text>
+                      </Pressable>
+                    ) : null}
+                    {media.length < MAX_IMAGES ? (
+                      <Pressable
+                        onPress={() => void handlePickVideo()}
+                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add video from gallery"
+                      >
+                        <Ionicons name="videocam" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Video</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -360,8 +412,72 @@ export default function CreatePostScreen() {
                         onRemove={() => removeMedia(item.uri)}
                       />
                     ))}
+
+                    {media.length < MAX_IMAGES ? (
+                      <Pressable
+                        onPress={() => void handleCaptureMedia()}
+                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Capture photo or video"
+                      >
+                        <Ionicons name="camera" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Camera</Text>
+                      </Pressable>
+                    ) : null}
+                    {media.length < MAX_IMAGES ? (
+                      <Pressable
+                        onPress={handlePickImage}
+                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add photo from gallery"
+                      >
+                        <Ionicons name="images" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Photos</Text>
+                      </Pressable>
+                    ) : null}
+                    {media.length < MAX_IMAGES ? (
+                      <Pressable
+                        onPress={() => void handlePickVideo()}
+                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add video from gallery"
+                      >
+                        <Ionicons name="videocam" size={24} color={colors.brand} />
+                        <Text style={styles.addTileText}>Video</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                ) : null}
+                ) : (
+                  <View style={styles.emptyMediaRow}>
+                    <Pressable
+                      onPress={() => void handleCaptureMedia()}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Capture photo or video"
+                    >
+                      <Ionicons name="camera" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Camera</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handlePickImage}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add photo from gallery"
+                    >
+                      <Ionicons name="images" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Photos</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void handlePickVideo()}
+                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add video from gallery"
+                    >
+                      <Ionicons name="videocam" size={30} color={colors.brand} />
+                      <Text style={styles.addTileText}>Video</Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 <View style={styles.placeRow}>
                   <Ionicons name="location-outline" size={20} color={colors.brand} />
@@ -398,10 +514,19 @@ export default function CreatePostScreen() {
                   onPress={handlePickImage}
                   style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
                   accessibilityRole="button"
-                  accessibilityLabel="Add photo or video"
+                  accessibilityLabel="Add photo"
                 >
                   <Ionicons name="image-outline" size={24} color={colors.brand} />
-                  <Text style={styles.toolbarLabel}>Gallery</Text>
+                  <Text style={styles.toolbarLabel}>Photos</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handlePickVideo()}
+                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add video"
+                >
+                  <Ionicons name="videocam-outline" size={24} color={colors.brand} />
+                  <Text style={styles.toolbarLabel}>Video</Text>
                 </Pressable>
               </View>
             )}
@@ -503,11 +628,11 @@ const styles = StyleSheet.create({
   },
   emptyMediaRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   addPhotoBox: {
     flex: 1,
-    minHeight: 110,
+    minHeight: 100,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,

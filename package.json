@@ -55,6 +55,7 @@
     "web": "expo start --web",
     "build:android:preview": "eas build --platform android --profile preview",
     "build:android:dev": "eas build --platform android --profile development",
+    "build:ios:dev:simulator": "eas build --platform ios --profile development",
     "build:android:apk:local": "bash scripts/build-android-apk-local.sh",
     "build:android:aab:local": "bash scripts/build-android-aab-local.sh",
     "build:ios:ipa:local": "bash scripts/build-ios-ipa-local.sh",

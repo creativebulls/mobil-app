@@ -53,6 +53,14 @@ fi
 if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
   XCODE_SIGN_ARGS+=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
 fi
+if [[ "$EXPORT_METHOD" == "app-store" ]]; then
+  BUILD_NUMBER="$(node -p "require('$ROOT/app.json').expo.ios.buildNumber" 2>/dev/null || echo 1)"
+  MARKETING_VERSION="$(node -p "require('$ROOT/app.json').expo.version" 2>/dev/null || echo 1.0.0)"
+  XCODE_SIGN_ARGS+=(
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+    MARKETING_VERSION="$MARKETING_VERSION"
+  )
+fi
 
 cd "$ROOT/ios"
 xcodebuild \

@@ -21,13 +21,35 @@ build_ios_prepare() {
   cd "$root"
   if [[ "${PREBUILD_CLEAN:-1}" == "1" ]]; then
     npx expo prebuild --platform ios --clean
-  else
+  elif [[ ! -f "$root/ios/Crave.xcworkspace/contents.xcworkspacedata" ]]; then
     npx expo prebuild --platform ios
+  else
+    echo "Skipping prebuild (using existing ios/ project)"
   fi
 
   if [[ -f "$root/ios/Podfile" ]]; then
     echo "Installing CocoaPods..."
+    build_ios_fix_release_signing "$root"
     (cd "$root/ios" && pod install)
+  fi
+}
+
+build_ios_fix_release_signing() {
+  local root="$1"
+  local pbx="$root/ios/Crave.xcodeproj/project.pbxproj"
+
+  if [[ "${IOS_EXPORT_METHOD:-app-store}" != "app-store" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$pbx" ]]; then
+    sed -i '' '/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "iPhone Developer";/d' "$pbx"
+    sed -i '' '/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "Apple Distribution";/d' "$pbx"
+    sed -i '' '/CODE_SIGN_IDENTITY = "Apple Distribution";/d' "$pbx"
+    if ! grep -A25 "13B07F951A680F5B00A75B9A /\* Release \*/" "$pbx" | grep -q CODE_SIGN_STYLE; then
+      sed -i '' '/13B07F951A680F5B00A75B9A \/\* Release \*\//,/name = Release;/ s/CODE_SIGN_ENTITLEMENTS = Crave\/Crave.entitlements;/CODE_SIGN_ENTITLEMENTS = Crave\/Crave.entitlements;\
+				CODE_SIGN_STYLE = Automatic;/' "$pbx"
+    fi
   fi
 }
 

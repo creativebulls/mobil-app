@@ -50,7 +50,38 @@ function serializeUserSummary(user: PopulatedUser) {
   };
 }
 
-export function serializePost(post: PostDocument, currentUserId: string) {
+type UserSummary = ReturnType<typeof serializeUserSummary>;
+
+function recentLikerIds(post: PostDocument, limit = 3): string[] {
+  return post.likes
+    .slice(-limit)
+    .reverse()
+    .map((id) => id.toString());
+}
+
+async function buildLikersMap(likerIds: Types.ObjectId[]): Promise<Map<string, UserSummary>> {
+  const unique = [...new Set(likerIds.map((id) => id.toString()))];
+  if (unique.length === 0) {
+    return new Map();
+  }
+
+  const users = (await User.find({ _id: { $in: unique } })
+    .select(AUTHOR_FIELDS)
+    .lean()) as unknown as PopulatedUser[];
+
+  return new Map(users.map((user) => [user._id.toString(), serializeUserSummary(user)]));
+}
+
+async function buildLikersMapForPosts(posts: PostDocument[]): Promise<Map<string, UserSummary>> {
+  const ids = posts.flatMap((post) => post.likes.slice(-3));
+  return buildLikersMap(ids);
+}
+
+export function serializePost(
+  post: PostDocument,
+  currentUserId: string,
+  likersById?: Map<string, UserSummary>,
+) {
   const author = post.author as unknown as PopulatedUser;
   const likes = post.likes.map((id) => id.toString());
   const imageUris =
@@ -59,6 +90,12 @@ export function serializePost(post: PostDocument, currentUserId: string) {
       : post.imageUrl
         ? [post.imageUrl]
         : [];
+
+  const recentLikers = likersById
+    ? recentLikerIds(post)
+        .map((id) => likersById.get(id))
+        .filter((user): user is UserSummary => user != null)
+    : [];
 
   return {
     id: post._id.toString(),
@@ -76,11 +113,22 @@ export function serializePost(post: PostDocument, currentUserId: string) {
         }
       : null,
     likesCount: likes.length,
+    recentLikers,
     commentsCount: post.commentsCount,
     likedByMe: likes.includes(currentUserId),
     createdAt: post.createdAt.toISOString(),
     timeAgo: formatRelativeTime(post.createdAt),
   };
+}
+
+export async function serializePosts(posts: PostDocument[], currentUserId: string) {
+  const likersById = await buildLikersMapForPosts(posts);
+  return posts.map((post) => serializePost(post, currentUserId, likersById));
+}
+
+async function serializeSinglePost(post: PostDocument, currentUserId: string) {
+  const likersById = await buildLikersMap(post.likes.slice(-3));
+  return serializePost(post, currentUserId, likersById);
 }
 
 function serializeComment(comment: CommentDocument, currentUserId: string) {
@@ -140,7 +188,7 @@ export async function createPost(input: {
   const posterFiles = input.posterFiles ?? [];
 
   if (!input.text && imageFiles.length === 0) {
-    throw new AppError(422, 'A post must include text or an image', 'EMPTY_POST');
+    throw new AppError(422, 'A post must include text or media', 'EMPTY_POST');
   }
 
   const author = await User.findById(input.authorId);
@@ -188,7 +236,7 @@ export async function createPost(input: {
 
   await post.populate('author', AUTHOR_FIELDS);
 
-  const serialized = serializePost(post, input.authorId);
+  const serialized = await serializeSinglePost(post, input.authorId);
 
   // Broadcast the new post to the author and each of their friends, so it
   // appears live in their feeds — and nowhere else.
@@ -218,8 +266,10 @@ export async function getFeed(currentUserId: string, limit = 20, before?: string
   const nextCursor =
     posts.length === limit ? posts[posts.length - 1].createdAt.toISOString() : null;
 
+  const likersById = await buildLikersMapForPosts(posts);
+
   return {
-    posts: posts.map((post) => serializePost(post, currentUserId)),
+    posts: posts.map((post) => serializePost(post, currentUserId, likersById)),
     nextCursor,
   };
 }
@@ -238,7 +288,8 @@ export async function searchPosts(currentUserId: string, q: string, limit = 20) 
     .limit(limit)
     .populate('author', AUTHOR_FIELDS);
 
-  return { posts: posts.map((post) => serializePost(post, currentUserId)) };
+  const likersById = await buildLikersMapForPosts(posts);
+  return { posts: posts.map((post) => serializePost(post, currentUserId, likersById)) };
 }
 
 function placeNameQuery(placeName: string): RegExp {
@@ -273,8 +324,10 @@ export async function listPostsByPlace(
   const nextCursor =
     posts.length === limit ? posts[posts.length - 1].createdAt.toISOString() : null;
 
+  const likersById = await buildLikersMapForPosts(posts);
+
   return {
-    posts: posts.map((post) => serializePost(post, currentUserId)),
+    posts: posts.map((post) => serializePost(post, currentUserId, likersById)),
     nextCursor,
   };
 }
@@ -289,7 +342,7 @@ export async function getPost(currentUserId: string, postId: string) {
   const authorId = (post.author as { _id: Types.ObjectId })._id.toString();
   await assertCanSeePost(currentUserId, authorId);
 
-  return serializePost(post, currentUserId);
+  return serializeSinglePost(post, currentUserId);
 }
 
 export async function listPostLikers(currentUserId: string, postId: string) {
@@ -341,7 +394,7 @@ export async function toggleLike(currentUserId: string, postId: string) {
 
   await post.populate('author', AUTHOR_FIELDS);
 
-  const serialized = serializePost(post, currentUserId);
+  const serialized = await serializeSinglePost(post, currentUserId);
 
   emitToUser(post.author._id.toString(), 'post:updated', serialized);
 

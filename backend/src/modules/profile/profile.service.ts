@@ -2,7 +2,7 @@ import { AppError } from '../../shared/errors/AppError';
 import { getPlaceDetails } from '../places/places.service';
 import { PlaceLike } from '../places/place-engagement.model';
 import { Post } from '../posts/post.model';
-import { serializePost } from '../posts/post.service';
+import { serializePosts } from '../posts/post.service';
 import { getFriendsCount, getFriendshipStatus, getMutualFriends } from '../friends/friends.service';
 import { getRelationState } from '../relations/relations.service';
 import {
@@ -103,7 +103,7 @@ export async function listUserPosts(userId: string, currentUserId: string, limit
     posts.length === limit ? posts[posts.length - 1].createdAt.toISOString() : null;
 
   return {
-    posts: posts.map((post) => serializePost(post, currentUserId)),
+    posts: await serializePosts(posts, currentUserId),
     nextCursor,
   };
 }

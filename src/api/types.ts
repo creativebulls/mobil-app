@@ -98,6 +98,8 @@ export type Post = {
   reaction: PostReaction | null;
   place: PostPlace | null;
   likesCount: number;
+  /** Up to 3 most recent likers, newest first. */
+  recentLikers?: AuthorSummary[];
   commentsCount: number;
   likedByMe: boolean;
   createdAt: string;

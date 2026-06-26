@@ -13,8 +13,10 @@ build_ios_auth_args() {
       -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID"
       -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"
     )
+  elif [[ "${IOS_EXPORT_METHOD:-app-store}" == "app-store" ]] && ! security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Distribution"; then
+    echo "Note: Apple Distribution certificate not found locally — xcodebuild will try -allowProvisioningUpdates." >&2
   elif [[ ! -f "$HOME/Library/Developer/Xcode/UserData/IDEAccounts.plist" ]]; then
-    echo "Note: proceeding without API key — using Xcode automatic signing (requires Apple ID in Xcode)." >&2
+    echo "Note: using Xcode automatic signing (Apple ID must be signed in under Xcode → Settings → Accounts)." >&2
   fi
 }
 

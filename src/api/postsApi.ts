@@ -10,6 +10,34 @@ import type {
   RepliesResponse,
 } from './types';
 
+function guessUploadMime(uri: string, type: 'image' | 'video'): string {
+  const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase();
+
+  if (type === 'video') {
+    if (extension === 'mov') return 'video/quicktime';
+    if (extension === 'webm') return 'video/webm';
+    if (extension === 'm4v') return 'video/x-m4v';
+    return 'video/mp4';
+  }
+
+  if (extension === 'png') return 'image/png';
+  if (extension === 'heic' || extension === 'heif') return 'image/heic';
+  if (extension === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+function guessUploadName(uri: string, type: 'image' | 'video', index: number): string {
+  const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase();
+  if (type === 'video') {
+    if (extension === 'mov') return `post-${index}.mov`;
+    if (extension === 'webm') return `post-${index}.webm`;
+    return `post-${index}.mp4`;
+  }
+  if (extension === 'png') return `post-${index}.png`;
+  if (extension === 'heic') return `post-${index}.heic`;
+  return `post-${index}.jpg`;
+}
+
 export async function fetchFeed(cursor?: string | null, limit = 20): Promise<FeedResponse> {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
@@ -60,8 +88,8 @@ export async function createPost(input: {
     const isVideo = item.type === 'video';
     formData.append('images', {
       uri: item.uri,
-      name: `post-${index}.${isVideo ? 'mp4' : 'jpg'}`,
-      type: isVideo ? 'video/mp4' : 'image/jpeg',
+      name: guessUploadName(item.uri, item.type, index),
+      type: guessUploadMime(item.uri, item.type),
     } as unknown as Blob);
   });
 

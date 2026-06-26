@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppImage } from './AppImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,25 +8,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { emitHomeReselect } from '../navigation/tabEvents';
 
-export type MainTabKey = 'home' | 'messages' | 'profile';
+export type MainTabKey = 'home' | 'create' | 'profile';
 
 type BottomTabBarProps = {
-  activeTab: MainTabKey;
+  activeTab?: MainTabKey | null;
   profileImageUri?: string | null;
-  messagesBadge?: number;
 };
 
-const TAB_ROUTES: Record<MainTabKey, '/home' | '/messages' | '/profile'> = {
+const TAB_ROUTES: Record<Exclude<MainTabKey, 'create'>, '/home' | '/profile'> = {
   home: '/home',
-  messages: '/messages',
   profile: '/profile',
 };
 
-export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: BottomTabBarProps) {
+const TAB_ICON_SIZE = 20;
+const CREATE_BUTTON_SIZE = 36;
+const PROFILE_IMAGE_SIZE = 20;
+const PROFILE_RING_WIDTH = 2;
+const PROFILE_OUTER_SIZE = PROFILE_IMAGE_SIZE + PROFILE_RING_WIDTH * 2;
+
+export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  function handleTabPress(tab: MainTabKey) {
+  function handleTabPress(tab: Exclude<MainTabKey, 'create'>) {
     if (tab === 'home') {
       if (activeTab === 'home') {
         emitHomeReselect();
@@ -42,8 +46,12 @@ export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: 
     router.replace(TAB_ROUTES[tab]);
   }
 
+  function handleCreatePress() {
+    router.push('/create-post');
+  }
+
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 6) }]}>
       <Pressable
         onPress={() => handleTabPress('home')}
         style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
@@ -53,32 +61,20 @@ export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: 
       >
         <Ionicons
           name={activeTab === 'home' ? 'home' : 'home-outline'}
-          size={24}
+          size={TAB_ICON_SIZE}
           color={activeTab === 'home' ? colors.brand : colors.labelGray}
         />
-        <Text style={[styles.label, activeTab === 'home' && styles.labelActive]}>Home</Text>
       </Pressable>
 
       <Pressable
-        onPress={() => handleTabPress('messages')}
+        onPress={handleCreatePress}
         style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
         accessibilityRole="button"
-        accessibilityLabel="Messages"
-        accessibilityState={{ selected: activeTab === 'messages' }}
+        accessibilityLabel="Create post"
       >
-        <View>
-          <Ionicons
-            name={activeTab === 'messages' ? 'chatbubble' : 'chatbubble-outline'}
-            size={24}
-            color={activeTab === 'messages' ? colors.brand : colors.labelGray}
-          />
-          {messagesBadge > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{messagesBadge > 99 ? '99+' : messagesBadge}</Text>
-            </View>
-          ) : null}
+        <View style={styles.createButton}>
+          <Ionicons name="add" size={22} color={colors.white} />
         </View>
-        <Text style={[styles.label, activeTab === 'messages' && styles.labelActive]}>Messages</Text>
       </Pressable>
 
       <Pressable
@@ -89,17 +85,20 @@ export function BottomTabBar({ activeTab, profileImageUri, messagesBadge = 0 }: 
         accessibilityState={{ selected: activeTab === 'profile' }}
       >
         {profileImageUri ? (
-          <View style={[styles.profileWrap, activeTab === 'profile' && styles.profileWrapActive]}>
-            <AppImage source={{ uri: profileImageUri }} style={styles.profileImage} resizeMode="cover" />
+          <View style={[styles.profileRing, activeTab === 'profile' && styles.profileRingActive]}>
+            <AppImage
+              source={{ uri: profileImageUri }}
+              style={styles.profileImage}
+              resizeMode="cover"
+            />
           </View>
         ) : (
           <Ionicons
             name={activeTab === 'profile' ? 'person-circle' : 'person-circle-outline'}
-            size={28}
+            size={TAB_ICON_SIZE + 2}
             color={activeTab === 'profile' ? colors.brand : colors.labelGray}
           />
         )}
-        <Text style={[styles.label, activeTab === 'profile' && styles.labelActive]}>Profile</Text>
       </Pressable>
     </View>
   );
@@ -110,63 +109,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 10,
-    paddingHorizontal: 16,
-    backgroundColor: colors.white,
+    paddingTop: 6,
+    paddingHorizontal: 24,
+    minHeight: 48,
+    backgroundColor: colors.surfaceMuted,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: colors.surfaceMutedBorder,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   tabPressed: {
     opacity: 0.75,
   },
-  label: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.labelGray,
+  createButton: {
+    width: CREATE_BUTTON_SIZE,
+    height: CREATE_BUTTON_SIZE,
+    borderRadius: CREATE_BUTTON_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
   },
-  labelActive: {
-    color: colors.brand,
-    fontWeight: '700',
-  },
-  profileWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1.5,
+  profileRing: {
+    width: PROFILE_OUTER_SIZE,
+    height: PROFILE_OUTER_SIZE,
+    borderRadius: PROFILE_OUTER_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: PROFILE_RING_WIDTH,
     borderColor: 'transparent',
   },
-  profileWrapActive: {
+  profileRingActive: {
     borderColor: colors.brand,
   },
   profileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -10,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
-  badgeText: {
-    color: colors.white,
-    fontSize: 10,
-    fontWeight: '800',
+    width: PROFILE_IMAGE_SIZE,
+    height: PROFILE_IMAGE_SIZE,
+    borderRadius: PROFILE_IMAGE_SIZE / 2,
+    backgroundColor: colors.inputGray,
   },
 });

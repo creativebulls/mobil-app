@@ -66,6 +66,8 @@ const FIXED_COLORS = {
   card: 'rgba(255, 255, 255, 0.92)',
   inputBackground: 'rgba(255, 255, 255, 0.95)',
   inputGray: '#F2F2F2',
+  surfaceMuted: '#F7F7F7',
+  surfaceMutedBorder: '#DCDADA',
   facebook: '#1877F2',
   buttonDisabled: '#E5E5E5',
   labelGray: '#9CA3AF',

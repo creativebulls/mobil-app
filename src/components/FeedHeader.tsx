@@ -10,8 +10,12 @@ import { colors } from '../theme/colors';
 type FeedHeaderProps = {
   title?: string;
   onNotificationsPress?: () => void;
+  onMessagesPress?: () => void;
   onAddPress?: () => void;
   onCallsPress?: () => void;
+  /** Hide the messages shortcut (e.g. on the messages screen itself). */
+  showMessages?: boolean;
+  messagesBadge?: number;
   /** Render the title left-aligned beside the logo instead of centered. */
   alignTitleLeft?: boolean;
 };
@@ -19,8 +23,11 @@ type FeedHeaderProps = {
 export function FeedHeader({
   title = 'My Feed',
   onNotificationsPress,
+  onMessagesPress,
   onAddPress,
   onCallsPress,
+  showMessages = true,
+  messagesBadge = 0,
   alignTitleLeft = false,
 }: FeedHeaderProps) {
   const router = useRouter();
@@ -32,6 +39,14 @@ export function FeedHeader({
       return;
     }
     router.push('/notifications');
+  }
+
+  function handleMessagesPress() {
+    if (onMessagesPress) {
+      onMessagesPress();
+      return;
+    }
+    router.push('/messages');
   }
 
   function handleAddPress() {
@@ -87,14 +102,32 @@ export function FeedHeader({
           ) : null}
         </Pressable>
 
-        <Pressable
-          onPress={handleAddPress}
-          style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Create post"
-        >
-          <Ionicons name="add" size={22} color={colors.text} />
-        </Pressable>
+        {showMessages ? (
+          <Pressable
+            onPress={handleMessagesPress}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Messages"
+          >
+            <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
+            {messagesBadge > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{messagesBadge > 99 ? '99+' : messagesBadge}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
+
+        {onAddPress ? (
+          <Pressable
+            onPress={handleAddPress}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Create"
+          >
+            <Ionicons name="add" size={22} color={colors.text} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

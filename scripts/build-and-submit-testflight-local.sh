@@ -8,6 +8,7 @@ export APP_VARIANT=production
 export EAS_BUILD_PROFILE=production
 export DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-45P2ZV9AZW}"
 export IOS_EXPORT_METHOD=app-store
+export PREBUILD_CLEAN=0
 
 echo "=== Crave iOS TestFlight (local, no EAS) ==="
 echo "  API: $EXPO_PUBLIC_API_URL"

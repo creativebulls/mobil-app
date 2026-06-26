@@ -22,6 +22,8 @@ import { MeetFriendsSection } from './MeetFriendsSection';
 import { MeetPeopleSection } from './MeetPeopleSection';
 import { RecommendedPlacesByFriendsSection } from './RecommendedPlacesByFriendsSection';
 import { SearchResults } from './SearchResults';
+import { FeedVideoPlaybackProvider, useFeedVideoPlayback } from '../feed/FeedVideoPlaybackContext';
+import { useUnreadMessageCount } from '../hooks/useUnreadMessageCount';
 
 // Logo/actions row height.
 const FEED_HEADER_HEIGHT = 56;
@@ -32,7 +34,26 @@ const SEARCH_REGION_HEIGHT = 60;
 const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
 
 export function MyFeedScreen() {
+  const [feedFocused, setFeedFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFeedFocused(true);
+      return () => setFeedFocused(false);
+    }, []),
+  );
+
+  return (
+    <FeedVideoPlaybackProvider enabled={feedFocused}>
+      <MyFeedScreenContent />
+    </FeedVideoPlaybackProvider>
+  );
+}
+
+function MyFeedScreenContent() {
   const router = useRouter();
+  const { requestEvaluate } = useFeedVideoPlayback();
+  const unreadMessages = useUnreadMessageCount();
   const {
     places,
     isLoading,
@@ -126,7 +147,8 @@ export function MyFeedScreen() {
     useCallback(() => {
       void loadFriends();
       void loadMeetPeople();
-    }, [loadFriends, loadMeetPeople]),
+      requestEvaluate();
+    }, [loadFriends, loadMeetPeople, requestEvaluate]),
   );
 
   useEffect(
@@ -136,8 +158,9 @@ export function MyFeedScreen() {
         setQuery('');
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         scrollY.setValue(0);
+        requestEvaluate();
       }),
-    [scrollY],
+    [requestEvaluate, scrollY],
   );
 
   const meetFriends = useMemo(
@@ -226,7 +249,10 @@ export function MyFeedScreen() {
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
           useNativeDriver: true,
+          listener: () => requestEvaluate(),
         })}
+        onMomentumScrollEnd={() => requestEvaluate()}
+        onScrollEndDrag={() => requestEvaluate()}
       >
         {__DEV__ && locationGranted && coords ? (
           <View style={styles.debugLocation}>
@@ -279,7 +305,7 @@ export function MyFeedScreen() {
           style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
           pointerEvents="box-none"
         >
-          <FeedHeader />
+          <FeedHeader messagesBadge={unreadMessages} />
           <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
             <View style={styles.searchTriggerInner}>
               <Ionicons name="search-outline" size={20} color={colors.labelGray} />

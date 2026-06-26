@@ -10,7 +10,6 @@ import { getHiddenPostIds, hidePost } from '../storage/hiddenPosts';
 import { readCache, writeCache } from '../storage/offlineCache';
 import { FeedPostCard } from './FeedPostCard';
 import { openUserProfile } from '../utils/openUserProfile';
-import { SectionHeader } from './SectionHeader';
 import { colors } from '../theme/colors';
 
 export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string }) {
@@ -92,8 +91,6 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
 
   return (
     <View style={styles.section}>
-      <SectionHeader title={title} accessibilityLabel="View all posts" />
-
       {isLoading && posts.length === 0 ? (
         <ActivityIndicator color={colors.brand} style={styles.loader} />
       ) : posts.length === 0 ? (
@@ -108,6 +105,8 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
               key={post.id}
               post={post}
               currentUserId={currentUserId}
+              enableVideoAutoplay
+              placePostTheme
               onChanged={handleChanged}
               onDeleted={handleDeleted}
               onHidden={handleHidden}
@@ -124,10 +123,9 @@ export function LatestPostsSection({ title = 'Latest Posts' }: { title?: string 
 const styles = StyleSheet.create({
   section: {
     width: '100%',
-    gap: 16,
   },
   list: {
-    gap: 20,
+    gap: 0,
   },
   loader: {
     paddingVertical: 24,
