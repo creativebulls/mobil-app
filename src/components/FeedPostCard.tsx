@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -12,17 +13,25 @@ import {
   View,
 } from 'react-native';
 
-import type { Post, PostReaction } from '../api/types';
-import { toggleLike as toggleLikeRequest, deletePost as deletePostRequest } from '../api/postsApi';
+import type { AuthorSummary, Post, PostReaction } from '../api/types';
+import {
+  fetchPostLikers,
+  toggleLike as toggleLikeRequest,
+  toggleSavePost as toggleSavePostRequest,
+  deletePost as deletePostRequest,
+} from '../api/postsApi';
 import { useFeedVideoPlayback } from '../feed/FeedVideoPlaybackContext';
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
 import { PostImageViewer } from './PostImageViewer';
 import { PostLikesPreview } from './PostLikesPreview';
 import { PostLikersModal } from './PostLikersModal';
+import { RichPostText } from './RichPostText';
 import { FeedPostVideoPlayer, PostVideoModal, isVideoUrl } from './PostVideo';
 import { FeedVideoViewportAnchor } from '../feed/FeedVideoPlaybackContext';
 import { getVideoPosterForUri } from '../utils/postMedia';
+import { openPlaceFromPost } from '../utils/openPlaceFromPost';
+import { getStoredUser } from '../storage/authSession';
 import { useDialog } from './dialog/DialogProvider';
 import { PostOptionsMenu, type PostMenuOption } from './PostOptionsMenu';
 import { colors } from '../theme/colors';
@@ -64,6 +73,25 @@ function formatDistance(km: number | null): string | null {
   return `${km.toFixed(km < 10 ? 1 : 0)} KM`;
 }
 
+function storedUserToAuthor(user: {
+  id: string;
+  email: string;
+  profilePhotoUrl: string | null;
+  givenName: string | null;
+  surname: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}): AuthorSummary {
+  const name =
+    user.givenName && user.surname
+      ? `${user.givenName} ${user.surname}`
+      : user.firstName && user.lastName
+        ? `${user.firstName} ${user.lastName}`
+        : user.email.split('@')[0];
+
+  return { id: user.id, name, avatarUri: user.profilePhotoUrl };
+}
+
 export function FeedPostCard({
   post,
   currentUserId,
@@ -76,13 +104,16 @@ export function FeedPostCard({
   enableVideoAutoplay = false,
   placePostTheme = false,
 }: FeedPostCardProps) {
+  const router = useRouter();
   const { requestEvaluate } = useFeedVideoPlayback();
   const isPlaceTheme = placePostTheme && post.place != null;
   const [isExpanded, setIsExpanded] = useState(false);
   const [likedByMe, setLikedByMe] = useState(post.likedByMe);
+  const [savedByMe, setSavedByMe] = useState(post.savedByMe ?? false);
   const [likesCount, setLikesCount] = useState(post.likesCount);
   const [recentLikers, setRecentLikers] = useState(post.recentLikers ?? []);
   const [isLiking, setIsLiking] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
@@ -106,6 +137,32 @@ export function FeedPostCard({
   // The fullscreen swipe viewer only handles photos; videos open a player.
   const imageOnly = postImages.filter((uri) => !isVideoUrl(uri));
 
+  useEffect(() => {
+    setLikedByMe(post.likedByMe);
+    setSavedByMe(post.savedByMe);
+    setLikesCount(post.likesCount);
+    setRecentLikers(post.recentLikers ?? []);
+  }, [post.id, post.likedByMe, post.savedByMe, post.likesCount, post.recentLikers]);
+
+  useEffect(() => {
+    if (likesCount <= 0 || recentLikers.length > 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void fetchPostLikers(post.id)
+      .then(({ users }) => {
+        if (!cancelled && users.length > 0) {
+          setRecentLikers(users.slice(0, 3));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [post.id, likesCount, recentLikers.length]);
+
   async function handleLikePress() {
     if (isLiking) {
       return;
@@ -113,22 +170,64 @@ export function FeedPostCard({
 
     const previousLiked = likedByMe;
     const previousCount = likesCount;
+    const previousLikers = recentLikers;
 
     setLikedByMe(!previousLiked);
     setLikesCount(previousCount + (previousLiked ? -1 : 1));
+
+    if (previousLiked && currentUserId) {
+      setRecentLikers((current) => current.filter((liker) => liker.id !== currentUserId));
+    } else if (!previousLiked && currentUserId) {
+      void getStoredUser().then((user) => {
+        if (!user) {
+          return;
+        }
+        const me = storedUserToAuthor(user);
+        setRecentLikers((current) => [me, ...current.filter((liker) => liker.id !== currentUserId)].slice(0, 3));
+      });
+    }
+
     setIsLiking(true);
 
     try {
       const updated = await toggleLikeRequest(post.id);
       setLikedByMe(updated.likedByMe);
       setLikesCount(updated.likesCount);
-      setRecentLikers(updated.recentLikers ?? []);
+      if (updated.recentLikers && updated.recentLikers.length > 0) {
+        setRecentLikers(updated.recentLikers);
+      } else if (updated.likesCount > 0) {
+        const { users } = await fetchPostLikers(post.id);
+        setRecentLikers(users.slice(0, 3));
+      } else {
+        setRecentLikers([]);
+      }
       onChanged?.(updated);
     } catch {
       setLikedByMe(previousLiked);
       setLikesCount(previousCount);
+      setRecentLikers(previousLikers);
     } finally {
       setIsLiking(false);
+    }
+  }
+
+  async function handleSavePress() {
+    if (isSaving) {
+      return;
+    }
+
+    const previousSaved = savedByMe;
+    setSavedByMe(!previousSaved);
+    setIsSaving(true);
+
+    try {
+      const updated = await toggleSavePostRequest(post.id);
+      setSavedByMe(updated.savedByMe);
+      onChanged?.(updated);
+    } catch {
+      setSavedByMe(previousSaved);
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -322,18 +421,25 @@ export function FeedPostCard({
       <View style={isPlaceTheme ? styles.placePostSection : undefined}>
       {post.place ? (
         <View style={styles.placeRow}>
-          <Avatar uri={post.place.logoUri} name={post.place.name} size={32} style={styles.placeLogo} />
+          <Pressable
+            onPress={() => openPlaceFromPost(router, post.place!)}
+            style={({ pressed }) => [styles.placeTap, pressed && styles.iconPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${post.place.name}`}
+          >
+            <Avatar uri={post.place.logoUri} name={post.place.name} size={32} style={styles.placeLogo} />
 
-          <View style={styles.placeText}>
-            <Text style={styles.placeName} numberOfLines={1} ellipsizeMode="tail">
-              {post.place.name}
-            </Text>
-            {distance ? (
-              <Text style={styles.placeDistance} numberOfLines={1} ellipsizeMode="tail">
-                {distance}
+            <View style={styles.placeText}>
+              <Text style={styles.placeName} numberOfLines={1} ellipsizeMode="tail">
+                {post.place.name}
               </Text>
-            ) : null}
-          </View>
+              {distance ? (
+                <Text style={styles.placeDistance} numberOfLines={1} ellipsizeMode="tail">
+                  {distance}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
 
           <Pressable
             onPress={() => onSharePress?.(post)}
@@ -422,35 +528,52 @@ export function FeedPostCard({
             </Pressable>
           </View>
 
-          <Pressable
-            onPress={handleShare}
-            style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Share post"
-            hitSlop={8}
-          >
-            <Ionicons name="paper-plane-outline" size={22} color={colors.text} />
-          </Pressable>
+          <View style={styles.footerActionsRight}>
+            <Pressable
+              onPress={handleSavePress}
+              style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={savedByMe ? 'Remove from saved posts' : 'Save post'}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={savedByMe ? 'bookmark' : 'bookmark-outline'}
+                size={22}
+                color={savedByMe ? colors.brand : colors.text}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={handleShare}
+              style={({ pressed }) => [styles.actionIcon, pressed && styles.iconPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Share post"
+              hitSlop={8}
+            >
+              <Ionicons name="paper-plane-outline" size={22} color={colors.text} />
+            </Pressable>
+          </View>
         </View>
 
         {likesCount > 0 ? (
           <PostLikesPreview
             likesCount={likesCount}
             recentLikers={recentLikers}
+            avatarRingColor={isPlaceTheme ? colors.surfaceMuted : colors.white}
             onPress={() => setLikersVisible(true)}
           />
         ) : null}
 
         {post.text ? (
           <View style={styles.textBlock}>
-            <Text
+            <Text style={styles.postText}>
+              <Text style={styles.captionAuthor}>{post.author.name} </Text>
+            </Text>
+            <RichPostText
+              text={post.text}
               style={styles.postText}
               numberOfLines={isExpanded ? undefined : 3}
-              ellipsizeMode="tail"
-            >
-              <Text style={styles.captionAuthor}>{post.author.name} </Text>
-              {post.text}
-            </Text>
+            />
 
             {showReadMore && !isExpanded ? (
               <Pressable onPress={() => setIsExpanded(true)} accessibilityRole="button">
@@ -559,6 +682,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingTop: 2,
   },
+  placeTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
   placeLogo: {
     borderRadius: 8,
     backgroundColor: colors.inputGray,
@@ -643,6 +773,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+  },
+  footerActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   likeIcon: {
     flexDirection: 'row',

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Dimensions,
@@ -16,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Post } from '../api/types';
+import { openPlaceFromPost } from '../utils/openPlaceFromPost';
 import { colors } from '../theme/colors';
 import { Avatar } from './Avatar';
 import { MediaImage } from './MediaImage';
@@ -49,6 +51,7 @@ export function PostImageViewer({
   onSharePress,
   onClose,
 }: PostImageViewerProps) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
@@ -105,9 +108,15 @@ export function PostImageViewer({
 
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
           {post.place ? (
-            <Text style={styles.placeName} numberOfLines={1}>
-              <Ionicons name="location" size={13} color={colors.white} /> {post.place.name}
-            </Text>
+            <Pressable
+              onPress={() => openPlaceFromPost(router, post.place!)}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${post.place.name}`}
+            >
+              <Text style={styles.placeName} numberOfLines={1}>
+                <Ionicons name="location" size={13} color={colors.white} /> {post.place.name}
+              </Text>
+            </Pressable>
           ) : null}
 
           {post.text ? (

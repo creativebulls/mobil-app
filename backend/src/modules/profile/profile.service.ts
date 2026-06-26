@@ -1,4 +1,5 @@
 import { AppError } from '../../shared/errors/AppError';
+import { emitToUser } from '../../socket/index';
 import { getPlaceDetails } from '../places/places.service';
 import { PlaceLike } from '../places/place-engagement.model';
 import { Post } from '../posts/post.model';
@@ -8,10 +9,13 @@ import { getRelationState } from '../relations/relations.service';
 import {
   DEFAULT_PUSH_PREFERENCES,
   getUserDisplayName,
+  getUserHandle,
   serializeAuthor,
+  serializeUser,
   User,
   type PushPreferences,
 } from '../users/user.model';
+import type { UpdatePersonalInfoInput } from './profile.validation';
 
 export async function getUserSettings(userId: string) {
   const user = await User.findById(userId).select('isPrivate pushPreferences');
@@ -87,6 +91,41 @@ export async function updateStatusText(userId: string, statusText: string) {
   return { statusText: user.statusText ?? null };
 }
 
+export async function updatePersonalInfo(userId: string, input: UpdatePersonalInfoInput) {
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  if (input.firstName !== undefined) {
+    user.firstName = input.firstName;
+    user.givenName = input.firstName;
+  }
+
+  if (input.lastName !== undefined) {
+    user.lastName = input.lastName;
+    user.surname = input.lastName;
+  }
+
+  if (input.username !== undefined) {
+    const taken = await User.findOne({ username: input.username, _id: { $ne: userId } });
+    if (taken) {
+      throw new AppError(409, 'Username is already taken', 'USERNAME_TAKEN');
+    }
+    user.username = input.username;
+  }
+
+  await user.save();
+
+  const serialized = serializeUser(user);
+  emitToUser(userId, 'user:profile-updated', { user: serialized });
+
+  return {
+    user: serialized,
+  };
+}
+
 export async function listUserPosts(userId: string, currentUserId: string, limit = 20, before?: string) {
   const query: Record<string, unknown> = { author: userId };
 
@@ -151,7 +190,7 @@ export async function listFavoritePlaces(userId: string, limit = 20) {
     if (seen.has(placeKey)) continue;
     seen.add(placeKey);
     favorites.push({
-      id: placeKey,
+      id: post.place.placeId ?? placeKey,
       name: post.place.name,
       imageUrl: post.place.logoUrl ?? '',
       rating: null,

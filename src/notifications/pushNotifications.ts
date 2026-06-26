@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import {
   getMessaging,
   getToken,
@@ -16,6 +16,7 @@ import { NOTIFICATION_SOUND_ANDROID } from '../constants/notificationSound';
 import { registerPushToken, removePushToken } from '../api/notificationsApi';
 import { getAccessToken } from '../storage/authSession';
 import { displayNotifeePush } from './displayNotifeePush';
+import { navigateFromPushData } from './navigateFromPushData';
 
 const PUSH_TOKEN_KEY = '@whereabout/fcm_push_token';
 
@@ -28,6 +29,7 @@ const IN_APP_BANNER_TYPES = new Set([
   'comment',
   'reply',
   'comment_like',
+  'mention',
   'friend_request',
   'friend_request_accepted',
 ]);
@@ -150,7 +152,19 @@ export function setupRemotePushHandlers(): void {
       return;
     }
 
-    await displayNotifeePush(raw);
+    await displayNotifeePush(raw, data);
+  });
+
+  notifee.onForegroundEvent(({ type, detail }) => {
+    if (type === EventType.PRESS) {
+      navigateFromPushData((detail.notification?.data ?? {}) as Record<string, unknown>);
+    }
+  });
+
+  notifee.onBackgroundEvent(async ({ type, detail }) => {
+    if (type === EventType.PRESS) {
+      navigateFromPushData((detail.notification?.data ?? {}) as Record<string, unknown>);
+    }
   });
 }
 

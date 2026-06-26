@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 
 import { AppError } from '../../shared/errors/AppError';
+import { extractHashtags } from '../../shared/utils/postEntities';
 import { formatRelativeTime } from '../../shared/utils/time';
 import { emitToUser } from '../../socket/index';
 import { User } from '../users/user.model';
@@ -9,6 +10,7 @@ import { isBlockedBetween } from '../relations/relations.service';
 import { createNotification } from '../notifications/notification.service';
 import { Comment, type CommentDocument } from './comment.model';
 import { Post, type PostDocument } from './post.model';
+import { PostSave } from './post-save.model';
 
 function resolvePostImageUrl(filename: string): string {
   return `/uploads/posts/${filename}`;
@@ -77,11 +79,35 @@ async function buildLikersMapForPosts(posts: PostDocument[]): Promise<Map<string
   return buildLikersMap(ids);
 }
 
+async function buildSavedPostIdsSet(
+  currentUserId: string,
+  postIds: string[],
+): Promise<Set<string>> {
+  if (postIds.length === 0) {
+    return new Set();
+  }
+
+  const saves = await PostSave.find({
+    user: currentUserId,
+    post: { $in: postIds },
+  })
+    .select('post')
+    .lean();
+
+  return new Set(saves.map((save) => save.post.toString()));
+}
+
+type SerializePostOptions = {
+  likersById?: Map<string, UserSummary>;
+  savedPostIds?: Set<string>;
+};
+
 export function serializePost(
   post: PostDocument,
   currentUserId: string,
-  likersById?: Map<string, UserSummary>,
+  options: SerializePostOptions = {},
 ) {
+  const { likersById, savedPostIds } = options;
   const author = post.author as unknown as PopulatedUser;
   const likes = post.likes.map((id) => id.toString());
   const imageUris =
@@ -107,6 +133,7 @@ export function serializePost(
     reaction: post.reaction ?? null,
     place: post.place
       ? {
+          placeId: post.place.placeId ?? null,
           name: post.place.name,
           logoUri: post.place.logoUrl ?? null,
           distanceKm: post.place.distanceKm ?? null,
@@ -115,7 +142,10 @@ export function serializePost(
     likesCount: likes.length,
     recentLikers,
     commentsCount: post.commentsCount,
+    viewsCount: post.viewsCount ?? 0,
     likedByMe: likes.includes(currentUserId),
+    savedByMe: savedPostIds?.has(post._id.toString()) ?? false,
+    hashtags: post.hashtags ?? [],
     createdAt: post.createdAt.toISOString(),
     timeAgo: formatRelativeTime(post.createdAt),
   };
@@ -123,12 +153,17 @@ export function serializePost(
 
 export async function serializePosts(posts: PostDocument[], currentUserId: string) {
   const likersById = await buildLikersMapForPosts(posts);
-  return posts.map((post) => serializePost(post, currentUserId, likersById));
+  const savedPostIds = await buildSavedPostIdsSet(
+    currentUserId,
+    posts.map((post) => post._id.toString()),
+  );
+  return posts.map((post) => serializePost(post, currentUserId, { likersById, savedPostIds }));
 }
 
 async function serializeSinglePost(post: PostDocument, currentUserId: string) {
   const likersById = await buildLikersMap(post.likes.slice(-3));
-  return serializePost(post, currentUserId, likersById);
+  const savedPostIds = await buildSavedPostIdsSet(currentUserId, [post._id.toString()]);
+  return serializePost(post, currentUserId, { likersById, savedPostIds });
 }
 
 function serializeComment(comment: CommentDocument, currentUserId: string) {
@@ -181,14 +216,20 @@ export async function createPost(input: {
   posterFiles?: Express.Multer.File[];
   reaction?: 'like' | 'dislike' | 'love';
   placeName?: string;
+  placeId?: string;
   placeImageUrl?: string;
   placeDistanceKm?: number;
+  mentionedUserIds?: string[];
 }) {
   const imageFiles = input.imageFiles ?? [];
   const posterFiles = input.posterFiles ?? [];
 
   if (!input.text && imageFiles.length === 0) {
     throw new AppError(422, 'A post must include text or media', 'EMPTY_POST');
+  }
+
+  if (!input.placeName?.trim()) {
+    throw new AppError(422, 'A place is required for every post', 'PLACE_REQUIRED');
   }
 
   const author = await User.findById(input.authorId);
@@ -211,6 +252,13 @@ export async function createPost(input: {
     }
   }
 
+  const hashtags = extractHashtags(input.text);
+  const friendIds = await getFriendUserIds(input.authorId);
+  const mentionedUserIds = (input.mentionedUserIds ?? []).filter(
+    (userId) => userId !== input.authorId && friendIds.has(userId),
+  );
+  const uniqueMentionedUserIds = [...new Set(mentionedUserIds)];
+
   const post = await Post.create({
     author: input.authorId,
     text: input.text,
@@ -218,16 +266,17 @@ export async function createPost(input: {
     images,
     videoThumbnails,
     reaction: input.reaction,
-    place: input.placeName
-      ? {
-          // Use the place's own photo (e.g. from Google Places), not the
-          // author's profile picture. Falls back to undefined when the place
-          // has no image, so the UI shows the place's initials instead.
-          name: input.placeName,
-          logoUrl: input.placeImageUrl,
-          distanceKm: input.placeDistanceKm,
-        }
-      : undefined,
+    place: {
+      // Use the place's own photo (e.g. from Google Places), not the
+      // author's profile picture. Falls back to undefined when the place
+      // has no image, so the UI shows the place's initials instead.
+      placeId: input.placeId?.trim() || undefined,
+      name: input.placeName.trim(),
+      logoUrl: input.placeImageUrl,
+      distanceKm: input.placeDistanceKm,
+    },
+    hashtags,
+    mentionedUsers: uniqueMentionedUserIds.map((id) => new Types.ObjectId(id)),
     likes: [],
     commentsCount: 0,
   });
@@ -240,11 +289,23 @@ export async function createPost(input: {
 
   // Broadcast the new post to the author and each of their friends, so it
   // appears live in their feeds — and nowhere else.
-  const friendIds = await getFriendUserIds(input.authorId);
   emitToUser(input.authorId, 'post:created', serialized);
   for (const friendId of friendIds) {
     emitToUser(friendId, 'post:created', serialized);
   }
+
+  const preview = input.text?.trim().slice(0, 120);
+  await Promise.all(
+    uniqueMentionedUserIds.map((recipientId) =>
+      createNotification({
+        recipientId,
+        actorId: input.authorId,
+        type: 'mention',
+        postId: post._id.toString(),
+        preview,
+      }),
+    ),
+  );
 
   return serialized;
 }
@@ -266,10 +327,8 @@ export async function getFeed(currentUserId: string, limit = 20, before?: string
   const nextCursor =
     posts.length === limit ? posts[posts.length - 1].createdAt.toISOString() : null;
 
-  const likersById = await buildLikersMapForPosts(posts);
-
   return {
-    posts: posts.map((post) => serializePost(post, currentUserId, likersById)),
+    posts: await serializePosts(posts, currentUserId),
     nextCursor,
   };
 }
@@ -288,8 +347,7 @@ export async function searchPosts(currentUserId: string, q: string, limit = 20) 
     .limit(limit)
     .populate('author', AUTHOR_FIELDS);
 
-  const likersById = await buildLikersMapForPosts(posts);
-  return { posts: posts.map((post) => serializePost(post, currentUserId, likersById)) };
+  return { posts: await serializePosts(posts, currentUserId) };
 }
 
 function placeNameQuery(placeName: string): RegExp {
@@ -324,10 +382,8 @@ export async function listPostsByPlace(
   const nextCursor =
     posts.length === limit ? posts[posts.length - 1].createdAt.toISOString() : null;
 
-  const likersById = await buildLikersMapForPosts(posts);
-
   return {
-    posts: posts.map((post) => serializePost(post, currentUserId, likersById)),
+    posts: await serializePosts(posts, currentUserId),
     nextCursor,
   };
 }
@@ -345,6 +401,21 @@ export async function getPost(currentUserId: string, postId: string) {
   return serializeSinglePost(post, currentUserId);
 }
 
+export async function recordPostView(currentUserId: string, postId: string) {
+  const post = await Post.findById(postId);
+
+  if (!post) {
+    throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
+  }
+
+  await assertCanSeePost(currentUserId, post.author.toString());
+
+  post.viewsCount = (post.viewsCount ?? 0) + 1;
+  await post.save();
+
+  return { viewsCount: post.viewsCount };
+}
+
 export async function listPostLikers(currentUserId: string, postId: string) {
   const post = await Post.findById(postId);
 
@@ -354,9 +425,7 @@ export async function listPostLikers(currentUserId: string, postId: string) {
 
   await assertCanSeePost(currentUserId, post.author.toString());
 
-  const likerIds = post.likes.map((id) => id.toString());
-
-  if (likerIds.length === 0) {
+  if (post.likes.length === 0) {
     return { users: [] };
   }
 
@@ -364,10 +433,15 @@ export async function listPostLikers(currentUserId: string, postId: string) {
     .select(AUTHOR_FIELDS)
     .lean()) as unknown as PopulatedUser[];
 
-  const summaries = users.map((user) => serializeUserSummary(user));
-  summaries.sort((a, b) => a.name.localeCompare(b.name));
+  const userById = new Map(users.map((user) => [user._id.toString(), serializeUserSummary(user)]));
 
-  return { users: summaries };
+  // Most recent like is last in the array — return newest first for feed previews.
+  const ordered = [...post.likes]
+    .reverse()
+    .map((id) => userById.get(id.toString()))
+    .filter((user): user is UserSummary => user != null);
+
+  return { users: ordered };
 }
 
 export async function toggleLike(currentUserId: string, postId: string) {
@@ -585,7 +659,79 @@ export async function deletePost(currentUserId: string, postId: string) {
   }
 
   await Comment.deleteMany({ post: postId });
+  await PostSave.deleteMany({ post: postId });
   await post.deleteOne();
 
   return { id: postId };
+}
+
+export async function toggleSave(currentUserId: string, postId: string) {
+  const post = await Post.findById(postId);
+
+  if (!post) {
+    throw new AppError(404, 'Post not found', 'POST_NOT_FOUND');
+  }
+
+  await assertCanSeePost(currentUserId, post.author.toString());
+
+  const existing = await PostSave.findOne({ user: currentUserId, post: postId });
+
+  if (existing) {
+    await existing.deleteOne();
+  } else {
+    await PostSave.create({ user: currentUserId, post: postId });
+  }
+
+  await post.populate('author', AUTHOR_FIELDS);
+
+  return serializeSinglePost(post, currentUserId);
+}
+
+export async function listSavedPosts(currentUserId: string, limit = 20, before?: string) {
+  const saveQuery: Record<string, unknown> = { user: currentUserId };
+
+  if (before) {
+    saveQuery.createdAt = { $lt: new Date(before) };
+  }
+
+  const saves = await PostSave.find(saveQuery)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+  if (saves.length === 0) {
+    return { posts: [], nextCursor: null };
+  }
+
+  const postIds = saves.map((save) => save.post);
+  const posts = await Post.find({ _id: { $in: postIds } }).populate('author', AUTHOR_FIELDS);
+
+  const postById = new Map(posts.map((post) => [post._id.toString(), post]));
+  const orderedPosts: PostDocument[] = [];
+
+  for (const save of saves) {
+    const post = postById.get(save.post.toString());
+    if (post) {
+      orderedPosts.push(post);
+    }
+  }
+
+  const visiblePosts: PostDocument[] = [];
+  for (const post of orderedPosts) {
+    const authorId = (post.author as { _id: Types.ObjectId })._id.toString();
+    try {
+      await assertCanSeePost(currentUserId, authorId);
+      visiblePosts.push(post);
+    } catch {
+      // Post is no longer visible — drop from the saved list response.
+    }
+  }
+
+  const nextCursor =
+    saves.length === limit ? saves[saves.length - 1].createdAt.toISOString() : null;
+
+  return {
+    posts: await serializePosts(visiblePosts, currentUserId),
+    nextCursor,
+  };
 }

@@ -11,6 +11,7 @@ import {
 } from '../places/place-engagement.model';
 import { Comment } from '../posts/comment.model';
 import { Post } from '../posts/post.model';
+import { PostSave } from '../posts/post-save.model';
 import { User, getUserDisplayName, serializeUser } from '../users/user.model';
 import { Appeal } from '../moderation/appeal.model';
 import { Report } from '../moderation/report.model';
@@ -626,8 +627,10 @@ export async function deleteUser(userId: string) {
   }
 
   const objectId = user._id;
+  const userPostIds = await Post.find({ author: objectId }).distinct('_id');
 
   await Promise.all([
+    PostSave.deleteMany({ $or: [{ user: objectId }, { post: { $in: userPostIds } }] }),
     Post.deleteMany({ author: objectId }),
     Comment.deleteMany({ author: objectId }),
     Notification.deleteMany({ $or: [{ recipient: objectId }, { actor: objectId }] }),

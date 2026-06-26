@@ -28,7 +28,7 @@ import { getErrorMessage, type Post } from '../src/api/types';
 import { readCache, writeCache } from '../src/storage/offlineCache';
 import { Avatar } from '../src/components/Avatar';
 import { BrandButton } from '../src/components/BrandButton';
-import { FeedPostCard } from '../src/components/FeedPostCard';
+import { ProfilePostsSection } from '../src/components/ProfilePostsSection';
 import { FriendsHorizontalList } from '../src/components/FriendsHorizontalList';
 import { MainScreenLayout } from '../src/components/MainScreenLayout';
 import { ProfileFavoritePlaces } from '../src/components/ProfileFavoritePlaces';
@@ -194,7 +194,11 @@ export default function ProfileScreen() {
         ? `${user.firstName} ${user.lastName}`
         : user?.email?.split('@')[0] ?? 'Profile';
 
-  const username = user?.email?.split('@')[0] ?? displayName;
+  const headerName =
+    user?.username ??
+    displayName.split(' ')[1] ??
+    displayName.split(' ')[0] ??
+    'Profile';
 
   return (
     <MainScreenLayout activeTab="profile">
@@ -209,7 +213,7 @@ export default function ProfileScreen() {
             <Ionicons name="qr-code-outline" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerUsername} numberOfLines={1}>
-            {username}
+            {headerName}
           </Text>
           <Pressable
             onPress={() => router.push('/settings')}
@@ -249,7 +253,7 @@ export default function ProfileScreen() {
                 ) : null}
               </Pressable>
               <Pressable
-                onPress={() => router.push('/settings')}
+                onPress={() => router.push('/edit-profile')}
                 style={({ pressed }) => [styles.editProfileLink, pressed && styles.pressed]}
                 hitSlop={8}
               >
@@ -298,20 +302,15 @@ export default function ProfileScreen() {
             <ProfileFavoritePlaces places={favoritePlaces} onPlacePress={handlePlacePress} />
 
             <View style={styles.postsSection}>
-              <Text style={styles.postsTitle}>My Posts</Text>
               {posts.length === 0 ? (
                 <Text style={styles.emptyPosts}>You haven&apos;t posted yet.</Text>
               ) : (
-                posts.map((post) => (
-                  <FeedPostCard
-                    key={post.id}
-                    post={post}
-                    currentUserId={user?.id}
-                    onCommentPress={(item) =>
-                      router.push({ pathname: '/comments', params: { postId: item.id } })
-                    }
-                  />
-                ))
+                <ProfilePostsSection
+                  posts={posts}
+                  onPostPress={(post) =>
+                    router.push({ pathname: '/comments', params: { postId: post.id } })
+                  }
+                />
               )}
             </View>
           </ScrollView>

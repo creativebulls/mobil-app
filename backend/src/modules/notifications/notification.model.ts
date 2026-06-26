@@ -5,6 +5,7 @@ export type NotificationType =
   | 'comment'
   | 'reply'
   | 'comment_like'
+  | 'mention'
   | 'friend_request'
   | 'friend_request_accepted';
 
@@ -30,7 +31,7 @@ const notificationSchema = new Schema<NotificationDocument>(
     actor: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     type: {
       type: String,
-      enum: ['like', 'comment', 'reply', 'comment_like', 'friend_request', 'friend_request_accepted'],
+      enum: ['like', 'comment', 'reply', 'comment_like', 'mention', 'friend_request', 'friend_request_accepted'],
       required: true,
     },
     post: { type: Schema.Types.ObjectId, ref: 'Post' },

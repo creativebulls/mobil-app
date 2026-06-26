@@ -135,6 +135,8 @@ export default function RootLayout() {
               <Stack.Screen name="comments" options={{ presentation: 'modal' }} />
               <Stack.Screen name="notifications" />
               <Stack.Screen name="settings" />
+              <Stack.Screen name="edit-profile" />
+              <Stack.Screen name="saved-posts" />
               <Stack.Screen name="manage-relations" />
               <Stack.Screen name="add-friends" />
               <Stack.Screen name="friends" />

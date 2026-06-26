@@ -13,6 +13,7 @@ export interface IUser {
   surname?: string;
   firstName?: string;
   lastName?: string;
+  username?: string;
   birthdate?: Date;
   gender?: string;
   registrationCompleted: boolean;
@@ -71,6 +72,7 @@ const userSchema = new Schema<UserDocument>(
     surname: { type: String, trim: true },
     firstName: { type: String, trim: true },
     lastName: { type: String, trim: true },
+    username: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     birthdate: { type: Date },
     gender: { type: String, trim: true },
     registrationCompleted: { type: Boolean, default: false },
@@ -113,7 +115,19 @@ export function getUserDisplayName(user: Pick<IUser, 'givenName' | 'surname' | '
     return `${user.firstName} ${user.lastName}`;
   }
 
+  if (user.firstName) {
+    return user.firstName;
+  }
+
+  if (user.givenName) {
+    return user.givenName;
+  }
+
   return user.email.split('@')[0];
+}
+
+export function getUserHandle(user: Pick<IUser, 'username' | 'email'>): string {
+  return user.username ?? user.email.split('@')[0];
 }
 
 export type AuthorSummary = {
@@ -140,6 +154,7 @@ export function serializeUser(user: UserDocument) {
     surname: user.surname ?? null,
     firstName: user.firstName ?? null,
     lastName: user.lastName ?? null,
+    username: user.username ?? null,
     birthdate: user.birthdate?.toISOString() ?? null,
     gender: user.gender ?? null,
     registrationCompleted: user.registrationCompleted,

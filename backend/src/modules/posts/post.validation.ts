@@ -1,11 +1,37 @@
 import { z } from 'zod';
 
+function parseMentionedUserIds(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String) : undefined;
+    } catch {
+      return value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return undefined;
+}
+
 export const createPostSchema = z.object({
   text: z.string().trim().max(2000).optional(),
-  placeName: z.string().trim().max(120).optional(),
+  placeName: z.string().trim().min(1, 'A place is required').max(120),
+  placeId: z.string().trim().min(1).max(200).optional(),
   placeImageUrl: z.string().trim().max(2000).optional(),
   placeDistanceKm: z.coerce.number().min(0).max(100000).optional(),
   reaction: z.enum(['like', 'dislike', 'love']).optional(),
+  mentionedUserIds: z.preprocess(parseMentionedUserIds, z.array(z.string()).max(20).optional()),
 });
 
 export const addCommentSchema = z.object({

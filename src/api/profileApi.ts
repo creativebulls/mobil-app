@@ -4,6 +4,7 @@ import type {
   FeedResponse,
   Post,
   PushPreferences,
+  UserProfile,
   UserProfileResponse,
   UserRelationship,
   UserSearchResult,
@@ -39,6 +40,7 @@ export type FavoritePlace = {
 export type FriendSummary = {
   id: string;
   name: string;
+  username?: string | null;
   avatarUri: string | null;
   statusText: string | null;
   isOnline?: boolean;
@@ -52,6 +54,59 @@ export async function updateProfileStatus(statusText: string): Promise<{ statusT
   return apiRequest<{ statusText: string | null }>('/profile/status', {
     method: 'PATCH',
     body: { statusText },
+  });
+}
+
+export async function updatePersonalInfo(input: {
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+}): Promise<{ user: UserProfile }> {
+  return apiRequest<{ user: UserProfile }>('/profile/personal-info', {
+    method: 'PATCH',
+    body: input,
+  });
+}
+
+export type EmailChangeCodeResponse = {
+  message: string;
+  maskedEmail: string;
+  expiresInSeconds: number;
+};
+
+export async function sendCurrentEmailChangeCode(): Promise<EmailChangeCodeResponse> {
+  return apiRequest<EmailChangeCodeResponse>('/profile/email-change/send-current-code', {
+    method: 'POST',
+  });
+}
+
+export async function verifyCurrentEmailChangeCode(code: string): Promise<{
+  message: string;
+  sessionExpiresInSeconds: number;
+}> {
+  return apiRequest<{ message: string; sessionExpiresInSeconds: number }>(
+    '/profile/email-change/verify-current-code',
+    {
+      method: 'POST',
+      body: { code },
+    },
+  );
+}
+
+export async function sendNewEmailChangeCode(newEmail: string): Promise<EmailChangeCodeResponse> {
+  return apiRequest<EmailChangeCodeResponse>('/profile/email-change/send-new-code', {
+    method: 'POST',
+    body: { newEmail },
+  });
+}
+
+export async function confirmEmailChange(
+  newEmail: string,
+  code: string,
+): Promise<{ message: string; user: UserProfile }> {
+  return apiRequest<{ message: string; user: UserProfile }>('/profile/email-change/confirm', {
+    method: 'POST',
+    body: { newEmail, code },
   });
 }
 

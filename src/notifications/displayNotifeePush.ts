@@ -21,10 +21,16 @@ function normalizeAndroidNotification(payload: NotifeePayload): NotifeePayload {
 }
 
 /** Displays a push notification from the backend `data.notifee` JSON blob. */
-export async function displayNotifeePush(raw: string): Promise<void> {
+export async function displayNotifeePush(
+  raw: string,
+  navigationData?: Record<string, string>,
+): Promise<void> {
   try {
     const payload = normalizeAndroidNotification(JSON.parse(raw) as NotifeePayload);
-    await notifee.displayNotification(payload);
+    await notifee.displayNotification({
+      ...payload,
+      data: navigationData ?? {},
+    });
   } catch {
     // Ignore malformed payloads.
   }

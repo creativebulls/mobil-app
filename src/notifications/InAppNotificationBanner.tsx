@@ -9,6 +9,7 @@ import { NotificationAvatarWithBadge } from '../components/NotificationAvatarWit
 import { getStoredUser } from '../storage/authSession';
 import { colors } from '../theme/colors';
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent';
+import { navigateToPost } from './navigateFromPushData';
 
 type BannerKind = 'message' | 'activity';
 
@@ -67,6 +68,7 @@ function activityIcon(type?: string): keyof typeof Ionicons.glyphMap {
       return 'heart';
     case 'comment':
     case 'reply':
+    case 'mention':
       return 'chatbubble-ellipses';
     case 'friend_request':
     case 'friend_request_accepted':
@@ -178,13 +180,7 @@ export function InAppNotificationBanner() {
       onPress: () => {
         dismiss();
         if (notification.postId) {
-          router.push({
-            pathname: '/comments',
-            params: {
-              postId: notification.postId,
-              ...(notification.commentId ? { highlightCommentId: notification.commentId } : {}),
-            },
-          });
+          navigateToPost(notification.postId, notification.commentId);
         } else {
           router.push('/notifications');
         }

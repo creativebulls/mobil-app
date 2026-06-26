@@ -15,9 +15,11 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
   const body = createPostSchema.parse({
     text: req.body.text,
     placeName: req.body.placeName,
+    placeId: req.body.placeId,
     placeImageUrl: req.body.placeImageUrl,
     placeDistanceKm: req.body.placeDistanceKm,
     reaction: req.body.reaction,
+    mentionedUserIds: req.body.mentionedUserIds,
   });
 
   const uploaded = req.files as
@@ -33,8 +35,10 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
     posterFiles,
     reaction: body.reaction,
     placeName: body.placeName,
+    placeId: body.placeId,
     placeImageUrl: body.placeImageUrl,
     placeDistanceKm: body.placeDistanceKm,
+    mentionedUserIds: body.mentionedUserIds,
   });
 
   sendSuccess(res, result, 201);
@@ -43,6 +47,12 @@ export const createPost = asyncHandler(async (req: AuthenticatedRequest, res: Re
 export const getFeed = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const query = feedQuerySchema.parse(req.query);
   const result = await postService.getFeed(req.auth!.userId, query.limit, query.before);
+  sendSuccess(res, result);
+});
+
+export const listSavedPosts = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const query = feedQuerySchema.parse(req.query);
+  const result = await postService.listSavedPosts(req.auth!.userId, query.limit, query.before);
   sendSuccess(res, result);
 });
 
@@ -57,8 +67,18 @@ export const getPost = asyncHandler(async (req: AuthenticatedRequest, res: Respo
   sendSuccess(res, result);
 });
 
+export const recordPostView = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await postService.recordPostView(req.auth!.userId, String(req.params.id));
+  sendSuccess(res, result);
+});
+
 export const toggleLike = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const result = await postService.toggleLike(req.auth!.userId, String(req.params.id));
+  sendSuccess(res, result);
+});
+
+export const toggleSave = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await postService.toggleSave(req.auth!.userId, String(req.params.id));
   sendSuccess(res, result);
 });
 

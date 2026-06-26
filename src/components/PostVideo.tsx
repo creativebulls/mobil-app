@@ -16,8 +16,8 @@ import { FullscreenVideoPlayer } from './FullscreenVideoPlayer';
 import { AppImage } from './AppImage';
 import { useFeedVideoPlayback } from '../feed/FeedVideoPlaybackContext';
 import { useMediaUrl } from '../hooks/useMediaUrl';
+import { useVideoPoster } from '../hooks/useVideoPoster';
 import { colors } from '../theme/colors';
-import { createVideoThumbnail } from '../utils/videoThumbnail';
 
 export { isVideoMediaUrl as isVideoUrl } from '../utils/postMedia';
 
@@ -28,43 +28,6 @@ function runPlayerCommand(command: () => void) {
   } catch {
     // expo-video may throw if pause/play runs after unmount.
   }
-}
-
-function useVideoPoster(
-  uri: string,
-  posterUri: string | null | undefined,
-  resolvedVideo: string | null,
-) {
-  const resolvedPoster = useMediaUrl(posterUri);
-  const [fallbackPoster, setFallbackPoster] = useState<string | null>(null);
-  const [loadingPoster, setLoadingPoster] = useState(!resolvedPoster);
-
-  useEffect(() => {
-    if (resolvedPoster) {
-      setLoadingPoster(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingPoster(true);
-
-    const source = resolvedVideo ?? uri;
-    void createVideoThumbnail(source).then((thumb) => {
-      if (!cancelled) {
-        setFallbackPoster(thumb);
-        setLoadingPoster(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [uri, resolvedVideo, resolvedPoster]);
-
-  return {
-    displayPoster: resolvedPoster ?? fallbackPoster,
-    loadingPoster,
-  };
 }
 
 /** Inline preview tile — poster with play overlay (used in create-post previews). */

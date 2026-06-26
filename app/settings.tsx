@@ -113,6 +113,16 @@ export default function SettingsScreen() {
           <ActivityIndicator color={colors.brand} style={styles.loader} />
         ) : (
           <ScrollView contentContainerStyle={styles.scroll}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <Pressable
+              onPress={() => router.push('/edit-profile')}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            >
+              <Ionicons name="person-circle-outline" size={22} color={colors.text} />
+              <Text style={styles.rowLabel}>Edit profile</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.labelGray} />
+            </Pressable>
+
             <Text style={styles.sectionTitle}>Privacy</Text>
             <View style={styles.toggleRow}>
               <View style={styles.toggleText}>
@@ -128,6 +138,15 @@ export default function SettingsScreen() {
                 thumbColor={colors.white}
               />
             </View>
+
+            <Pressable
+              onPress={() => router.push('/saved-posts')}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            >
+              <Ionicons name="bookmark-outline" size={22} color={colors.text} />
+              <Text style={styles.rowLabel}>Saved posts</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.labelGray} />
+            </Pressable>
 
             <Pressable
               onPress={() => router.push('/manage-relations')}

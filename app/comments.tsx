@@ -18,6 +18,7 @@ import {
   fetchComments,
   fetchPost,
   fetchReplies,
+  recordPostView,
   toggleCommentLike,
 } from '../src/api/postsApi';
 import { getErrorMessage, type Post, type PostComment } from '../src/api/types';
@@ -82,6 +83,15 @@ export default function PostDetailScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!postId) {
+      return;
+    }
+    void recordPostView(postId).then((result) => {
+      setPost((current) => (current ? { ...current, viewsCount: result.viewsCount } : current));
+    }).catch(() => {});
+  }, [postId]);
 
   useEffect(() => {
     if (didHighlightRef.current || !highlightCommentId || isLoading) {

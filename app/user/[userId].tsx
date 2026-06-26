@@ -32,7 +32,7 @@ import { getErrorMessage, type Post } from '../../src/api/types';
 import { Avatar } from '../../src/components/Avatar';
 import { StackScreenLayout } from '../../src/components/StackScreenLayout';
 import { BrandButton } from '../../src/components/BrandButton';
-import { FeedPostCard } from '../../src/components/FeedPostCard';
+import { ProfilePostsSection } from '../../src/components/ProfilePostsSection';
 import { UserListSheet } from '../../src/components/UserListSheet';
 import { useDialog } from '../../src/components/dialog/DialogProvider';
 import { getStoredUser } from '../../src/storage/authSession';
@@ -468,7 +468,6 @@ export default function UserProfileScreen() {
             ) : null}
 
             <View style={styles.postsSection}>
-              <Text style={styles.postsTitle}>Posts</Text>
               {relationship?.blockedByMe || relationship?.blockedMe ? (
                 <Text style={styles.emptyPosts}>Posts are hidden.</Text>
               ) : relationship?.isLocked ? (
@@ -482,17 +481,12 @@ export default function UserProfileScreen() {
               ) : posts.length === 0 ? (
                 <Text style={styles.emptyPosts}>No posts yet.</Text>
               ) : (
-                posts.map((post) => (
-                  <FeedPostCard
-                    key={post.id}
-                    post={post}
-                    currentUserId={currentUserId}
-                    onAuthorPress={(authorId) => openUserProfile(router, authorId, currentUserId)}
-                    onCommentPress={(item) =>
-                      router.push({ pathname: '/comments', params: { postId: item.id } })
-                    }
-                  />
-                ))
+                <ProfilePostsSection
+                  posts={posts}
+                  onPostPress={(post) =>
+                    router.push({ pathname: '/comments', params: { postId: post.id } })
+                  }
+                />
               )}
             </View>
           </ScrollView>

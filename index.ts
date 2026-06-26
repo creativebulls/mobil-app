@@ -10,6 +10,7 @@
 // an admin sets takes effect on the next app launch.
 
 import '@expo/metro-runtime';
+import './src/theme/applyTypographyScale';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
@@ -30,7 +31,7 @@ if (Platform.OS === 'android') {
     if (!raw || typeof raw !== 'string') {
       return;
     }
-    await displayNotifeePush(raw);
+    await displayNotifeePush(raw, remoteMessage.data as Record<string, string>);
   });
 }
 

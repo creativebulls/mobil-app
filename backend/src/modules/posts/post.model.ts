@@ -1,6 +1,7 @@
 import { Schema, model, type Document, type Types } from 'mongoose';
 
 export interface IPostPlace {
+  placeId?: string;
   name: string;
   logoUrl?: string;
   distanceKm?: number;
@@ -19,6 +20,9 @@ export interface IPost {
   place?: IPostPlace;
   likes: Types.ObjectId[];
   commentsCount: number;
+  viewsCount: number;
+  hashtags: string[];
+  mentionedUsers: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +31,7 @@ export type PostDocument = IPost & Document<Types.ObjectId>;
 
 const postPlaceSchema = new Schema<IPostPlace>(
   {
+    placeId: { type: String, trim: true },
     name: { type: String, required: true, trim: true },
     logoUrl: { type: String },
     distanceKm: { type: Number },
@@ -45,6 +50,9 @@ const postSchema = new Schema<PostDocument>(
     place: { type: postPlaceSchema },
     likes: { type: [Schema.Types.ObjectId], ref: 'User', default: [] },
     commentsCount: { type: Number, default: 0 },
+    viewsCount: { type: Number, default: 0 },
+    hashtags: { type: [String], default: [] },
+    mentionedUsers: { type: [Schema.Types.ObjectId], ref: 'User', default: [] },
   },
   { timestamps: true },
 );

@@ -4,35 +4,30 @@ import type { AuthorSummary } from '../api/types';
 import { Avatar } from './Avatar';
 import { colors } from '../theme/colors';
 
-const AVATAR_SIZE = 18;
-const AVATAR_OVERLAP = 6;
+const AVATAR_SIZE = 22;
+const AVATAR_OVERLAP = 10;
 
 type PostLikesPreviewProps = {
   likesCount: number;
   recentLikers: AuthorSummary[];
+  /** Ring around stacked avatars — match section background on place posts. */
+  avatarRingColor?: string;
   onPress?: () => void;
 };
 
-function buildLikesLabel(likesCount: number, primaryName: string): string {
-  if (likesCount <= 1) {
-    return `Liked by ${primaryName}`;
-  }
-
-  const others = likesCount - 1;
-  const othersLabel = others === 1 ? '1 other' : `${others} others`;
-  return `Liked by ${primaryName} and ${othersLabel}`;
-}
-
-export function PostLikesPreview({ likesCount, recentLikers, onPress }: PostLikesPreviewProps) {
+export function PostLikesPreview({
+  likesCount,
+  recentLikers,
+  avatarRingColor = colors.white,
+  onPress,
+}: PostLikesPreviewProps) {
   if (likesCount <= 0) {
     return null;
   }
 
   const primaryLiker = recentLikers[0];
+  // Left = older liker, right = most recent (on top).
   const displayLikers = recentLikers.slice(0, 3).reverse();
-  const label = primaryLiker
-    ? buildLikesLabel(likesCount, primaryLiker.name)
-    : `${likesCount} ${likesCount === 1 ? 'like' : 'likes'}`;
 
   const content = (
     <View style={styles.row}>
@@ -43,8 +38,12 @@ export function PostLikesPreview({ likesCount, recentLikers, onPress }: PostLike
               key={liker.id}
               style={[
                 styles.avatarWrap,
-                index > 0 && { marginLeft: -AVATAR_OVERLAP },
-                { zIndex: index + 1 },
+                {
+                  marginLeft: index > 0 ? -AVATAR_OVERLAP : 0,
+                  zIndex: index + 1,
+                  borderColor: avatarRingColor,
+                  backgroundColor: avatarRingColor,
+                },
               ]}
             >
               <Avatar uri={liker.avatarUri} name={liker.name} size={AVATAR_SIZE} style={styles.avatar} />
@@ -65,7 +64,7 @@ export function PostLikesPreview({ likesCount, recentLikers, onPress }: PostLike
             ) : null}
           </>
         ) : (
-          label
+          `${likesCount} ${likesCount === 1 ? 'like' : 'likes'}`
         )}
       </Text>
     </View>
@@ -92,6 +91,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 2,
   },
   avatarStack: {
     flexDirection: 'row',
@@ -99,9 +99,7 @@ const styles = StyleSheet.create({
   },
   avatarWrap: {
     borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 1.5,
-    borderColor: colors.white,
-    backgroundColor: colors.white,
+    borderWidth: 2,
   },
   avatar: {
     borderRadius: AVATAR_SIZE / 2,
@@ -111,6 +109,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
     color: colors.text,
+    lineHeight: 18,
   },
   name: {
     fontWeight: '700',

@@ -68,7 +68,7 @@ export async function resolveConnectCode(viewerId: string, rawCode: string) {
   };
 }
 
-const AUTHOR_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl statusText points';
+const AUTHOR_FIELDS = 'givenName surname firstName lastName email profilePhotoUrl statusText points username';
 
 const FRIEND_POINTS = 5;
 
@@ -79,11 +79,13 @@ function serializeFriendUser(user: {
   firstName?: string;
   lastName?: string;
   email: string;
+  username?: string;
   profilePhotoUrl?: string;
   statusText?: string;
 }) {
   return {
     ...serializeAuthor(user as Parameters<typeof serializeAuthor>[0]),
+    username: user.username ?? null,
     statusText: user.statusText ?? null,
     isOnline: isUserOnline(user._id.toString()),
   };

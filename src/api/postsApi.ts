@@ -58,9 +58,11 @@ export async function createPost(input: {
   text?: string;
   media?: { uri: string; type: 'image' | 'video'; thumbnailUri?: string | null }[];
   reaction?: PostReaction | null;
-  placeName?: string;
+  placeName: string;
+  placeId?: string;
   placeImageUrl?: string;
   placeDistanceKm?: number;
+  mentionedUserIds?: string[];
 }): Promise<Post> {
   const formData = new FormData();
 
@@ -72,8 +74,14 @@ export async function createPost(input: {
     formData.append('reaction', input.reaction);
   }
 
-  if (input.placeName) {
-    formData.append('placeName', input.placeName);
+  formData.append('placeName', input.placeName);
+
+  if (input.placeId) {
+    formData.append('placeId', input.placeId);
+  }
+
+  if (input.mentionedUserIds && input.mentionedUserIds.length > 0) {
+    formData.append('mentionedUserIds', JSON.stringify(input.mentionedUserIds));
   }
 
   if (input.placeImageUrl) {
@@ -113,8 +121,26 @@ export async function fetchPost(postId: string): Promise<Post> {
   return apiRequest<Post>(`/posts/${postId}`);
 }
 
+export async function recordPostView(postId: string): Promise<{ viewsCount: number }> {
+  return apiRequest<{ viewsCount: number }>(`/posts/${postId}/view`, { method: 'POST', body: {} });
+}
+
 export async function toggleLike(postId: string): Promise<Post> {
   return apiRequest<Post>(`/posts/${postId}/like`, { method: 'POST', body: {} });
+}
+
+export async function toggleSavePost(postId: string): Promise<Post> {
+  return apiRequest<Post>(`/posts/${postId}/save`, { method: 'POST', body: {} });
+}
+
+export async function fetchSavedPosts(cursor?: string | null, limit = 20): Promise<FeedResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (cursor) {
+    params.set('before', cursor);
+  }
+
+  return apiRequest<FeedResponse>(`/posts/saved?${params.toString()}`);
 }
 
 export async function fetchPostLikers(postId: string): Promise<{ users: AuthorSummary[] }> {

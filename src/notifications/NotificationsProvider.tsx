@@ -1,5 +1,7 @@
 import { router } from 'expo-router';
+import { navigateFromPushData } from './navigateFromPushData';
 import * as Notifications from 'expo-notifications';
+import notifee from '@notifee/react-native';
 import {
   createContext,
   useCallback,
@@ -100,65 +102,38 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     });
 
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as
-        | {
-            postId?: string;
-            commentId?: string;
-            friendRequestId?: string;
-            type?: string;
-            conversationId?: string;
-            sessionId?: string;
-            adminName?: string;
-          }
-        | undefined;
+      const data = response.notification.request.content.data as Record<string, unknown> | undefined;
 
       if (data?.type === 'live_request' && data.sessionId) {
-        emitLiveRequest({ sessionId: data.sessionId, adminName: data.adminName ?? null });
+        emitLiveRequest({
+          sessionId: String(data.sessionId),
+          adminName: typeof data.adminName === 'string' ? data.adminName : null,
+        });
         return;
       }
 
       if (data?.type === 'incoming_call') {
-        // Bringing the app to the foreground reconnects the realtime socket;
-        // the server then asks the caller to re-send the call, and the global
-        // call overlay appears. Nothing else to navigate to.
         return;
       }
 
-      if (data?.type === 'missed_call') {
-        router.push('/call-history');
-        return;
-      }
-
-      if (data?.type === 'message' && data.conversationId) {
-        router.push({
-          pathname: '/chat',
-          params: {
-            conversationId: data.conversationId,
-            name: (data as { senderName?: string }).senderName ?? 'Chat',
-            userId: (data as { senderId?: string }).senderId ?? '',
-            isGroup: (data as { isGroup?: string }).isGroup === '1' ? '1' : '',
-          },
-        });
-        return;
-      }
-
-      if (data?.postId) {
-        router.push({
-          pathname: '/comments',
-          params: {
-            postId: data.postId,
-            ...(data.commentId ? { highlightCommentId: data.commentId } : {}),
-          },
-        });
-        return;
-      }
-
-      if (data?.type === 'friend_request' || data?.type === 'friend_request_accepted') {
-        router.push('/notifications');
+      if (navigateFromPushData(data)) {
         return;
       }
 
       router.push('/notifications');
+    });
+
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) {
+        return;
+      }
+      navigateFromPushData(response.notification.request.content.data as Record<string, unknown>);
+    });
+
+    void notifee.getInitialNotification().then((initial) => {
+      if (initial?.pressAction?.id === 'default') {
+        navigateFromPushData((initial.notification?.data ?? {}) as Record<string, unknown>);
+      }
     });
 
     return () => {

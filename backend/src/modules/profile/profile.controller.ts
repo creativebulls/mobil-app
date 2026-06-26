@@ -9,7 +9,9 @@ import {
   updateStatusSchema,
   userIdParamSchema,
 } from '../friends/friends.validation';
+import { updatePersonalInfoSchema, emailChangeCodeSchema, emailChangeNewEmailSchema, emailChangeConfirmSchema } from './profile.validation';
 import * as profileService from './profile.service';
+import * as emailChangeService from './email-change.service';
 
 export const profileGuards = [requireAuth, requireVerifiedEmail, requireNotSuspended];
 
@@ -48,6 +50,35 @@ export const getStats = asyncHandler(async (req: AuthenticatedRequest, res: Resp
 export const updateStatus = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const body = updateStatusSchema.parse(req.body);
   const result = await profileService.updateStatusText(req.auth!.userId, body.statusText);
+  sendSuccess(res, result);
+});
+
+export const updatePersonalInfo = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = updatePersonalInfoSchema.parse(req.body);
+  const result = await profileService.updatePersonalInfo(req.auth!.userId, body);
+  sendSuccess(res, result);
+});
+
+export const sendCurrentEmailChangeCode = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const result = await emailChangeService.sendCurrentEmailChangeCode(req.auth!.userId);
+  sendSuccess(res, result);
+});
+
+export const verifyCurrentEmailChangeCode = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = emailChangeCodeSchema.parse(req.body);
+  const result = await emailChangeService.verifyCurrentEmailChangeCode(req.auth!.userId, body.code);
+  sendSuccess(res, result);
+});
+
+export const sendNewEmailChangeCode = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = emailChangeNewEmailSchema.parse(req.body);
+  const result = await emailChangeService.sendNewEmailChangeCode(req.auth!.userId, body.newEmail);
+  sendSuccess(res, result);
+});
+
+export const confirmEmailChange = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = emailChangeConfirmSchema.parse(req.body);
+  const result = await emailChangeService.confirmEmailChange(req.auth!.userId, body.newEmail, body.code);
   sendSuccess(res, result);
 });
 

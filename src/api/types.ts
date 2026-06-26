@@ -26,6 +26,7 @@ export type UserProfile = {
   surname: string | null;
   firstName: string | null;
   lastName: string | null;
+  username: string | null;
   birthdate: string | null;
   gender: string | null;
   registrationCompleted: boolean;
@@ -80,6 +81,7 @@ export type AuthorSummary = {
 };
 
 export type PostPlace = {
+  placeId?: string | null;
   name: string;
   logoUri: string | null;
   distanceKm: number | null;
@@ -98,10 +100,13 @@ export type Post = {
   reaction: PostReaction | null;
   place: PostPlace | null;
   likesCount: number;
+  viewsCount?: number;
   /** Up to 3 most recent likers, newest first. */
   recentLikers?: AuthorSummary[];
   commentsCount: number;
   likedByMe: boolean;
+  savedByMe?: boolean;
+  hashtags?: string[];
   createdAt: string;
   timeAgo: string;
 };
@@ -143,6 +148,7 @@ export type NotificationType =
   | 'comment'
   | 'reply'
   | 'comment_like'
+  | 'mention'
   | 'friend_request'
   | 'friend_request_accepted';
 

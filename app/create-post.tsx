@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
@@ -18,12 +17,16 @@ import { createPost } from '../src/api/postsApi';
 import { getErrorMessage } from '../src/api/types';
 import { AppImage } from '../src/components/AppImage';
 import { Avatar } from '../src/components/Avatar';
+import { CreatePostComposerInput } from '../src/components/CreatePostComposerInput';
+import { CreatePostPlaceField, type TaggedPlace } from '../src/components/CreatePostPlaceField';
 import { useDialog } from '../src/components/dialog/DialogProvider';
 import { StackScreenLayout } from '../src/components/StackScreenLayout';
 import { getStoredUser } from '../src/storage/authSession';
 import type { PostReaction, UserProfile } from '../src/api/types';
 import { colors } from '../src/theme/colors';
 import { createVideoThumbnail } from '../src/utils/videoThumbnail';
+
+const MAX_MEDIA = 6;
 
 const REACTIONS: {
   key: PostReaction;
@@ -33,7 +36,7 @@ const REACTIONS: {
 }[] = [
   { key: 'like', label: 'Like', icon: 'thumbs-up-outline', activeIcon: 'thumbs-up' },
   { key: 'dislike', label: 'Dislike', icon: 'thumbs-down-outline', activeIcon: 'thumbs-down' },
-  { key: 'love', label: 'I love it', icon: 'heart-outline', activeIcon: 'heart' },
+  { key: 'love', label: 'Love it', icon: 'heart-outline', activeIcon: 'heart' },
 ];
 
 type PostMediaItem = { uri: string; type: 'image' | 'video'; thumbnailUri?: string | null };
@@ -44,6 +47,16 @@ async function assetToMediaItem(asset: ImagePicker.ImagePickerAsset): Promise<Po
   return { uri: asset.uri, type, thumbnailUri };
 }
 
+function resolveDisplayName(user: UserProfile | null): string {
+  if (user?.givenName && user?.surname) {
+    return `${user.givenName} ${user.surname}`;
+  }
+  if (user?.firstName && user?.lastName) {
+    return `${user.firstName} ${user.lastName}`;
+  }
+  return user?.email?.split('@')[0] ?? 'You';
+}
+
 function CreatePostMediaTile({
   item,
   onRemove,
@@ -52,44 +65,75 @@ function CreatePostMediaTile({
   onRemove: () => void;
 }) {
   return (
-    <View style={styles.tileWrap}>
+    <View style={styles.mediaTile}>
       {item.type === 'video' ? (
-        <View style={styles.tileImage}>
+        <View style={styles.mediaTileInner}>
           {item.thumbnailUri ? (
             <AppImage source={{ uri: item.thumbnailUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           ) : (
-            <View style={[StyleSheet.absoluteFill, styles.videoTile]}>
+            <View style={[StyleSheet.absoluteFill, styles.videoPlaceholder]}>
               <ActivityIndicator color={colors.white} />
             </View>
           )}
-          <View style={styles.videoTileOverlay}>
-            <Ionicons name="play-circle" size={34} color={colors.white} />
+          <View style={styles.videoOverlay}>
+            <Ionicons name="play" size={22} color={colors.white} />
           </View>
         </View>
       ) : (
-        <AppImage source={{ uri: item.uri }} style={styles.tileImage} resizeMode="cover" />
+        <AppImage source={{ uri: item.uri }} style={styles.mediaTileInner} resizeMode="cover" />
       )}
-      <Pressable
-        onPress={onRemove}
-        style={styles.removeImageButton}
-        accessibilityLabel="Remove"
-        hitSlop={8}
-      >
-        <Ionicons name="close-circle" size={24} color={colors.white} />
+      <Pressable onPress={onRemove} style={styles.removeMedia} hitSlop={6} accessibilityLabel="Remove media">
+        <Ionicons name="close" size={14} color={colors.white} />
       </Pressable>
     </View>
+  );
+}
+
+type MediaAction = 'camera' | 'gallery' | 'video';
+
+function MediaActionButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.mediaAction, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={20} color={colors.brand} />
+      <Text style={styles.mediaActionLabel}>{label}</Text>
+    </Pressable>
   );
 }
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const dialog = useDialog();
-  const params = useLocalSearchParams<{ placeName?: string; placeImageUrl?: string }>();
-  const isPlaceMode = Boolean(params.placeName);
+  const params = useLocalSearchParams<{ placeName?: string; placeImageUrl?: string; placeId?: string }>();
+
+  const initialPlace = useMemo<TaggedPlace | null>(() => {
+    if (!params.placeName) {
+      return null;
+    }
+    return {
+      placeId: params.placeId ?? '',
+      name: params.placeName,
+      imageUrl: params.placeImageUrl ?? null,
+    };
+  }, [params.placeId, params.placeImageUrl, params.placeName]);
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [text, setText] = useState('');
   const [media, setMedia] = useState<PostMediaItem[]>([]);
-  const [placeName, setPlaceName] = useState(params.placeName ?? '');
+  const [taggedPlace, setTaggedPlace] = useState<TaggedPlace | null>(initialPlace);
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
   const [reaction, setReaction] = useState<PostReaction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -100,54 +144,24 @@ export default function CreatePostScreen() {
     }, []),
   );
 
-  const displayName =
-    user?.givenName && user?.surname
-      ? `${user.givenName} ${user.surname}`
-      : user?.firstName && user?.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user?.email?.split('@')[0] ?? 'You';
+  const displayName = resolveDisplayName(user);
+  const hasContent = text.trim().length > 0 || media.length > 0;
+  const canPost = Boolean(taggedPlace) && hasContent && !isSubmitting;
+  const showReactions = Boolean(taggedPlace);
 
-  const MAX_IMAGES = 6;
-  const canPost = (text.trim().length > 0 || media.length > 0) && !isSubmitting;
-
-  async function handlePickVideo() {
-    if (media.length >= MAX_IMAGES) {
+  async function ensureMediaRoom() {
+    if (media.length >= MAX_MEDIA) {
       await dialog.alert({
         title: 'Limit reached',
-        message: `You can add up to ${MAX_IMAGES} items.`,
+        message: `You can add up to ${MAX_MEDIA} photos or videos.`,
       });
-      return;
+      return false;
     }
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      await dialog.alert({
-        title: 'Permission required',
-        message: 'Please allow photo access to add videos.',
-      });
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_IMAGES - media.length,
-      videoMaxDuration: 60,
-      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
-    });
-
-    if (!result.canceled) {
-      const picked = await Promise.all(result.assets.map(assetToMediaItem));
-      setMedia((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
-    }
+    return true;
   }
 
-  async function handlePickImage() {
-    if (media.length >= MAX_IMAGES) {
-      await dialog.alert({
-        title: 'Limit reached',
-        message: `You can add up to ${MAX_IMAGES} items.`,
-      });
+  async function handlePickFromGallery(includeVideos: boolean) {
+    if (!(await ensureMediaRoom())) {
       return;
     }
 
@@ -155,15 +169,15 @@ export default function CreatePostScreen() {
     if (!permission.granted) {
       await dialog.alert({
         title: 'Permission required',
-        message: 'Please allow photo access to add photos or videos.',
+        message: 'Please allow photo library access to add media.',
       });
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
+      mediaTypes: includeVideos ? ['images', 'videos'] : ['videos'],
       allowsMultipleSelection: true,
-      selectionLimit: MAX_IMAGES - media.length,
+      selectionLimit: MAX_MEDIA - media.length,
       quality: 0.85,
       videoMaxDuration: 60,
       videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
@@ -171,16 +185,12 @@ export default function CreatePostScreen() {
 
     if (!result.canceled) {
       const picked = await Promise.all(result.assets.map(assetToMediaItem));
-      setMedia((prev) => [...prev, ...picked].slice(0, MAX_IMAGES));
+      setMedia((prev) => [...prev, ...picked].slice(0, MAX_MEDIA));
     }
   }
 
   async function handleCaptureMedia() {
-    if (media.length >= MAX_IMAGES) {
-      await dialog.alert({
-        title: 'Limit reached',
-        message: `You can add up to ${MAX_IMAGES} items.`,
-      });
+    if (!(await ensureMediaRoom())) {
       return;
     }
 
@@ -202,7 +212,7 @@ export default function CreatePostScreen() {
 
     if (!result.canceled && result.assets?.length) {
       const item = await assetToMediaItem(result.assets[0]);
-      setMedia((prev) => [...prev, item].slice(0, MAX_IMAGES));
+      setMedia((prev) => [...prev, item].slice(0, MAX_MEDIA));
     }
   }
 
@@ -211,6 +221,16 @@ export default function CreatePostScreen() {
   }
 
   async function handleSubmit() {
+    if (!hasContent) {
+      setError('Add text or a photo/video to your post.');
+      return;
+    }
+
+    if (!taggedPlace) {
+      setError('Select which place you are at before posting.');
+      return;
+    }
+
     if (!canPost) {
       return;
     }
@@ -222,9 +242,11 @@ export default function CreatePostScreen() {
       await createPost({
         text: text.trim() || undefined,
         media,
-        reaction: isPlaceMode ? reaction : null,
-        placeName: placeName.trim() || undefined,
-        placeImageUrl: params.placeImageUrl || undefined,
+        reaction,
+        placeName: taggedPlace.name,
+        placeId: taggedPlace.placeId || undefined,
+        placeImageUrl: taggedPlace.imageUrl ?? undefined,
+        mentionedUserIds,
       });
       router.back();
     } catch (submitError) {
@@ -237,310 +259,122 @@ export default function CreatePostScreen() {
   return (
     <StackScreenLayout>
       <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Close">
-            <Ionicons name="close" size={26} color={colors.text} />
-          </Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel="Close">
+          <Ionicons name="close" size={26} color={colors.text} />
+        </Pressable>
 
-          <Text style={styles.headerTitle}>New Post</Text>
+        <Text style={styles.headerTitle}>New post</Text>
 
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!canPost}
-            style={[styles.postButton, !canPost && styles.postButtonDisabled]}
-            accessibilityRole="button"
-            accessibilityLabel="Share post"
-          >
-            <Text style={[styles.postButtonText, !canPost && styles.postButtonTextDisabled]}>
-              Post
-            </Text>
-          </Pressable>
-        </View>
-
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        <Pressable
+          onPress={() => void handleSubmit()}
+          disabled={!canPost}
+          style={[styles.postButton, !canPost && styles.postButtonDisabled]}
+          accessibilityRole="button"
+          accessibilityLabel="Share post"
         >
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <View style={styles.authorRow}>
-              <Avatar uri={user?.profilePhotoUrl} name={displayName} size={44} />
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Text style={[styles.postButtonText, !canPost && styles.postButtonTextDisabled]}>Post</Text>
+          )}
+        </Pressable>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.authorRow}>
+            <Avatar uri={user?.profilePhotoUrl} name={displayName} size={40} />
+            <View style={styles.authorText}>
               <Text style={styles.authorName}>{displayName}</Text>
+              <Text style={styles.authorHint}>Select where you are to share your post</Text>
             </View>
-
-            {isPlaceMode ? (
-              <>
-                <View style={styles.placeChip}>
-                  <Ionicons name="location" size={16} color={colors.brand} />
-                  <Text style={styles.placeChipText} numberOfLines={1}>
-                    {placeName}
-                  </Text>
-                </View>
-
-                <Text style={styles.sectionLabel}>Write something about this place</Text>
-                <TextInput
-                  value={text}
-                  onChangeText={setText}
-                  placeholder="Share the details of your experience…"
-                  placeholderTextColor={colors.labelGray}
-                  style={styles.detailsInput}
-                  multiline
-                  autoFocus
-                  maxLength={2000}
-                />
-
-                <Text style={styles.sectionLabel}>Add photos or videos</Text>
-                {media.length === 0 ? (
-                  <View style={styles.emptyMediaRow}>
-                    <Pressable
-                      onPress={() => void handleCaptureMedia()}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Capture photo or video"
-                    >
-                      <Ionicons name="camera" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Camera</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={handlePickImage}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Add photo from gallery"
-                    >
-                      <Ionicons name="images" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Photos</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => void handlePickVideo()}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Add video from gallery"
-                    >
-                      <Ionicons name="videocam" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Video</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.tilesGrid}>
-                    {media.map((item) => (
-                      <CreatePostMediaTile
-                        key={item.uri}
-                        item={item}
-                        onRemove={() => removeMedia(item.uri)}
-                      />
-                    ))}
-
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={() => void handleCaptureMedia()}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Capture photo or video"
-                      >
-                        <Ionicons name="camera" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Camera</Text>
-                      </Pressable>
-                    ) : null}
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={handlePickImage}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add from gallery"
-                      >
-                        <Ionicons name="images" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Photos</Text>
-                      </Pressable>
-                    ) : null}
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={() => void handlePickVideo()}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add video from gallery"
-                      >
-                        <Ionicons name="videocam" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Video</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                )}
-
-                <Text style={styles.sectionLabel}>What do you think of this place?</Text>
-                <View style={styles.reactionRow}>
-                  {REACTIONS.map((item) => {
-                    const active = reaction === item.key;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        onPress={() => setReaction((prev) => (prev === item.key ? null : item.key))}
-                        style={[styles.reactionButton, active && styles.reactionButtonActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={item.label}
-                      >
-                        <Ionicons
-                          name={active ? item.activeIcon : item.icon}
-                          size={24}
-                          color={active ? colors.brand : colors.textSecondary}
-                        />
-                        <Text style={[styles.reactionLabel, active && styles.reactionLabelActive]}>
-                          {item.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </>
-            ) : (
-              <>
-                <TextInput
-                  value={text}
-                  onChangeText={setText}
-                  placeholder="What's happening around you?"
-                  placeholderTextColor={colors.labelGray}
-                  style={styles.textInput}
-                  multiline
-                  autoFocus
-                  maxLength={2000}
-                />
-
-                {media.length > 0 ? (
-                  <View style={styles.tilesGrid}>
-                    {media.map((item) => (
-                      <CreatePostMediaTile
-                        key={item.uri}
-                        item={item}
-                        onRemove={() => removeMedia(item.uri)}
-                      />
-                    ))}
-
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={() => void handleCaptureMedia()}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Capture photo or video"
-                      >
-                        <Ionicons name="camera" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Camera</Text>
-                      </Pressable>
-                    ) : null}
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={handlePickImage}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add photo from gallery"
-                      >
-                        <Ionicons name="images" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Photos</Text>
-                      </Pressable>
-                    ) : null}
-                    {media.length < MAX_IMAGES ? (
-                      <Pressable
-                        onPress={() => void handlePickVideo()}
-                        style={({ pressed }) => [styles.addTile, pressed && styles.toolbarButtonPressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add video from gallery"
-                      >
-                        <Ionicons name="videocam" size={24} color={colors.brand} />
-                        <Text style={styles.addTileText}>Video</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View style={styles.emptyMediaRow}>
-                    <Pressable
-                      onPress={() => void handleCaptureMedia()}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Capture photo or video"
-                    >
-                      <Ionicons name="camera" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Camera</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={handlePickImage}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Add photo from gallery"
-                    >
-                      <Ionicons name="images" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Photos</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => void handlePickVideo()}
-                      style={({ pressed }) => [styles.addPhotoBox, pressed && styles.toolbarButtonPressed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Add video from gallery"
-                    >
-                      <Ionicons name="videocam" size={30} color={colors.brand} />
-                      <Text style={styles.addTileText}>Video</Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                <View style={styles.placeRow}>
-                  <Ionicons name="location-outline" size={20} color={colors.brand} />
-                  <TextInput
-                    value={placeName}
-                    onChangeText={setPlaceName}
-                    placeholder="Add a place (optional)"
-                    placeholderTextColor={colors.labelGray}
-                    style={styles.placeInput}
-                    maxLength={120}
-                  />
-                </View>
-              </>
-            )}
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </ScrollView>
-
-          <View style={styles.toolbar}>
-            {isPlaceMode ? (
-              <View />
-            ) : (
-              <View style={styles.toolbarButtons}>
-                <Pressable
-                  onPress={() => void handleCaptureMedia()}
-                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Capture photo or video"
-                >
-                  <Ionicons name="camera-outline" size={24} color={colors.brand} />
-                  <Text style={styles.toolbarLabel}>Camera</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handlePickImage}
-                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add photo"
-                >
-                  <Ionicons name="image-outline" size={24} color={colors.brand} />
-                  <Text style={styles.toolbarLabel}>Photos</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void handlePickVideo()}
-                  style={({ pressed }) => [styles.toolbarButton, pressed && styles.toolbarButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add video"
-                >
-                  <Ionicons name="videocam-outline" size={24} color={colors.brand} />
-                  <Text style={styles.toolbarLabel}>Video</Text>
-                </Pressable>
-              </View>
-            )}
-
-            {isSubmitting ? <ActivityIndicator color={colors.brand} /> : null}
           </View>
-        </KeyboardAvoidingView>
+
+          <CreatePostPlaceField value={taggedPlace} onChange={setTaggedPlace} />
+
+          <View style={styles.composerCard}>
+            <CreatePostComposerInput
+              value={text}
+              onChange={setText}
+              mentionedUserIds={mentionedUserIds}
+              onMentionedUserIdsChange={setMentionedUserIds}
+              placeholder={
+                taggedPlace ? 'Share your experience at this place…' : "What's on your mind?"
+              }
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Photos & videos</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mediaStrip}
+            >
+              {media.map((item) => (
+                <CreatePostMediaTile key={item.uri} item={item} onRemove={() => removeMedia(item.uri)} />
+              ))}
+              {media.length < MAX_MEDIA ? (
+                <>
+                  <MediaActionButton icon="camera-outline" label="Camera" onPress={() => void handleCaptureMedia()} />
+                  <MediaActionButton icon="image-outline" label="Photos" onPress={() => void handlePickFromGallery(true)} />
+                  <MediaActionButton icon="videocam-outline" label="Video" onPress={() => void handlePickFromGallery(false)} />
+                </>
+              ) : null}
+            </ScrollView>
+          </View>
+
+          {showReactions ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Your take on this place</Text>
+              <Text style={styles.sectionHint}>Optional reaction</Text>
+              <View style={styles.reactionRow}>
+                {REACTIONS.map((item) => {
+                  const active = reaction === item.key;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      onPress={() => setReaction((prev) => (prev === item.key ? null : item.key))}
+                      style={[styles.reactionChip, active && styles.reactionChipActive]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={item.label}
+                    >
+                      <Ionicons
+                        name={active ? item.activeIcon : item.icon}
+                        size={20}
+                        color={active ? colors.brand : colors.textSecondary}
+                      />
+                      <Text style={[styles.reactionLabel, active && styles.reactionLabelActive]}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </StackScreenLayout>
   );
 }
 
+const MEDIA_TILE = 96;
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+    backgroundColor: colors.surfaceMuted,
   },
   header: {
     flexDirection: 'row',
@@ -550,6 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+    backgroundColor: colors.white,
   },
   headerTitle: {
     fontSize: 17,
@@ -557,10 +392,13 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   postButton: {
+    minWidth: 72,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.brand,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   postButtonDisabled: {
     backgroundColor: colors.buttonDisabled,
@@ -574,110 +412,130 @@ const styles = StyleSheet.create({
     color: colors.labelGray,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: 16,
+    gap: 20,
+    paddingBottom: 32,
   },
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
+  authorText: {
+    flex: 1,
+    gap: 2,
+  },
   authorName: {
     fontSize: 16,
     fontWeight: '800',
     color: colors.text,
   },
-  textInput: {
+  authorHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  composerCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.surfaceMutedBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 140,
+  },
+  composerInput: {
     fontSize: 16,
-    lineHeight: 23,
+    lineHeight: 24,
     color: colors.text,
-    minHeight: 120,
-    textAlignVertical: 'top',
+    minHeight: 112,
   },
-  placeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    backgroundColor: 'rgba(243, 100, 100, 0.1)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    maxWidth: '100%',
+  section: {
+    gap: 8,
   },
-  placeChipText: {
+  sectionTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: colors.brand,
-    flexShrink: 1,
-  },
-  sectionLabel: {
-    fontSize: 15,
     fontWeight: '800',
     color: colors.text,
+    letterSpacing: 0.2,
   },
-  detailsInput: {
-    fontSize: 16,
-    lineHeight: 23,
-    color: colors.text,
-    minHeight: 110,
-    textAlignVertical: 'top',
-    backgroundColor: colors.inputGray,
-    borderRadius: 12,
-    padding: 14,
+  sectionHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
-  emptyMediaRow: {
-    flexDirection: 'row',
+  mediaStrip: {
     gap: 10,
+    paddingVertical: 4,
   },
-  addPhotoBox: {
-    flex: 1,
-    minHeight: 100,
+  mediaTile: {
+    width: MEDIA_TILE,
+    height: MEDIA_TILE,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: colors.inputGray,
+  },
+  mediaTileInner: {
+    width: '100%',
+    height: '100%',
+  },
+  videoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1f2530',
+  },
+  videoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  removeMedia: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  mediaAction: {
+    width: MEDIA_TILE,
+    height: MEDIA_TILE,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderStyle: 'dashed',
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 20,
-    backgroundColor: colors.inputGray,
   },
-  addTile: {
-    width: '31.5%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: colors.inputGray,
-  },
-  addTileText: {
-    fontSize: 13,
+  mediaActionLabel: {
+    fontSize: 12,
     fontWeight: '700',
     color: colors.brand,
   },
   reactionRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginTop: 4,
   },
-  reactionButton: {
+  reactionChip: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.surfaceMutedBorder,
   },
-  reactionButtonActive: {
+  reactionChipActive: {
     borderColor: colors.brand,
-    backgroundColor: 'rgba(243, 100, 100, 0.1)',
+    backgroundColor: 'rgba(82, 186, 215, 0.08)',
   },
   reactionLabel: {
     fontSize: 13,
@@ -687,86 +545,12 @@ const styles = StyleSheet.create({
   reactionLabelActive: {
     color: colors.brand,
   },
-  tilesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tileWrap: {
-    position: 'relative',
-    width: '31.5%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  tileImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.inputGray,
-  },
-  videoTile: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1f2530',
-  },
-  videoTileOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 12,
-  },
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.inputGray,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    minHeight: 48,
-  },
-  placeInput: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-    paddingVertical: 12,
-  },
   errorText: {
     fontSize: 14,
-    color: '#DC2626',
+    color: colors.danger,
     fontWeight: '600',
   },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  toolbarButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  toolbarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  toolbarButtonPressed: {
-    opacity: 0.7,
-  },
-  toolbarLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.brand,
+  pressed: {
+    opacity: 0.75,
   },
 });

@@ -24,6 +24,7 @@ import { useDialog } from '../src/components/dialog/DialogProvider';
 import { useRealtimeEvent } from '../src/hooks/useRealtimeEvent';
 import { useNotifications } from '../src/notifications/NotificationsProvider';
 import { openUserProfile } from '../src/utils/openUserProfile';
+import { navigateToPost } from '../src/notifications/navigateFromPushData';
 import { getStoredUser } from '../src/storage/authSession';
 import { readCache, writeCache } from '../src/storage/offlineCache';
 import { colors } from '../src/theme/colors';
@@ -35,6 +36,7 @@ function notificationIcon(type: NotificationType): keyof typeof Ionicons.glyphMa
       return 'heart';
     case 'comment':
     case 'reply':
+    case 'mention':
       return 'chatbubble';
     case 'friend_request':
       return 'person-add';
@@ -150,16 +152,8 @@ export default function NotificationsScreen() {
       return;
     }
 
-    // Post-related notifications (like / comment / reply / comment_like) deep-link
-    // straight to the post, highlighting the relevant comment when available.
     if (notification.postId) {
-      router.push({
-        pathname: '/comments',
-        params: {
-          postId: notification.postId,
-          ...(notification.commentId ? { highlightCommentId: notification.commentId } : {}),
-        },
-      });
+      navigateToPost(notification.postId, notification.commentId);
       return;
     }
 

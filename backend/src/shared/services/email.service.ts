@@ -106,6 +106,36 @@ export function renderVerificationErrorPage(): string {
   return buildVerificationErrorPage(getEmailVerifiedDeepLink(true));
 }
 
+export async function sendEmailChangeCode(
+  email: string,
+  code: string,
+  step: 'current' | 'new',
+): Promise<void> {
+  const isCurrent = step === 'current';
+  const subject = isCurrent
+    ? 'Verify your current email to change it'
+    : 'Verify your new Crave email';
+  const heading = isCurrent ? 'Confirm your current email' : 'Confirm your new email';
+  const description = isCurrent
+    ? 'Enter this code in the app to confirm you own this email before changing it:'
+    : 'Enter this code in the app to finish updating your email address:';
+
+  await deliverMail({
+    to: email,
+    subject,
+    text: `${heading}\n\n${description}\n\nYour verification code is: ${code}\n\nThis code expires in 10 minutes.`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+        <div style="height:4px;background:linear-gradient(90deg,#9447B3,#F36464);border-radius:4px;margin-bottom:24px;"></div>
+        <h2 style="color:#2D1A35;margin:0 0 12px;">${heading}</h2>
+        <p style="color:#7A6288;line-height:1.6;">${description}</p>
+        <p style="font-size:32px;font-weight:800;letter-spacing:8px;color:#F36464;margin:24px 0;">${code}</p>
+        <p style="color:#9CA3AF;font-size:14px;">This code expires in 10 minutes.</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendPasswordResetCode(email: string, code: string): Promise<void> {
   await deliverMail({
     to: email,

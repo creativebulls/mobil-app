@@ -16,6 +16,7 @@ const PUSH_CATEGORY_BY_TYPE: Record<NotificationType, keyof PushPreferences> = {
   comment: 'comments',
   reply: 'comments',
   comment_like: 'comments',
+  mention: 'comments',
   friend_request: 'friendRequests',
   friend_request_accepted: 'friendRequests',
 };
@@ -34,6 +35,27 @@ type PopulatedFriendRequest = {
   _id: { toString(): string };
   status?: 'pending' | 'accepted' | 'rejected';
 };
+
+function resolveObjectId(value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'object' && value !== null && '_id' in value) {
+    const id = (value as { _id?: { toString(): string } })._id;
+    return id ? id.toString() : null;
+  }
+
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    return (value as { toString(): string }).toString();
+  }
+
+  return null;
+}
 
 function serializeNotification(notification: NotificationDocument) {
   const actor = notification.actor as unknown as PopulatedActor | null;
@@ -78,8 +100,8 @@ function serializeNotification(notification: NotificationDocument) {
     message,
     preview: notification.preview ?? null,
     read: notification.read,
-    postId: notification.post ? notification.post.toString() : null,
-    commentId: notification.comment ? notification.comment.toString() : null,
+    postId: resolveObjectId(notification.post),
+    commentId: resolveObjectId(notification.comment),
     friendRequestId,
     friendRequestStatus,
     actor: actor && actor._id
@@ -119,6 +141,7 @@ export async function createNotification(input: {
     comment: `${actorSummary.name} commented on your post`,
     reply: `${actorSummary.name} replied to your comment`,
     comment_like: `${actorSummary.name} liked your comment`,
+    mention: `${actorSummary.name} mentioned you in a post`,
     friend_request: `${actorSummary.name} sent you a friend request`,
     friend_request_accepted: `${actorSummary.name} accepted your friend request`,
   };
