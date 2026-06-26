@@ -16,6 +16,7 @@ import { openUserProfile } from '../utils/openUserProfile';
 import { placeToDiscoverPlace } from '../utils/places';
 import { DiscoverPlacesSection } from './DiscoverPlacesSection';
 import { FeedHeader } from './FeedHeader';
+import { FeedHeaderActions } from './FeedHeaderActions';
 import { FeedSearchInput } from './FeedSearchInput';
 import { LatestPostsSection } from './LatestPostsSection';
 import { MeetFriendsSection } from './MeetFriendsSection';
@@ -32,6 +33,30 @@ const SEARCH_REGION_HEIGHT = 60;
 // Full top bar (logo row + search) that scrolls up out of view as the page
 // scrolls down and returns when scrolled back to the top.
 const TOP_BAR_HEIGHT = FEED_HEADER_HEIGHT + SEARCH_REGION_HEIGHT;
+// Width of notification + messages buttons in the header actions row.
+const HEADER_ICON_SLOT_WIDTH = 90;
+// Vertical position of the floating icon row at rest (header) and when collapsed (search).
+const HEADER_ICONS_TOP = 8;
+const SEARCH_ICONS_TOP = FEED_HEADER_HEIGHT + (SEARCH_REGION_HEIGHT - 40) / 2;
+const ICON_SEARCH_GAP = 12;
+const SEARCH_RESERVE_RIGHT = HEADER_ICON_SLOT_WIDTH + ICON_SEARCH_GAP;
+// How far the user scrolls before the header fully collapses (lower = snappier).
+const COLLAPSE_SCROLL = 18;
+const COLLAPSE_INPUT = [0, COLLAPSE_SCROLL * 0.45, COLLAPSE_SCROLL] as const;
+
+/** Ease-out curve — most of the motion finishes in the first half of the scroll. */
+function easeOutOutputs(from: number, to: number): number[] {
+  const delta = to - from;
+  return [from, from + delta * 0.82, to];
+}
+
+function collapseInterp(scrollY: Animated.Value, from: number, to: number) {
+  return scrollY.interpolate({
+    inputRange: [...COLLAPSE_INPUT],
+    outputRange: easeOutOutputs(from, to),
+    extrapolate: 'clamp',
+  });
+}
 
 export function MyFeedScreen() {
   const [feedFocused, setFeedFocused] = useState(true);
@@ -84,22 +109,26 @@ function MyFeedScreenContent() {
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
-  // The logo row scrolls up out of view as the page scrolls down, but the bar
-  // only travels by the logo-row height — so the search bar stays pinned to the
-  // top once scrolled. At the very top everything sits in its natural position.
-  const headerTranslateY = useMemo(
-    () =>
-      scrollY.interpolate({
-        inputRange: [0, FEED_HEADER_HEIGHT],
-        outputRange: [0, -FEED_HEADER_HEIGHT],
-        extrapolate: 'clamp',
-      }),
+
+  const headerContentTranslateY = useMemo(
+    () => collapseInterp(scrollY, 0, -FEED_HEADER_HEIGHT),
+    [scrollY],
+  );
+  const headerOpacity = useMemo(() => collapseInterp(scrollY, 1, 0), [scrollY]);
+  const iconsTranslateY = useMemo(
+    () => collapseInterp(scrollY, 0, SEARCH_ICONS_TOP - HEADER_ICONS_TOP),
+    [scrollY],
+  );
+  const iconsTranslateX = useMemo(() => collapseInterp(scrollY, -12, 0), [scrollY]);
+  const searchTranslateX = useMemo(() => collapseInterp(scrollY, 8, 0), [scrollY]);
+  const searchClipRight = useMemo(
+    () => collapseInterp(scrollY, 0, SEARCH_RESERVE_RIGHT),
     [scrollY],
   );
   const dividerOpacity = useMemo(
     () =>
       scrollY.interpolate({
-        inputRange: [0, 12],
+        inputRange: [0, COLLAPSE_SCROLL * 0.4],
         outputRange: [0, 1],
         extrapolate: 'clamp',
       }),
@@ -246,9 +275,9 @@ function MyFeedScreenContent() {
         // inset to avoid duplicated/growing top spacing on pull-to-refresh.
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
-        scrollEventThrottle={16}
+        scrollEventThrottle={1}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: true,
+          useNativeDriver: false,
           listener: () => requestEvaluate(),
         })}
         onMomentumScrollEnd={() => requestEvaluate()}
@@ -300,24 +329,59 @@ function MyFeedScreenContent() {
         />
       </Animated.ScrollView>
 
-      <View style={styles.topBarClip} pointerEvents="box-none">
+      <Animated.View style={styles.topBarClip} pointerEvents="box-none">
         <Animated.View
-          style={[styles.topBar, { transform: [{ translateY: headerTranslateY }] }]}
+          style={[styles.topBarInner, { transform: [{ translateY: headerContentTranslateY }] }]}
           pointerEvents="box-none"
+          shouldRasterizeIOS
+          renderToHardwareTextureAndroid
         >
-          <FeedHeader messagesBadge={unreadMessages} />
-          <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
-            <View style={styles.searchTriggerInner}>
-              <Ionicons name="search-outline" size={20} color={colors.labelGray} />
-              <Text style={styles.searchTriggerText}>{searchPlaceholder}</Text>
-            </View>
-          </Pressable>
+          <Animated.View
+            style={[styles.headerRow, { opacity: headerOpacity }]}
+            pointerEvents="box-none"
+          >
+            <FeedHeader showActions={false} messagesBadge={unreadMessages} />
+          </Animated.View>
+
+          <Animated.View style={styles.searchRow} pointerEvents="box-none">
+            <Animated.View
+              style={[
+                styles.searchClip,
+                {
+                  transform: [{ translateX: searchTranslateX }],
+                  paddingRight: searchClipRight,
+                },
+              ]}
+            >
+              <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
+                <View style={styles.searchTriggerInner}>
+                  <Ionicons name="search-outline" size={20} color={colors.labelGray} />
+                  <Text style={styles.searchTriggerText} numberOfLines={1}>
+                    {searchPlaceholder}
+                  </Text>
+                </View>
+              </Pressable>
+            </Animated.View>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents="box-none"
+            style={[
+              styles.floatingActions,
+              {
+                transform: [{ translateY: iconsTranslateY }, { translateX: iconsTranslateX }],
+              },
+            ]}
+          >
+            <FeedHeaderActions side="both" messagesBadge={unreadMessages} />
+          </Animated.View>
+
           <Animated.View
             pointerEvents="none"
             style={[styles.topBarDivider, { opacity: dividerOpacity }]}
           />
         </Animated.View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -351,8 +415,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.labelGray,
   },
-  // Clipping window pinned to the safe-area top edge. The header slides within
-  // it and is clipped before it can reach the system status bar.
+  // Clipping window below the safe-area top edge. Only transforms are animated
+  // (native driver) — height stays fixed to avoid layout thrashing / flicker.
   topBarClip: {
     position: 'absolute',
     top: 0,
@@ -363,8 +427,33 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 4,
   },
-  topBar: {
+  topBarInner: {
+    height: TOP_BAR_HEIGHT,
+  },
+  headerRow: {
+    height: FEED_HEADER_HEIGHT,
     backgroundColor: colors.white,
+  },
+  searchRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: SEARCH_REGION_HEIGHT,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 8,
+    backgroundColor: colors.white,
+  },
+  searchClip: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  floatingActions: {
+    position: 'absolute',
+    top: HEADER_ICONS_TOP,
+    right: 8,
+    zIndex: 2,
   },
   topBarDivider: {
     position: 'absolute',
@@ -375,19 +464,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   searchTrigger: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    flex: 1,
+    minWidth: 0,
   },
   searchTriggerInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 44,
     borderRadius: 12,
     backgroundColor: colors.inputGray,
     paddingHorizontal: 14,
     gap: 10,
   },
   searchTriggerText: {
+    flex: 1,
     fontSize: 16,
     color: colors.labelGray,
   },

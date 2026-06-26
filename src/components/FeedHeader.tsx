@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppImage } from './AppImage';
+import { FeedHeaderActions } from './FeedHeaderActions';
 
-import { useNotifications } from '../notifications/NotificationsProvider';
 import { colors } from '../theme/colors';
 
 type FeedHeaderProps = {
@@ -15,6 +15,8 @@ type FeedHeaderProps = {
   onCallsPress?: () => void;
   /** Hide the messages shortcut (e.g. on the messages screen itself). */
   showMessages?: boolean;
+  /** Hide notification/messages shortcuts (e.g. home feed renders them beside search). */
+  showActions?: boolean;
   messagesBadge?: number;
   /** Render the title left-aligned beside the logo instead of centered. */
   alignTitleLeft?: boolean;
@@ -27,27 +29,11 @@ export function FeedHeader({
   onAddPress,
   onCallsPress,
   showMessages = true,
+  showActions = true,
   messagesBadge = 0,
   alignTitleLeft = false,
 }: FeedHeaderProps) {
   const router = useRouter();
-  const { unreadCount } = useNotifications();
-
-  function handleNotificationsPress() {
-    if (onNotificationsPress) {
-      onNotificationsPress();
-      return;
-    }
-    router.push('/notifications');
-  }
-
-  function handleMessagesPress() {
-    if (onMessagesPress) {
-      onMessagesPress();
-      return;
-    }
-    router.push('/messages');
-  }
 
   function handleAddPress() {
     if (onAddPress) {
@@ -88,34 +74,14 @@ export function FeedHeader({
           </Pressable>
         ) : null}
 
-        <Pressable
-          onPress={handleNotificationsPress}
-          style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Notifications"
-        >
-          <Ionicons name="notifications-outline" size={20} color={colors.text} />
-          {unreadCount > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-            </View>
-          ) : null}
-        </Pressable>
-
-        {showMessages ? (
-          <Pressable
-            onPress={handleMessagesPress}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Messages"
-          >
-            <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
-            {messagesBadge > 0 ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{messagesBadge > 99 ? '99+' : messagesBadge}</Text>
-              </View>
-            ) : null}
-          </Pressable>
+        {showActions ? (
+          <FeedHeaderActions
+            side="both"
+            messagesBadge={messagesBadge}
+            showMessages={showMessages}
+            onNotificationsPress={onNotificationsPress}
+            onMessagesPress={onMessagesPress}
+          />
         ) : null}
 
         {onAddPress ? (
@@ -179,22 +145,5 @@ const styles = StyleSheet.create({
   iconButtonPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.96 }],
-  },
-  badge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: colors.white,
   },
 });
