@@ -31,9 +31,14 @@ export const googlePlacesConfigSchema = z.object({
   apiKey: z.string().trim().min(1, 'Google Places API key is required').max(256),
 });
 
-export const googleMapsConfigSchema = z.object({
-  apiKey: z.string().trim().min(1, 'Google Maps API key is required').max(256),
-});
+export const googleMapsConfigSchema = z
+  .object({
+    apiKey: z.string().trim().min(1, 'Google Maps API key is required').max(256).optional(),
+    defaultZoom: z.number().int().min(10).max(20).optional(),
+  })
+  .refine((data) => data.apiKey !== undefined || data.defaultZoom !== undefined, {
+    message: 'Provide an API key and/or default zoom level',
+  });
 
 export const placesProviderSchema = z.object({
   provider: z.enum(['foursquare', 'google', 'opentripmap', 'sample']),

@@ -121,7 +121,10 @@ export const getMapsConfig = asyncHandler(async (_req: AdminRequest, res: Respon
 
 export const setMapsConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = googleMapsConfigSchema.parse(req.body);
-  const result = await adminService.setMapsConfig(body.apiKey);
+  const result = await adminService.setMapsConfig({
+    apiKey: body.apiKey,
+    defaultZoom: body.defaultZoom,
+  });
   sendSuccess(res, result);
 });
 

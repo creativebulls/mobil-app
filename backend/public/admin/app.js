@@ -720,19 +720,29 @@ async function loadPlacesConfig() {
 function renderMapsStatus(config) {
   const badge = $('maps-status-badge');
   const detail = $('maps-status-detail');
+  const zoomInput = $('maps-default-zoom');
   if (!badge || !detail) return;
+
+  if (zoomInput && typeof config.defaultZoom === 'number') {
+    zoomInput.value = String(config.defaultZoom);
+  }
+
+  const zoomLabel = typeof config.defaultZoom === 'number' ? `zoom: ${config.defaultZoom}` : null;
 
   if (config.configured) {
     badge.className = 'badge badge-success';
-    badge.textContent = 'Key saved';
+    badge.textContent = 'Configured';
     const parts = [];
     if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
-    if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
+    if (zoomLabel) parts.push(zoomLabel);
+    if (config.updatedAt) parts.push(`key updated ${formatDate(config.updatedAt)}`);
     detail.textContent = parts.join(' · ');
   } else {
     badge.className = 'badge badge-muted';
     badge.textContent = 'No key';
-    detail.textContent = 'Add a Google Maps Android API key for the friends map.';
+    detail.textContent = zoomLabel
+      ? `${zoomLabel} · Add a Google Maps Android API key for the map.`
+      : 'Add a Google Maps Android API key for the friends map.';
   }
 }
 
@@ -749,21 +759,32 @@ async function saveMapsConfig() {
   const errorEl = $('maps-config-error');
   errorEl.textContent = '';
   const apiKey = $('maps-api-key').value.trim();
+  const zoomRaw = $('maps-default-zoom')?.value;
+  const defaultZoom = zoomRaw === '' || zoomRaw == null ? undefined : Number.parseInt(String(zoomRaw), 10);
 
-  if (!apiKey) {
-    errorEl.textContent = 'Paste your Google Maps Android API key first.';
+  if (!apiKey && defaultZoom === undefined) {
+    errorEl.textContent = 'Enter an API key and/or default zoom level.';
+    return;
+  }
+
+  if (defaultZoom !== undefined && (!Number.isFinite(defaultZoom) || defaultZoom < 10 || defaultZoom > 20)) {
+    errorEl.textContent = 'Zoom must be a whole number between 10 and 20.';
     return;
   }
 
   $('maps-save-btn').disabled = true;
   try {
+    const payload = {};
+    if (apiKey) payload.apiKey = apiKey;
+    if (defaultZoom !== undefined) payload.defaultZoom = defaultZoom;
+
     const config = await api('/maps-config', {
       method: 'PUT',
-      body: JSON.stringify({ apiKey }),
+      body: JSON.stringify(payload),
     });
     renderMapsStatus(config);
     $('maps-api-key').value = '';
-    toast('Google Maps Android key saved');
+    toast(apiKey ? 'Google Maps settings saved' : 'Map zoom saved');
   } catch (error) {
     errorEl.textContent = error.message;
   } finally {

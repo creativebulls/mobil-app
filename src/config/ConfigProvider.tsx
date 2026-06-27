@@ -50,6 +50,8 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
 
   // Google Maps SDK for Android (friends map). Loaded from admin maps-config.
   'maps.google_android_api_key': '',
+  // Map camera zoom when centered on the user (10–20). Loaded from admin maps-config.
+  'maps.default_zoom': '16',
 };
 
 // Module-level snapshot so non-React code (e.g. event handlers, utilities) can

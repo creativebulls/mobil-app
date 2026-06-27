@@ -121,6 +121,10 @@ const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
 const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
 const GOOGLE_API_KEY_SETTING = 'google_places_api_key';
 const GOOGLE_MAPS_ANDROID_API_KEY_SETTING = 'google_maps_android_api_key';
+const MAP_DEFAULT_ZOOM_SETTING = 'map_default_zoom';
+const DEFAULT_MAP_ZOOM = 16;
+const MIN_MAP_ZOOM = 10;
+const MAX_MAP_ZOOM = 20;
 const PLACES_PROVIDER_SETTING = 'places_provider';
 const PLACES_CATEGORIES_SETTING = 'places_category_keys';
 
@@ -299,28 +303,60 @@ export async function getGoogleMapsAndroidApiKey(): Promise<string | null> {
   return key || null;
 }
 
+function clampMapZoom(value: number): number {
+  return Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, Math.round(value)));
+}
+
+export async function getMapDefaultZoom(): Promise<number> {
+  const doc = await AppSetting.findOne({ key: MAP_DEFAULT_ZOOM_SETTING });
+  if (!doc?.value) {
+    return DEFAULT_MAP_ZOOM;
+  }
+  const parsed = Number.parseInt(doc.value, 10);
+  return Number.isFinite(parsed) ? clampMapZoom(parsed) : DEFAULT_MAP_ZOOM;
+}
+
 export async function getMapsConfig() {
-  const doc = await AppSetting.findOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
-  const key = doc?.value?.trim() || null;
+  const [keyDoc, zoomDoc] = await Promise.all([
+    AppSetting.findOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING }),
+    AppSetting.findOne({ key: MAP_DEFAULT_ZOOM_SETTING }),
+  ]);
+  const key = keyDoc?.value?.trim() || null;
+  const defaultZoom = await getMapDefaultZoom();
 
   return {
     configured: Boolean(key),
     maskedKey: key ? maskKey(key) : null,
-    updatedAt: doc?.updatedAt ?? null,
+    updatedAt: keyDoc?.updatedAt ?? null,
+    defaultZoom,
+    zoomUpdatedAt: zoomDoc?.updatedAt ?? null,
   };
 }
 
-export async function setMapsConfig(apiKey: string) {
-  const trimmed = apiKey.trim();
-  if (!trimmed) {
-    throw new AppError(400, 'Google Maps API key is required', 'INVALID_GOOGLE_MAPS_KEY');
+export async function setMapsConfig(input: { apiKey?: string; defaultZoom?: number }) {
+  if (input.apiKey !== undefined) {
+    const trimmed = input.apiKey.trim();
+    if (!trimmed) {
+      throw new AppError(400, 'Google Maps API key is required', 'INVALID_GOOGLE_MAPS_KEY');
+    }
+    await AppSetting.findOneAndUpdate(
+      { key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
   }
 
-  await AppSetting.findOneAndUpdate(
-    { key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING },
-    { value: trimmed },
-    { upsert: true, new: true },
-  );
+  if (input.defaultZoom !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: MAP_DEFAULT_ZOOM_SETTING },
+      { value: String(clampMapZoom(input.defaultZoom)) },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.apiKey === undefined && input.defaultZoom === undefined) {
+    throw new AppError(400, 'Provide an API key and/or default zoom level', 'INVALID_MAPS_CONFIG');
+  }
 
   return getMapsConfig();
 }
@@ -336,6 +372,7 @@ export async function getPublicAppConfig() {
   if (mapsKey) {
     config['maps.google_android_api_key'] = mapsKey;
   }
+  config['maps.default_zoom'] = String(await getMapDefaultZoom());
   return { config, updatedAt };
 }
 

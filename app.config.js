@@ -10,18 +10,20 @@
 //
 // `EAS_BUILD_PROFILE` is set automatically by EAS; `APP_VARIANT` is set by our
 // local production build scripts and the EAS production env.
+const { execSync } = require('child_process');
+
 const IS_PRODUCTION =
   process.env.APP_VARIANT === 'production' ||
   process.env.EAS_BUILD_PROFILE === 'production';
 
-async function fetchAndroidMapsApiKey() {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://mobilevps.tech';
+function fetchAndroidMapsApiKey() {
+  const apiUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://mobilevps.tech').replace(/\/$/, '');
   try {
-    const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/v1/app-config`);
-    if (!response.ok) {
-      return null;
-    }
-    const payload = await response.json();
+    const raw = execSync(
+      `curl -fsS --max-time 8 "${apiUrl}/api/v1/app-config"`,
+      { encoding: 'utf8' },
+    );
+    const payload = JSON.parse(raw);
     const key = payload?.data?.config?.['maps.google_android_api_key'];
     return typeof key === 'string' && key.trim() ? key.trim() : null;
   } catch {
@@ -29,7 +31,7 @@ async function fetchAndroidMapsApiKey() {
   }
 }
 
-module.exports = async ({ config }) => {
+module.exports = ({ config }) => {
   if (IS_PRODUCTION && Array.isArray(config.plugins)) {
     config.plugins = config.plugins.filter((plugin) => {
       const name = Array.isArray(plugin) ? plugin[0] : plugin;
@@ -69,9 +71,7 @@ module.exports = async ({ config }) => {
   };
 
   const mapsApiKey =
-    (await fetchAndroidMapsApiKey()) ??
-    process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
-    null;
+    fetchAndroidMapsApiKey() ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? null;
 
   if (mapsApiKey) {
     config.android = {

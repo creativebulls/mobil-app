@@ -569,8 +569,24 @@
                   />
                   <p id="maps-config-error" class="error-text"></p>
                 </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="maps-default-zoom">Default map zoom</label>
+                  <input
+                    id="maps-default-zoom"
+                    class="input"
+                    type="number"
+                    min="10"
+                    max="20"
+                    step="1"
+                    value="16"
+                  />
+                  <p class="card-description" style="margin-top: 0.35rem">
+                    Zoom level when the map opens on the user&apos;s current location (10 = wider area,
+                    20 = street level). Updates in the app on next launch — no rebuild required.
+                  </p>
+                </div>
                 <div class="actions">
-                  <button id="maps-save-btn" type="button" class="btn btn-primary btn-sm">Save key</button>
+                  <button id="maps-save-btn" type="button" class="btn btn-primary btn-sm">Save</button>
                   <button id="maps-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove key</button>
                 </div>
                 <p class="card-description" style="margin-top: 0.5rem">
