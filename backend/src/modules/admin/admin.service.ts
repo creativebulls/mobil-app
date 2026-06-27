@@ -120,6 +120,7 @@ export async function clearPushConfig() {
 const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
 const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
 const GOOGLE_API_KEY_SETTING = 'google_places_api_key';
+const GOOGLE_MAPS_ANDROID_API_KEY_SETTING = 'google_maps_android_api_key';
 const PLACES_PROVIDER_SETTING = 'places_provider';
 const PLACES_CATEGORIES_SETTING = 'places_category_keys';
 
@@ -290,6 +291,52 @@ export async function clearGooglePlacesConfig() {
   clearPlacesCache();
 
   return getPlacesConfig();
+}
+
+export async function getGoogleMapsAndroidApiKey(): Promise<string | null> {
+  const doc = await AppSetting.findOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
+  const key = doc?.value?.trim();
+  return key || null;
+}
+
+export async function getMapsConfig() {
+  const doc = await AppSetting.findOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
+  const key = doc?.value?.trim() || null;
+
+  return {
+    configured: Boolean(key),
+    maskedKey: key ? maskKey(key) : null,
+    updatedAt: doc?.updatedAt ?? null,
+  };
+}
+
+export async function setMapsConfig(apiKey: string) {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    throw new AppError(400, 'Google Maps API key is required', 'INVALID_GOOGLE_MAPS_KEY');
+  }
+
+  await AppSetting.findOneAndUpdate(
+    { key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING },
+    { value: trimmed },
+    { upsert: true, new: true },
+  );
+
+  return getMapsConfig();
+}
+
+export async function clearMapsConfig() {
+  await AppSetting.deleteOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
+  return getMapsConfig();
+}
+
+export async function getPublicAppConfig() {
+  const { config, updatedAt } = await getAppConfig();
+  const mapsKey = await getGoogleMapsAndroidApiKey();
+  if (mapsKey) {
+    config['maps.google_android_api_key'] = mapsKey;
+  }
+  return { config, updatedAt };
 }
 
 export async function sendTestPush(email: string) {

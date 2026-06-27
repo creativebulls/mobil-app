@@ -8,15 +8,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { emitHomeReselect } from '../navigation/tabEvents';
 
-export type MainTabKey = 'home' | 'create' | 'profile';
+export type MainTabKey = 'home' | 'map' | 'create' | 'profile';
 
 type BottomTabBarProps = {
   activeTab?: MainTabKey | null;
   profileImageUri?: string | null;
 };
 
-const TAB_ROUTES: Record<Exclude<MainTabKey, 'create'>, '/home' | '/profile'> = {
+const TAB_ROUTES: Record<Exclude<MainTabKey, 'create'>, '/home' | '/map' | '/profile'> = {
   home: '/home',
+  map: '/map',
   profile: '/profile',
 };
 
@@ -63,6 +64,20 @@ export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBar
           name={activeTab === 'home' ? 'home' : 'home-outline'}
           size={TAB_ICON_SIZE}
           color={activeTab === 'home' ? colors.brand : colors.labelGray}
+        />
+      </Pressable>
+
+      <Pressable
+        onPress={() => handleTabPress('map')}
+        style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Friends map"
+        accessibilityState={{ selected: activeTab === 'map' }}
+      >
+        <Ionicons
+          name={activeTab === 'map' ? 'map' : 'map-outline'}
+          size={TAB_ICON_SIZE}
+          color={activeTab === 'map' ? colors.brand : colors.labelGray}
         />
       </Pressable>
 

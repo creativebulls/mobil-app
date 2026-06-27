@@ -32,7 +32,14 @@ export interface IUser {
   suspendedAt?: Date;
   suspensionReason?: string;
   liveAudioEnabled: boolean;
+  lastLocation?: UserLastLocation;
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserLastLocation {
+  latitude: number;
+  longitude: number;
   updatedAt: Date;
 }
 
@@ -100,6 +107,11 @@ const userSchema = new Schema<UserDocument>(
     suspendedAt: { type: Date },
     suspensionReason: { type: String, trim: true, maxlength: 500 },
     liveAudioEnabled: { type: Boolean, default: false },
+    lastLocation: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      updatedAt: { type: Date },
+    },
   },
   { timestamps: true },
 );

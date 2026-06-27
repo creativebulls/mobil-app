@@ -542,6 +542,43 @@
                 </p>
               </div>
             </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Google Maps (Android)</h2>
+                <p class="card-description">
+                  API key for the friends map on Android (Maps SDK for Android). The mobile app
+                  downloads this from the server — restrict the key to your Android app package and
+                  signing certificate SHA-1 in Google Cloud Console.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="maps-status-badge" class="badge badge-muted">Loading…</span>
+                  <span id="maps-status-detail" class="user-email"></span>
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="maps-api-key">Google Maps Android API key</label>
+                  <input
+                    id="maps-api-key"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Paste your Google Maps Android API key…"
+                    style="font-family: monospace"
+                  />
+                  <p id="maps-config-error" class="error-text"></p>
+                </div>
+                <div class="actions">
+                  <button id="maps-save-btn" type="button" class="btn btn-primary btn-sm">Save key</button>
+                  <button id="maps-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove key</button>
+                </div>
+                <p class="card-description" style="margin-top: 0.5rem">
+                  After saving, rebuild the Android app so the native manifest picks up the key.
+                  Existing installs receive updates on the next app launch for in-app validation.
+                </p>
+              </div>
+            </div>
           </section>
         </main>
       </div>

@@ -9,7 +9,7 @@ import {
   updateStatusSchema,
   userIdParamSchema,
 } from '../friends/friends.validation';
-import { updatePersonalInfoSchema, emailChangeCodeSchema, emailChangeNewEmailSchema, emailChangeConfirmSchema } from './profile.validation';
+import { updatePersonalInfoSchema, emailChangeCodeSchema, emailChangeNewEmailSchema, emailChangeConfirmSchema, updateLocationSchema } from './profile.validation';
 import * as profileService from './profile.service';
 import * as emailChangeService from './email-change.service';
 
@@ -56,6 +56,12 @@ export const updateStatus = asyncHandler(async (req: AuthenticatedRequest, res: 
 export const updatePersonalInfo = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const body = updatePersonalInfoSchema.parse(req.body);
   const result = await profileService.updatePersonalInfo(req.auth!.userId, body);
+  sendSuccess(res, result);
+});
+
+export const updateLocation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = updateLocationSchema.parse(req.body);
+  const result = await profileService.updateUserLocation(req.auth!.userId, body);
   sendSuccess(res, result);
 });
 

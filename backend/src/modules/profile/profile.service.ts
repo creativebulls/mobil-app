@@ -15,7 +15,7 @@ import {
   User,
   type PushPreferences,
 } from '../users/user.model';
-import type { UpdatePersonalInfoInput } from './profile.validation';
+import type { UpdateLocationInput, UpdatePersonalInfoInput } from './profile.validation';
 
 export async function getUserSettings(userId: string) {
   const user = await User.findById(userId).select('isPrivate pushPreferences');
@@ -270,5 +270,31 @@ export async function getPublicUserProfile(viewerId: string, targetUserId: strin
     },
     mutualFriends,
     posts: postsResult.posts,
+  };
+}
+
+export async function updateUserLocation(userId: string, input: UpdateLocationInput) {
+  const updatedAt = new Date();
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      lastLocation: {
+        latitude: input.latitude,
+        longitude: input.longitude,
+        updatedAt,
+      },
+    },
+    { new: true },
+  ).select('lastLocation');
+
+  if (!user) {
+    throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  return {
+    latitude: user.lastLocation!.latitude,
+    longitude: user.lastLocation!.longitude,
+    updatedAt: user.lastLocation!.updatedAt.toISOString(),
   };
 }

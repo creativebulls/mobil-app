@@ -16,6 +16,7 @@ import {
   adminUsersQuerySchema,
   appConfigSchema,
   googlePlacesConfigSchema,
+  googleMapsConfigSchema,
   placesCategoriesSchema,
   placesConfigSchema,
   placesProFieldsSchema,
@@ -113,6 +114,22 @@ export const clearGooglePlacesConfig = asyncHandler(async (_req: AdminRequest, r
   sendSuccess(res, result);
 });
 
+export const getMapsConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getMapsConfig();
+  sendSuccess(res, result);
+});
+
+export const setMapsConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = googleMapsConfigSchema.parse(req.body);
+  const result = await adminService.setMapsConfig(body.apiKey);
+  sendSuccess(res, result);
+});
+
+export const clearMapsConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.clearMapsConfig();
+  sendSuccess(res, result);
+});
+
 export const setPlacesCategories = asyncHandler(async (req: AdminRequest, res: Response) => {
   const body = placesCategoriesSchema.parse(req.body);
   const result = await adminService.setPlacesCategories(body.keys);
@@ -187,6 +204,6 @@ export const setAppConfig = asyncHandler(async (req: AdminRequest, res: Response
 
 // Public (unauthenticated) endpoint so the mobile client can fetch live config.
 export const publicAppConfig = asyncHandler(async (_req, res: Response) => {
-  const result = await adminService.getAppConfig();
+  const result = await adminService.getPublicAppConfig();
   sendSuccess(res, { config: result.config });
 });

@@ -47,6 +47,9 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   'home.meet_people_title': 'Meet People',
   'home.view_all_label': 'View all',
   'home.search_placeholder': 'Search friends, places, posts…',
+
+  // Google Maps SDK for Android (friends map). Loaded from admin maps-config.
+  'maps.google_android_api_key': '',
 };
 
 // Module-level snapshot so non-React code (e.g. event handlers, utilities) can

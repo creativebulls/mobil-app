@@ -717,6 +717,73 @@ async function loadPlacesConfig() {
   }
 }
 
+function renderMapsStatus(config) {
+  const badge = $('maps-status-badge');
+  const detail = $('maps-status-detail');
+  if (!badge || !detail) return;
+
+  if (config.configured) {
+    badge.className = 'badge badge-success';
+    badge.textContent = 'Key saved';
+    const parts = [];
+    if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
+    if (config.updatedAt) parts.push(`updated ${formatDate(config.updatedAt)}`);
+    detail.textContent = parts.join(' · ');
+  } else {
+    badge.className = 'badge badge-muted';
+    badge.textContent = 'No key';
+    detail.textContent = 'Add a Google Maps Android API key for the friends map.';
+  }
+}
+
+async function loadMapsConfig() {
+  try {
+    const config = await api('/maps-config');
+    renderMapsStatus(config);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function saveMapsConfig() {
+  const errorEl = $('maps-config-error');
+  errorEl.textContent = '';
+  const apiKey = $('maps-api-key').value.trim();
+
+  if (!apiKey) {
+    errorEl.textContent = 'Paste your Google Maps Android API key first.';
+    return;
+  }
+
+  $('maps-save-btn').disabled = true;
+  try {
+    const config = await api('/maps-config', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    });
+    renderMapsStatus(config);
+    $('maps-api-key').value = '';
+    toast('Google Maps Android key saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('maps-save-btn').disabled = false;
+  }
+}
+
+async function clearMapsConfig() {
+  $('maps-clear-btn').disabled = true;
+  try {
+    const config = await api('/maps-config', { method: 'DELETE' });
+    renderMapsStatus(config);
+    toast('Google Maps Android key removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('maps-clear-btn').disabled = false;
+  }
+}
+
 async function savePlacesConfig() {
   const errorEl = $('places-config-error');
   errorEl.textContent = '';
@@ -1284,6 +1351,8 @@ function bindEvents() {
   $('places-categories-clear-btn')?.addEventListener('click', () => void savePlacesCategories([]));
   $('google-save-btn')?.addEventListener('click', () => void saveGooglePlacesConfig());
   $('google-clear-btn')?.addEventListener('click', () => void clearGooglePlacesConfig());
+  $('maps-save-btn')?.addEventListener('click', () => void saveMapsConfig());
+  $('maps-clear-btn')?.addEventListener('click', () => void clearMapsConfig());
 
   $('config-add')?.addEventListener('click', () => {
     syncConfigFromInputs();
@@ -1501,6 +1570,7 @@ async function init() {
       await loadUsers();
       await loadPushConfig();
       await loadPlacesConfig();
+      await loadMapsConfig();
       await loadReports();
       await loadAppeals();
     } catch {

@@ -496,4 +496,48 @@ export async function getFriendshipStatus(viewerId: string, targetUserId: string
   };
 }
 
+const FRIEND_LOCATION_MAX_AGE_MS = 30 * 60 * 1000;
+
+export async function listFriendLocations(viewerId: string) {
+  const friendIds = await getFriendUserIds(viewerId);
+  const blockedIds = await getBlockedUserIds(viewerId);
+
+  const visibleFriendIds = [...friendIds].filter((id) => !blockedIds.has(id));
+
+  if (visibleFriendIds.length === 0) {
+    return { friends: [] as FriendLocationSummary[] };
+  }
+
+  const minUpdatedAt = new Date(Date.now() - FRIEND_LOCATION_MAX_AGE_MS);
+
+  const users = await User.find({
+    _id: { $in: visibleFriendIds },
+    'lastLocation.updatedAt': { $gte: minUpdatedAt },
+    'lastLocation.latitude': { $exists: true },
+    'lastLocation.longitude': { $exists: true },
+  }).select(`${AUTHOR_FIELDS} lastLocation`);
+
+  const friends: FriendLocationSummary[] = users.map((user) => ({
+    id: user._id.toString(),
+    name: getUserDisplayName(user),
+    avatarUri: user.profilePhotoUrl ?? null,
+    latitude: user.lastLocation!.latitude,
+    longitude: user.lastLocation!.longitude,
+    updatedAt: user.lastLocation!.updatedAt.toISOString(),
+    isOnline: isUserOnline(user._id.toString()),
+  }));
+
+  return { friends };
+}
+
+export type FriendLocationSummary = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  latitude: number;
+  longitude: number;
+  updatedAt: string;
+  isOnline: boolean;
+};
+
 export { getFriendUserIds };

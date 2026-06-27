@@ -46,6 +46,27 @@ export type FriendSummary = {
   isOnline?: boolean;
 };
 
+export type FriendLocation = {
+  id: string;
+  name: string;
+  avatarUri: string | null;
+  latitude: number;
+  longitude: number;
+  updatedAt: string;
+  isOnline: boolean;
+};
+
+export async function updateMyLocation(latitude: number, longitude: number): Promise<void> {
+  await apiRequest('/profile/location', {
+    method: 'PATCH',
+    body: { latitude, longitude },
+  });
+}
+
+export async function fetchFriendLocations(): Promise<{ friends: FriendLocation[] }> {
+  return apiRequest<{ friends: FriendLocation[] }>('/friends/locations');
+}
+
 export async function fetchProfileStats(): Promise<ProfileStats> {
   return apiRequest<ProfileStats>('/profile/stats');
 }

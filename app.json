@@ -11,7 +11,7 @@
       "icon": "./assets/ios-icon.png",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Crave uses your location to show awesome places near you.",
+        "NSLocationWhenInUseUsageDescription": "Crave uses your location to show places near you and share your position with friends on the map.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.mohit9313.mobileapp",
@@ -107,7 +107,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Crave to use your location to show places near you."
+          "locationWhenInUsePermission": "Allow Crave to use your location to show places near you and share your position with friends on the map."
         }
       ],
       [

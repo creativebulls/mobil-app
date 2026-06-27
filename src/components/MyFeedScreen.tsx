@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchFriends, fetchMeetPeople, type FriendSummary, type MeetPerson } from '../api/profileApi';
 import { useAppText } from '../config/ConfigProvider';
@@ -40,6 +40,8 @@ const HEADER_ICONS_TOP = 8;
 const SEARCH_ICONS_TOP = FEED_HEADER_HEIGHT + (SEARCH_REGION_HEIGHT - 40) / 2;
 const ICON_SEARCH_GAP = 12;
 const SEARCH_RESERVE_RIGHT = HEADER_ICON_SLOT_WIDTH + ICON_SEARCH_GAP;
+// Android: native-driver scroll + opacity crossfade. iOS: padding tween (smoother there).
+const USE_NATIVE_SCROLL_DRIVER = Platform.OS === 'android';
 // How far the user scrolls before the header fully collapses (lower = snappier).
 const COLLAPSE_SCROLL = 18;
 const COLLAPSE_INPUT = [0, COLLAPSE_SCROLL * 0.45, COLLAPSE_SCROLL] as const;
@@ -125,6 +127,8 @@ function MyFeedScreenContent() {
     () => collapseInterp(scrollY, 0, SEARCH_RESERVE_RIGHT),
     [scrollY],
   );
+  const searchExpandedOpacity = useMemo(() => collapseInterp(scrollY, 1, 0), [scrollY]);
+  const searchCollapsedOpacity = useMemo(() => collapseInterp(scrollY, 0, 1), [scrollY]);
   const dividerOpacity = useMemo(
     () =>
       scrollY.interpolate({
@@ -275,9 +279,9 @@ function MyFeedScreenContent() {
         // inset to avoid duplicated/growing top spacing on pull-to-refresh.
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
-        scrollEventThrottle={1}
+        scrollEventThrottle={USE_NATIVE_SCROLL_DRIVER ? 16 : 1}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-          useNativeDriver: false,
+          useNativeDriver: USE_NATIVE_SCROLL_DRIVER,
           listener: () => requestEvaluate(),
         })}
         onMomentumScrollEnd={() => requestEvaluate()}
@@ -333,8 +337,7 @@ function MyFeedScreenContent() {
         <Animated.View
           style={[styles.topBarInner, { transform: [{ translateY: headerContentTranslateY }] }]}
           pointerEvents="box-none"
-          shouldRasterizeIOS
-          renderToHardwareTextureAndroid
+          {...(Platform.OS === 'ios' ? { shouldRasterizeIOS: true as const } : {})}
         >
           <Animated.View
             style={[styles.headerRow, { opacity: headerOpacity }]}
@@ -343,26 +346,57 @@ function MyFeedScreenContent() {
             <FeedHeader showActions={false} messagesBadge={unreadMessages} />
           </Animated.View>
 
-          <Animated.View style={styles.searchRow} pointerEvents="box-none">
-            <Animated.View
-              style={[
-                styles.searchClip,
-                {
-                  transform: [{ translateX: searchTranslateX }],
-                  paddingRight: searchClipRight,
-                },
-              ]}
-            >
-              <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
-                <View style={styles.searchTriggerInner}>
-                  <Ionicons name="search-outline" size={20} color={colors.labelGray} />
-                  <Text style={styles.searchTriggerText} numberOfLines={1}>
-                    {searchPlaceholder}
-                  </Text>
-                </View>
-              </Pressable>
+          {USE_NATIVE_SCROLL_DRIVER ? (
+            <View style={styles.searchRow} pointerEvents="box-none">
+              <Animated.View
+                style={[styles.searchLayer, styles.searchLayerExpanded, { opacity: searchExpandedOpacity }]}
+                pointerEvents="box-none"
+              >
+                <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
+                  <View style={styles.searchTriggerInner}>
+                    <Ionicons name="search-outline" size={20} color={colors.labelGray} />
+                    <Text style={styles.searchTriggerText} numberOfLines={1}>
+                      {searchPlaceholder}
+                    </Text>
+                  </View>
+                </Pressable>
+              </Animated.View>
+              <Animated.View
+                style={[styles.searchLayer, styles.searchLayerCollapsed, { opacity: searchCollapsedOpacity }]}
+                pointerEvents="box-none"
+              >
+                <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
+                  <View style={styles.searchTriggerInner}>
+                    <Ionicons name="search-outline" size={20} color={colors.labelGray} />
+                    <Text style={styles.searchTriggerText} numberOfLines={1}>
+                      {searchPlaceholder}
+                    </Text>
+                  </View>
+                </Pressable>
+              </Animated.View>
+            </View>
+          ) : (
+            <Animated.View style={[styles.searchRow, styles.searchRowIos]} pointerEvents="box-none">
+              <Animated.View
+                style={[
+                  styles.searchClip,
+                  {
+                    transform: [{ translateX: searchTranslateX }],
+                    paddingRight: searchClipRight,
+                  },
+                ]}
+              >
+                <Pressable style={styles.searchTrigger} onPress={() => setSearchActive(true)}>
+                  <View style={styles.searchTriggerInner}>
+                    <Ionicons name="search-outline" size={20} color={colors.labelGray} />
+                    <Text style={styles.searchTriggerText} numberOfLines={1}>
+                      {searchPlaceholder}
+                    </Text>
+                  </View>
+                </Pressable>
+              </Animated.View>
             </Animated.View>
-          </Animated.View>
+          )}
 
           <Animated.View
             pointerEvents="box-none"
@@ -440,10 +474,24 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: SEARCH_REGION_HEIGHT,
-    paddingLeft: 12,
-    paddingRight: 8,
     paddingVertical: 8,
     backgroundColor: colors.white,
+  },
+  searchRowIos: {
+    paddingLeft: 12,
+    paddingRight: 8,
+  },
+  searchLayer: {
+    ...StyleSheet.absoluteFillObject,
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  searchLayerExpanded: {
+    paddingHorizontal: 20,
+  },
+  searchLayerCollapsed: {
+    paddingLeft: 12,
+    paddingRight: SEARCH_RESERVE_RIGHT + 8,
   },
   searchClip: {
     flex: 1,

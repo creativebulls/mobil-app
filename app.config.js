@@ -14,7 +14,22 @@ const IS_PRODUCTION =
   process.env.APP_VARIANT === 'production' ||
   process.env.EAS_BUILD_PROFILE === 'production';
 
-module.exports = ({ config }) => {
+async function fetchAndroidMapsApiKey() {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://mobilevps.tech';
+  try {
+    const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/v1/app-config`);
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    const key = payload?.data?.config?.['maps.google_android_api_key'];
+    return typeof key === 'string' && key.trim() ? key.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = async ({ config }) => {
   if (IS_PRODUCTION && Array.isArray(config.plugins)) {
     config.plugins = config.plugins.filter((plugin) => {
       const name = Array.isArray(plugin) ? plugin[0] : plugin;
@@ -52,6 +67,23 @@ module.exports = ({ config }) => {
       NSUserActivityTypes: ['INSendMessageIntent'],
     },
   };
+
+  const mapsApiKey =
+    (await fetchAndroidMapsApiKey()) ??
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
+    null;
+
+  if (mapsApiKey) {
+    config.android = {
+      ...(config.android ?? {}),
+      config: {
+        ...(config.android?.config ?? {}),
+        googleMaps: {
+          apiKey: mapsApiKey,
+        },
+      },
+    };
+  }
 
   return config;
 };

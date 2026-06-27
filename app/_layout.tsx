@@ -18,6 +18,7 @@ import { NotificationsProvider } from '../src/notifications/NotificationsProvide
 import { PresenceProvider } from '../src/realtime/PresenceProvider';
 import { ConfigProvider } from '../src/config/ConfigProvider';
 import { resolveBackendHost } from '../src/config/api';
+import { useLocationSharing } from '../src/hooks/useLocationSharing';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -91,6 +92,11 @@ function SessionGuard() {
   return null;
 }
 
+function LocationSharingBootstrap() {
+  useLocationSharing();
+  return null;
+}
+
 export default function RootLayout() {
   useEffect(() => {
     void resolveBackendHost();
@@ -108,6 +114,7 @@ export default function RootLayout() {
             <CallProvider>
               <LiveAudioProvider>
               <SessionGuard />
+              <LocationSharingBootstrap />
               <AppErrorBoundary>
               <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
               <Stack.Screen name="index" />
@@ -123,6 +130,7 @@ export default function RootLayout() {
               <Stack.Screen name="verification-code" />
               <Stack.Screen name="reset-password-new" />
               <Stack.Screen name="home" />
+              <Stack.Screen name="map" />
               <Stack.Screen name="messages" />
               <Stack.Screen name="new-group" />
               <Stack.Screen name="chat" />
