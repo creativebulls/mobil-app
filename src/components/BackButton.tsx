@@ -23,9 +23,11 @@ export function BackButton({ onPress, variant = 'gradient' }: BackButtonProps) {
     }
   }
 
+  const isLight = variant === 'light';
+
   return (
     <Pressable
-      style={[styles.button, variant === 'light' && styles.buttonLight]}
+      style={[styles.button, isLight ? styles.buttonLight : styles.buttonGradient]}
       onPress={handlePress}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       accessibilityRole="button"
@@ -33,8 +35,8 @@ export function BackButton({ onPress, variant = 'gradient' }: BackButtonProps) {
     >
       <Ionicons
         name="chevron-back"
-        size={28}
-        color={variant === 'light' ? colors.text : colors.textOnGradient}
+        size={isLight ? 26 : 28}
+        color={isLight ? colors.text : colors.textOnGradient}
       />
     </Pressable>
   );
@@ -42,15 +44,20 @@ export function BackButton({ onPress, variant = 'gradient' }: BackButtonProps) {
 
 const styles = StyleSheet.create({
   button: {
+    marginBottom: 16,
+  },
+  buttonLight: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    marginLeft: -4,
+  },
+  buttonGradient: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-  },
-  buttonLight: {
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
   },
 });

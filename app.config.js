@@ -16,7 +16,7 @@ const IS_PRODUCTION =
   process.env.APP_VARIANT === 'production' ||
   process.env.EAS_BUILD_PROFILE === 'production';
 
-function fetchMapsApiKeys() {
+function fetchRemoteAppConfig() {
   const apiUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://mobilevps.tech').replace(/\/$/, '');
   try {
     const raw = execSync(
@@ -24,16 +24,28 @@ function fetchMapsApiKeys() {
       { encoding: 'utf8' },
     );
     const payload = JSON.parse(raw);
-    const config = payload?.data?.config ?? {};
-    const android = config['maps.google_android_api_key'];
-    const ios = config['maps.google_ios_api_key'];
-    return {
-      android: typeof android === 'string' && android.trim() ? android.trim() : null,
-      ios: typeof ios === 'string' && ios.trim() ? ios.trim() : null,
-    };
+    return payload?.data?.config ?? {};
   } catch {
-    return { android: null, ios: null };
+    return {};
   }
+}
+
+function fetchMapsApiKeys() {
+  const config = fetchRemoteAppConfig();
+  const android = config['maps.google_android_api_key'];
+  const ios = config['maps.google_ios_api_key'];
+  return {
+    android: typeof android === 'string' && android.trim() ? android.trim() : null,
+    ios: typeof ios === 'string' && ios.trim() ? ios.trim() : null,
+  };
+}
+
+function googleIosUrlScheme(iosClientId) {
+  if (typeof iosClientId !== 'string' || !iosClientId.endsWith('.apps.googleusercontent.com')) {
+    return null;
+  }
+  const prefix = iosClientId.replace('.apps.googleusercontent.com', '');
+  return `com.googleusercontent.apps.${prefix}`;
 }
 
 module.exports = ({ config }) => {
@@ -48,6 +60,7 @@ module.exports = ({ config }) => {
   // Notifications via Notifee + a Notification Service Extension.
   config.plugins = [
     ...(config.plugins ?? []),
+    'expo-apple-authentication',
     './plugins/withNotificationSound.js',
     [
       '@evennit/notifee-expo-plugin',
@@ -68,6 +81,7 @@ module.exports = ({ config }) => {
     entitlements: {
       ...(config.ios?.entitlements ?? {}),
       'com.apple.developer.usernotifications.communication': true,
+      'com.apple.developer.applesignin': ['Default'],
     },
     infoPlist: {
       ...(config.ios?.infoPlist ?? {}),
@@ -76,6 +90,19 @@ module.exports = ({ config }) => {
   };
 
   const remoteKeys = fetchMapsApiKeys();
+  const remoteConfig = fetchRemoteAppConfig();
+  const googleIosClientId = remoteConfig['auth.google.ios_client_id'];
+  const googleIosUrlSchemeValue = googleIosUrlScheme(googleIosClientId);
+
+  if (googleIosUrlSchemeValue) {
+    config.plugins.push([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: googleIosUrlSchemeValue },
+    ]);
+  } else {
+    config.plugins.push('@react-native-google-signin/google-signin');
+  }
+
   const androidMapsApiKey =
     remoteKeys.android ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY ?? null;
   const iosMapsApiKey =

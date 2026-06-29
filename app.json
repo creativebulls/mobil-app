@@ -59,7 +59,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000"
+          "backgroundColor": "#000000",
+          "android": {
+            "backgroundColor": "#000000"
+          },
+          "ios": {
+            "backgroundColor": "#000000"
+          }
         }
       ],
       "./plugins/withWhereaboutNetworkSecurity",

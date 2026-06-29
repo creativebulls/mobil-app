@@ -15,6 +15,8 @@ import {
   adminSuspendSchema,
   adminUsersQuerySchema,
   appConfigSchema,
+  authConfigSchema,
+  registrationConfigSchema,
   googlePlacesConfigSchema,
   googleMapsConfigSchema,
   placesCategoriesSchema,
@@ -132,6 +134,39 @@ export const setMapsConfig = asyncHandler(async (req: AdminRequest, res: Respons
 export const clearMapsConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
   const platform = req.query.platform === 'ios' ? 'ios' : 'android';
   const result = await adminService.clearMapsConfig(platform);
+  sendSuccess(res, result);
+});
+
+export const getAuthConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getAuthConfig();
+  sendSuccess(res, result);
+});
+
+export const setAuthConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = authConfigSchema.parse(req.body);
+  const result = await adminService.setAuthConfig(body);
+  sendSuccess(res, result);
+});
+
+export const clearAuthConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const provider =
+    req.query.provider === 'google'
+      ? 'google'
+      : req.query.provider === 'google-secret'
+        ? 'google-secret'
+        : 'apple';
+  const result = await adminService.clearAuthConfig(provider);
+  sendSuccess(res, result);
+});
+
+export const getRegistrationConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
+  const result = await adminService.getRegistrationConfig();
+  sendSuccess(res, result);
+});
+
+export const setRegistrationConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const body = registrationConfigSchema.parse(req.body);
+  const result = await adminService.setRegistrationConfig(body);
   sendSuccess(res, result);
 });
 

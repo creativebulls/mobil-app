@@ -46,6 +46,18 @@ import {
 import { listCategoryOptions, sanitizeCategoryKeys } from '../places/place.categories';
 import { clearPlacesCache } from '../places/places.service';
 import { AppSetting } from './app-setting.model';
+import {
+  AUTH_APPLE_CLIENT_ID,
+  AUTH_APPLE_ENABLED,
+  AUTH_GOOGLE_ANDROID_CLIENT_ID,
+  AUTH_GOOGLE_CLIENT_SECRET,
+  AUTH_GOOGLE_ENABLED,
+  AUTH_GOOGLE_IOS_CLIENT_ID,
+  AUTH_GOOGLE_WEB_CLIENT_ID,
+  getAppleAuthSettings,
+  getGoogleAuthSettings,
+  getPublicAuthConfig,
+} from '../auth/social-auth.service';
 
 const SALT_ROUNDS = 12;
 
@@ -128,6 +140,11 @@ const MIN_MAP_ZOOM = 10;
 const MAX_MAP_ZOOM = 20;
 const PLACES_PROVIDER_SETTING = 'places_provider';
 const PLACES_CATEGORIES_SETTING = 'places_category_keys';
+const REGISTRATION_BUSINESS_ENABLED_SETTING = 'registration_business_enabled';
+const REGISTRATION_PROGRESS_STEP_SETTING = 'registration_progress_step';
+const REGISTRATION_PROGRESS_TOTAL_SETTING = 'registration_progress_total';
+const DEFAULT_REGISTRATION_PROGRESS_STEP = 2;
+const DEFAULT_REGISTRATION_PROGRESS_TOTAL = 4;
 
 const VALID_PROVIDERS: PlacesProviderName[] = ['foursquare', 'google', 'opentripmap', 'sample'];
 
@@ -409,6 +426,242 @@ export async function clearMapsConfig(platform: 'android' | 'ios' = 'android') {
   return getMapsConfig();
 }
 
+function parseAuthEnabled(value: string | undefined): boolean {
+  return value === 'true' || value === '1';
+}
+
+export async function getAuthConfig() {
+  const [apple, google, secretDoc] = await Promise.all([
+    getAppleAuthSettings(),
+    getGoogleAuthSettings(),
+    AppSetting.findOne({ key: AUTH_GOOGLE_CLIENT_SECRET }),
+  ]);
+  const [appleEnabledDoc, googleEnabledDoc] = await Promise.all([
+    AppSetting.findOne({ key: AUTH_APPLE_ENABLED }),
+    AppSetting.findOne({ key: AUTH_GOOGLE_ENABLED }),
+  ]);
+  const clientSecret = secretDoc?.value?.trim() || null;
+
+  return {
+    apple: {
+      enabled: parseAuthEnabled(appleEnabledDoc?.value),
+      configured: Boolean(apple.clientId),
+      clientId: apple.clientId,
+    },
+    google: {
+      enabled: parseAuthEnabled(googleEnabledDoc?.value),
+      configured: Boolean(google.webClientId),
+      webClientId: google.webClientId,
+      iosClientId: google.iosClientId,
+      androidClientId: google.androidClientId,
+      maskedClientSecret: clientSecret ? maskKey(clientSecret) : null,
+    },
+  };
+}
+
+export async function setAuthConfig(input: {
+  appleEnabled?: boolean;
+  appleClientId?: string;
+  googleEnabled?: boolean;
+  googleWebClientId?: string;
+  googleIosClientId?: string;
+  googleAndroidClientId?: string;
+  googleClientSecret?: string;
+}) {
+  if (input.appleEnabled !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_APPLE_ENABLED },
+      { value: input.appleEnabled ? 'true' : 'false' },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.appleClientId !== undefined) {
+    const trimmed = input.appleClientId.trim();
+    if (!trimmed) {
+      throw new AppError(400, 'Apple client ID is required', 'INVALID_APPLE_CLIENT_ID');
+    }
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_APPLE_CLIENT_ID },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.googleEnabled !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_GOOGLE_ENABLED },
+      { value: input.googleEnabled ? 'true' : 'false' },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.googleWebClientId !== undefined) {
+    const trimmed = input.googleWebClientId.trim();
+    if (!trimmed) {
+      throw new AppError(400, 'Google web client ID is required', 'INVALID_GOOGLE_WEB_CLIENT_ID');
+    }
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_GOOGLE_WEB_CLIENT_ID },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.googleIosClientId !== undefined) {
+    const trimmed = input.googleIosClientId.trim();
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_GOOGLE_IOS_CLIENT_ID },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.googleAndroidClientId !== undefined) {
+    const trimmed = input.googleAndroidClientId.trim();
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_GOOGLE_ANDROID_CLIENT_ID },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.googleClientSecret !== undefined) {
+    const trimmed = input.googleClientSecret.trim();
+    if (!trimmed) {
+      throw new AppError(400, 'Google client secret cannot be empty', 'INVALID_GOOGLE_CLIENT_SECRET');
+    }
+    await AppSetting.findOneAndUpdate(
+      { key: AUTH_GOOGLE_CLIENT_SECRET },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  const hasUpdate =
+    input.appleEnabled !== undefined ||
+    input.appleClientId !== undefined ||
+    input.googleEnabled !== undefined ||
+    input.googleWebClientId !== undefined ||
+    input.googleIosClientId !== undefined ||
+    input.googleAndroidClientId !== undefined ||
+    input.googleClientSecret !== undefined;
+
+  if (!hasUpdate) {
+    throw new AppError(400, 'Provide at least one auth setting to update', 'INVALID_AUTH_CONFIG');
+  }
+
+  return getAuthConfig();
+}
+
+export async function clearAuthConfig(provider: 'apple' | 'google' | 'google-secret' = 'apple') {
+  if (provider === 'apple') {
+    await Promise.all([
+      AppSetting.deleteOne({ key: AUTH_APPLE_ENABLED }),
+      AppSetting.deleteOne({ key: AUTH_APPLE_CLIENT_ID }),
+    ]);
+  } else if (provider === 'google') {
+    await Promise.all([
+      AppSetting.deleteOne({ key: AUTH_GOOGLE_ENABLED }),
+      AppSetting.deleteOne({ key: AUTH_GOOGLE_WEB_CLIENT_ID }),
+      AppSetting.deleteOne({ key: AUTH_GOOGLE_IOS_CLIENT_ID }),
+      AppSetting.deleteOne({ key: AUTH_GOOGLE_ANDROID_CLIENT_ID }),
+    ]);
+  } else {
+    await AppSetting.deleteOne({ key: AUTH_GOOGLE_CLIENT_SECRET });
+  }
+
+  return getAuthConfig();
+}
+
+function parseRegistrationBoolean(value: string | undefined): boolean {
+  return value === 'true' || value === '1';
+}
+
+function clampRegistrationTotal(value: number): number {
+  return Math.min(10, Math.max(1, Math.round(value)));
+}
+
+function clampRegistrationStep(value: number, total: number): number {
+  return Math.min(total, Math.max(1, Math.round(value)));
+}
+
+export async function getRegistrationConfig() {
+  const [businessDoc, stepDoc, totalDoc] = await Promise.all([
+    AppSetting.findOne({ key: REGISTRATION_BUSINESS_ENABLED_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_PROGRESS_STEP_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_PROGRESS_TOTAL_SETTING }),
+  ]);
+
+  const totalStepsRaw = totalDoc?.value ? Number.parseInt(totalDoc.value, 10) : DEFAULT_REGISTRATION_PROGRESS_TOTAL;
+  const totalSteps = Number.isFinite(totalStepsRaw)
+    ? clampRegistrationTotal(totalStepsRaw)
+    : DEFAULT_REGISTRATION_PROGRESS_TOTAL;
+  const currentStepRaw = stepDoc?.value
+    ? Number.parseInt(stepDoc.value, 10)
+    : DEFAULT_REGISTRATION_PROGRESS_STEP;
+  const currentStep = Number.isFinite(currentStepRaw)
+    ? clampRegistrationStep(currentStepRaw, totalSteps)
+    : DEFAULT_REGISTRATION_PROGRESS_STEP;
+
+  return {
+    businessAccountsEnabled: parseRegistrationBoolean(businessDoc?.value),
+    currentStep,
+    totalSteps,
+    updatedAt: businessDoc?.updatedAt ?? stepDoc?.updatedAt ?? totalDoc?.updatedAt ?? null,
+  };
+}
+
+export async function setRegistrationConfig(input: {
+  businessAccountsEnabled?: boolean;
+  currentStep?: number;
+  totalSteps?: number;
+}) {
+  if (input.businessAccountsEnabled !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_BUSINESS_ENABLED_SETTING },
+      { value: input.businessAccountsEnabled ? 'true' : 'false' },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.totalSteps !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_PROGRESS_TOTAL_SETTING },
+      { value: String(clampRegistrationTotal(input.totalSteps)) },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.currentStep !== undefined) {
+    const total = input.totalSteps ?? (await getRegistrationConfig()).totalSteps;
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_PROGRESS_STEP_SETTING },
+      { value: String(clampRegistrationStep(input.currentStep, total)) },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (
+    input.businessAccountsEnabled === undefined &&
+    input.currentStep === undefined &&
+    input.totalSteps === undefined
+  ) {
+    throw new AppError(400, 'Provide at least one registration setting', 'INVALID_REGISTRATION_CONFIG');
+  }
+
+  return getRegistrationConfig();
+}
+
+export async function getPublicRegistrationConfig(): Promise<Record<string, string>> {
+  const config = await getRegistrationConfig();
+  return {
+    'registration.business_accounts_enabled': config.businessAccountsEnabled ? 'true' : 'false',
+    'registration.progress_step': String(config.currentStep),
+    'registration.progress_total': String(config.totalSteps),
+  };
+}
+
 export async function getPublicAppConfig() {
   const { config, updatedAt } = await getAppConfig();
   const mapsKey = await getGoogleMapsAndroidApiKey();
@@ -420,6 +673,8 @@ export async function getPublicAppConfig() {
     config['maps.google_ios_api_key'] = iosMapsKey;
   }
   config['maps.default_zoom'] = String(await getMapDefaultZoom());
+  Object.assign(config, await getPublicAuthConfig());
+  Object.assign(config, await getPublicRegistrationConfig());
   return { config, updatedAt };
 }
 
@@ -599,11 +854,74 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
   'welcome.new_user_button': "I'm new to Crave",
   'welcome.existing_account_button': 'I have an account',
+  'welcome.skip_link': 'Skip',
+  'welcome.headline_lines': 'Discover.\nPlan.\nExperience.\nRemember.',
+  'welcome.headline_accent_line': 'Experience.',
+  'welcome.body_text':
+    'Crave is your home for\nreal-life experiences\nwith the people who matter.',
+  'welcome.slide2.headline_lines': 'Connect.\nExplore.\nTogether.\nAnywhere.',
+  'welcome.slide2.headline_accent_line': 'Together.',
+  'welcome.slide2.body_text':
+    'Meet friends nearby, plan outings together,\nand turn trips and nights out into\nmemories worth sharing on Crave.',
+  'welcome.slide3.headline_lines': 'Find.\nLocal spots.\nShare.\nMoments.',
+  'welcome.slide3.headline_accent_line': 'Share.',
+  'welcome.slide3.body_text':
+    'Discover places friends love,\nexplore top-rated spots near you,\nand save the meals and moments\nyou will crave again.',
+  'welcome.next_button': 'Next',
 
   // Splash / first-run landing screen (one tagline per line).
   'splash.taglines': 'Real experiences.\nReal people.\nRemember more.',
   'splash.get_started_button': 'Get started',
+  'splash.get_started_button_color': '#FD4301',
   'splash.explore_guest_link': 'Explore as guest',
+
+  // Sign-in screen
+  'sign_in.title': 'Welcome back 👋',
+  'sign_in.subtitle': 'Log in to continue your journey.',
+  'sign_in.apple_button': 'Continue with Apple',
+  'sign_in.google_button': 'Continue with Google',
+  'sign_in.divider': 'or',
+  'sign_in.login_id_label': 'Email or phone number',
+  'sign_in.login_id_placeholder': 'Enter your email or phone number',
+  'sign_in.password_label': 'Password',
+  'sign_in.password_placeholder': 'Enter your password',
+  'sign_in.forgot_password': 'Forgot password?',
+  'sign_in.submit_button': 'Log in',
+  'sign_in.footer_text': "Don't have an account?",
+  'sign_in.register_link': 'Register',
+  'sign_in.social_unavailable':
+    'Social sign-in is coming soon. Use email or phone for now.',
+
+  // Sign-up screen
+  'sign_up.title': 'Create your account',
+  'sign_up.subtitle': "Let's get you set up.",
+  'sign_up.progress_label': 'Step {step} of {total}',
+  'sign_up.apple_button': 'Continue with Apple',
+  'sign_up.google_button': 'Continue with Google',
+  'sign_up.email_label': 'Email',
+  'sign_up.email_placeholder': 'Enter your email',
+  'sign_up.password_label': 'Password',
+  'sign_up.password_placeholder': 'Create a password',
+  'sign_up.confirm_password_label': 'Confirm password',
+  'sign_up.confirm_password_placeholder': 'Re-enter your password',
+  'sign_up.password_req_length': 'At least 8 characters',
+  'sign_up.password_req_number': 'Includes a number',
+  'sign_up.password_req_uppercase': 'Includes an uppercase letter',
+  'sign_up.account_type_label': 'I am',
+  'sign_up.individual_label': 'Individual',
+  'sign_up.business_label': 'Business',
+  'sign_up.consent_prefix': "I agree to Crave's",
+  'sign_up.consent_terms': 'Terms of Service',
+  'sign_up.consent_conjunction': 'and',
+  'sign_up.consent_privacy': 'Privacy Policy',
+  'sign_up.submit_button': 'Create account',
+  'sign_up.footer_text': 'Already have an account?',
+  'sign_up.login_link': 'Log in',
+  'sign_up.social_unavailable': 'Social sign-up is coming soon. Use email for now.',
+
+  'registration.business_accounts_enabled': 'true',
+  'registration.progress_step': '2',
+  'registration.progress_total': '4',
 
   // Home feed section titles & labels
   'home.meet_friends_title': 'Meet Friends',

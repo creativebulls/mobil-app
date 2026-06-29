@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { fetchAppConfig } from '../api/configApi';
+import { configureGoogleSignInFromConfig } from '../auth/googleSignInConfig';
 
 const CACHE_KEY = '@whereabout/app_config';
 
@@ -37,11 +38,79 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   'welcome.taglines': 'Discover cool new places\nShare the sports you love\nMeet with new people',
   'welcome.new_user_button': "I'm new to Crave",
   'welcome.existing_account_button': 'I have an account',
+  'welcome.skip_link': 'Skip',
+  'welcome.headline_lines': 'Discover.\nPlan.\nExperience.\nRemember.',
+  'welcome.headline_accent_line': 'Experience.',
+  'welcome.body_text':
+    'Crave is your home for\nreal-life experiences\nwith the people who matter.',
+  'welcome.slide2.headline_lines': 'Connect.\nExplore.\nTogether.\nAnywhere.',
+  'welcome.slide2.headline_accent_line': 'Together.',
+  'welcome.slide2.body_text':
+    'Meet friends nearby, plan outings together,\nand turn trips and nights out into\nmemories worth sharing on Crave.',
+  'welcome.slide3.headline_lines': 'Find.\nLocal spots.\nShare.\nMoments.',
+  'welcome.slide3.headline_accent_line': 'Share.',
+  'welcome.slide3.body_text':
+    'Discover places friends love,\nexplore top-rated spots near you,\nand save the meals and moments\nyou will crave again.',
+  'welcome.next_button': 'Next',
 
   // Splash / first-run landing screen (one tagline per line).
   'splash.taglines': 'Real experiences.\nReal people.\nRemember more.',
   'splash.get_started_button': 'Get started',
+  'splash.get_started_button_color': '#FD4301',
   'splash.explore_guest_link': 'Explore as guest',
+
+  'sign_in.title': 'Welcome back 👋',
+  'sign_in.subtitle': 'Log in to continue your journey.',
+  'sign_in.apple_button': 'Continue with Apple',
+  'sign_in.google_button': 'Continue with Google',
+  'sign_in.divider': 'or',
+  'sign_in.login_id_label': 'Email or phone number',
+  'sign_in.login_id_placeholder': 'Enter your email or phone number',
+  'sign_in.password_label': 'Password',
+  'sign_in.password_placeholder': 'Enter your password',
+  'sign_in.forgot_password': 'Forgot password?',
+  'sign_in.submit_button': 'Log in',
+  'sign_in.footer_text': "Don't have an account?",
+  'sign_in.register_link': 'Register',
+  'sign_in.social_unavailable':
+    'Social sign-in is coming soon. Use email or phone for now.',
+
+  'sign_up.title': 'Create your account',
+  'sign_up.subtitle': "Let's get you set up.",
+  'sign_up.progress_label': 'Step {step} of {total}',
+  'sign_up.apple_button': 'Continue with Apple',
+  'sign_up.google_button': 'Continue with Google',
+  'sign_up.email_label': 'Email',
+  'sign_up.email_placeholder': 'Enter your email',
+  'sign_up.password_label': 'Password',
+  'sign_up.password_placeholder': 'Create a password',
+  'sign_up.confirm_password_label': 'Confirm password',
+  'sign_up.confirm_password_placeholder': 'Re-enter your password',
+  'sign_up.password_req_length': 'At least 8 characters',
+  'sign_up.password_req_number': 'Includes a number',
+  'sign_up.password_req_uppercase': 'Includes an uppercase letter',
+  'sign_up.account_type_label': 'I am',
+  'sign_up.individual_label': 'Individual',
+  'sign_up.business_label': 'Business',
+  'sign_up.consent_prefix': "I agree to Crave's",
+  'sign_up.consent_terms': 'Terms of Service',
+  'sign_up.consent_conjunction': 'and',
+  'sign_up.consent_privacy': 'Privacy Policy',
+  'sign_up.submit_button': 'Create account',
+  'sign_up.footer_text': 'Already have an account?',
+  'sign_up.login_link': 'Log in',
+  'sign_up.social_unavailable': 'Social sign-up is coming soon. Use email for now.',
+
+  'registration.business_accounts_enabled': 'true',
+  'registration.progress_step': '2',
+  'registration.progress_total': '4',
+
+  'auth.apple.enabled': 'false',
+  'auth.apple.client_id': '',
+  'auth.google.enabled': 'false',
+  'auth.google.web_client_id': '',
+  'auth.google.ios_client_id': '',
+  'auth.google.android_client_id': '',
 
   'home.meet_friends_title': 'Meet Friends',
   'home.discover_title': 'Discover Top Places',
@@ -93,6 +162,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     const apply = (next: Record<string, string>) => {
       const merged = mergeWithDefaults(next);
       activeConfig = merged;
+      configureGoogleSignInFromConfig(merged);
       if (active) {
         setConfig(merged);
       }

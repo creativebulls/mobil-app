@@ -11,6 +11,8 @@ authRouter.post('/resume-verified-session', authController.resumeVerifiedSession
 authRouter.get('/verification-status', authController.verificationStatus);
 authRouter.post('/resend-verification', authController.resendVerification);
 authRouter.post('/login', authController.login);
+authRouter.post('/apple', authController.loginWithApple);
+authRouter.post('/google', authController.loginWithGoogle);
 authRouter.post('/refresh', authController.refresh);
 authRouter.post('/logout', authController.authGuards[0], authController.logout);
 authRouter.post('/forgot-password', authController.forgotPassword);

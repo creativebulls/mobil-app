@@ -607,6 +607,156 @@
                 </p>
               </div>
             </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Apple &amp; Google sign-in</h2>
+                <p class="card-description">
+                  OAuth client IDs and secrets for Continue with Apple / Google on the login and
+                  register screens. Client IDs are sent to the app; secrets stay on the server only.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="auth-status-badge" class="badge badge-muted">Loading…</span>
+                  <span id="auth-status-detail" class="user-email"></span>
+                </div>
+
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label">
+                    <input id="auth-apple-enabled" type="checkbox" />
+                    Enable Apple sign-in
+                  </label>
+                </div>
+                <div class="field">
+                  <label class="label" for="auth-apple-client-id">Apple client ID (iOS bundle ID)</label>
+                  <input
+                    id="auth-apple-client-id"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="com.mohit9313.mobileapp"
+                    style="font-family: monospace"
+                  />
+                </div>
+
+                <div class="field" style="margin-top: 1rem">
+                  <label class="label">
+                    <input id="auth-google-enabled" type="checkbox" />
+                    Enable Google sign-in
+                  </label>
+                </div>
+                <div class="field">
+                  <label class="label" for="auth-google-web-client-id">Google web client ID</label>
+                  <input
+                    id="auth-google-web-client-id"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="123456789-abc.apps.googleusercontent.com"
+                    style="font-family: monospace"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="auth-google-ios-client-id">Google iOS client ID</label>
+                  <input
+                    id="auth-google-ios-client-id"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="123456789-ios.apps.googleusercontent.com"
+                    style="font-family: monospace"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="auth-google-android-client-id">Google Android client ID</label>
+                  <input
+                    id="auth-google-android-client-id"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="123456789-android.apps.googleusercontent.com"
+                    style="font-family: monospace"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="auth-google-client-secret">Google client secret (server only)</label>
+                  <input
+                    id="auth-google-client-secret"
+                    class="input"
+                    type="password"
+                    autocomplete="off"
+                    placeholder="Paste to update — leave blank to keep current"
+                    style="font-family: monospace"
+                  />
+                  <p id="auth-config-error" class="error-text"></p>
+                </div>
+
+                <div class="actions">
+                  <button id="auth-save-btn" type="button" class="btn btn-primary btn-sm">Save</button>
+                  <button id="auth-clear-apple-btn" type="button" class="btn btn-destructive btn-sm">Clear Apple</button>
+                  <button id="auth-clear-google-btn" type="button" class="btn btn-destructive btn-sm">Clear Google</button>
+                  <button id="auth-clear-google-secret-btn" type="button" class="btn btn-destructive btn-sm">Clear secret</button>
+                </div>
+                <p class="card-description" style="margin-top: 0.5rem">
+                  After changing Google iOS client ID, rebuild the native iOS app so the URL scheme
+                  is updated. Apple and Google toggles apply on next app launch.
+                </p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Registration</h2>
+                <p class="card-description">
+                  Control business account sign-up and the progress indicator on the create-account
+                  screen.
+                </p>
+              </div>
+              <div class="card-content">
+                <div class="push-status">
+                  <span id="registration-status-badge" class="badge badge-muted">Loading…</span>
+                  <span id="registration-status-detail" class="user-email"></span>
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label">
+                    <input id="registration-business-enabled" type="checkbox" />
+                    Allow business account registration
+                  </label>
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-progress-step">Progress step (current)</label>
+                  <input
+                    id="registration-progress-step"
+                    class="input"
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value="2"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-progress-total">Progress total steps</label>
+                  <input
+                    id="registration-progress-total"
+                    class="input"
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value="4"
+                  />
+                  <p id="registration-config-error" class="error-text"></p>
+                </div>
+                <div class="actions">
+                  <button id="registration-save-btn" type="button" class="btn btn-primary btn-sm">Save</button>
+                </div>
+                <p class="card-description" style="margin-top: 0.5rem">
+                  Changes apply on the next app launch when the mobile app refreshes app config.
+                </p>
+              </div>
+            </div>
           </section>
         </main>
       </div>

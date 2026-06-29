@@ -824,6 +824,200 @@ async function clearMapsIosConfig() {
   }
 }
 
+function renderAuthStatus(config) {
+  const badge = $('auth-status-badge');
+  const detail = $('auth-status-detail');
+  if (!badge || !detail) return;
+
+  const apple = config.apple ?? {};
+  const google = config.google ?? {};
+  const appleOn = Boolean(apple.enabled && apple.configured);
+  const googleOn = Boolean(google.enabled && google.configured);
+
+  if (appleOn || googleOn) {
+    badge.className = 'badge badge-success';
+    badge.textContent = 'Configured';
+    const parts = [];
+    if (appleOn) parts.push(`Apple: ${apple.clientId}`);
+    if (googleOn) parts.push(`Google: ${google.webClientId}`);
+    if (google.maskedClientSecret) parts.push(`secret ${google.maskedClientSecret}`);
+    detail.textContent = parts.join(' · ');
+  } else {
+    badge.className = 'badge badge-muted';
+    badge.textContent = 'Not configured';
+    detail.textContent = 'Enable Apple and/or Google sign-in for the mobile app.';
+  }
+
+  if ($('auth-apple-enabled')) $('auth-apple-enabled').checked = Boolean(apple.enabled);
+  if ($('auth-apple-client-id') && apple.clientId) $('auth-apple-client-id').value = apple.clientId;
+  if ($('auth-google-enabled')) $('auth-google-enabled').checked = Boolean(google.enabled);
+  if ($('auth-google-web-client-id') && google.webClientId) {
+    $('auth-google-web-client-id').value = google.webClientId;
+  }
+  if ($('auth-google-ios-client-id') && google.iosClientId) {
+    $('auth-google-ios-client-id').value = google.iosClientId;
+  }
+  if ($('auth-google-android-client-id') && google.androidClientId) {
+    $('auth-google-android-client-id').value = google.androidClientId;
+  }
+}
+
+async function loadAuthConfig() {
+  try {
+    const config = await api('/auth-config');
+    renderAuthStatus(config);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function saveAuthConfig() {
+  const errorEl = $('auth-config-error');
+  errorEl.textContent = '';
+
+  const payload = {
+    appleEnabled: $('auth-apple-enabled')?.checked ?? false,
+    googleEnabled: $('auth-google-enabled')?.checked ?? false,
+  };
+
+  const appleClientId = $('auth-apple-client-id')?.value.trim() ?? '';
+  const googleWebClientId = $('auth-google-web-client-id')?.value.trim() ?? '';
+  const googleIosClientId = $('auth-google-ios-client-id')?.value.trim() ?? '';
+  const googleAndroidClientId = $('auth-google-android-client-id')?.value.trim() ?? '';
+  const googleClientSecret = $('auth-google-client-secret')?.value.trim() ?? '';
+
+  if (appleClientId) payload.appleClientId = appleClientId;
+  if (googleWebClientId) payload.googleWebClientId = googleWebClientId;
+  if (googleIosClientId) payload.googleIosClientId = googleIosClientId;
+  if (googleAndroidClientId) payload.googleAndroidClientId = googleAndroidClientId;
+  if (googleClientSecret) payload.googleClientSecret = googleClientSecret;
+
+  $('auth-save-btn').disabled = true;
+  try {
+    const config = await api('/auth-config', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    renderAuthStatus(config);
+    $('auth-google-client-secret').value = '';
+    toast('Auth settings saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('auth-save-btn').disabled = false;
+  }
+}
+
+async function clearAuthAppleConfig() {
+  $('auth-clear-apple-btn').disabled = true;
+  try {
+    const config = await api('/auth-config?provider=apple', { method: 'DELETE' });
+    renderAuthStatus(config);
+    toast('Apple sign-in settings cleared');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('auth-clear-apple-btn').disabled = false;
+  }
+}
+
+async function clearAuthGoogleConfig() {
+  $('auth-clear-google-btn').disabled = true;
+  try {
+    const config = await api('/auth-config?provider=google', { method: 'DELETE' });
+    renderAuthStatus(config);
+    toast('Google sign-in settings cleared');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('auth-clear-google-btn').disabled = false;
+  }
+}
+
+async function clearAuthGoogleSecret() {
+  $('auth-clear-google-secret-btn').disabled = true;
+  try {
+    const config = await api('/auth-config?provider=google-secret', { method: 'DELETE' });
+    renderAuthStatus(config);
+    toast('Google client secret removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('auth-clear-google-secret-btn').disabled = false;
+  }
+}
+
+function renderRegistrationStatus(config) {
+  const badge = $('registration-status-badge');
+  const detail = $('registration-status-detail');
+  if (!badge || !detail) return;
+
+  const businessOn = Boolean(config.businessAccountsEnabled);
+  badge.className = 'badge badge-success';
+  badge.textContent = businessOn ? 'Business enabled' : 'Individual only';
+  detail.textContent = `Step ${config.currentStep} of ${config.totalSteps}`;
+
+  if ($('registration-business-enabled')) {
+    $('registration-business-enabled').checked = businessOn;
+  }
+  if ($('registration-progress-step')) {
+    $('registration-progress-step').value = String(config.currentStep);
+  }
+  if ($('registration-progress-total')) {
+    $('registration-progress-total').value = String(config.totalSteps);
+  }
+}
+
+async function loadRegistrationConfig() {
+  try {
+    const config = await api('/registration-config');
+    renderRegistrationStatus(config);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function saveRegistrationConfig() {
+  const errorEl = $('registration-config-error');
+  errorEl.textContent = '';
+
+  const currentStep = Number.parseInt(String($('registration-progress-step')?.value ?? ''), 10);
+  const totalSteps = Number.parseInt(String($('registration-progress-total')?.value ?? ''), 10);
+
+  if (!Number.isFinite(currentStep) || currentStep < 1 || currentStep > 10) {
+    errorEl.textContent = 'Progress step must be between 1 and 10.';
+    return;
+  }
+
+  if (!Number.isFinite(totalSteps) || totalSteps < 1 || totalSteps > 10) {
+    errorEl.textContent = 'Progress total must be between 1 and 10.';
+    return;
+  }
+
+  if (currentStep > totalSteps) {
+    errorEl.textContent = 'Progress step cannot be greater than total steps.';
+    return;
+  }
+
+  $('registration-save-btn').disabled = true;
+  try {
+    const config = await api('/registration-config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        businessAccountsEnabled: $('registration-business-enabled')?.checked ?? false,
+        currentStep,
+        totalSteps,
+      }),
+    });
+    renderRegistrationStatus(config);
+    toast('Registration settings saved');
+  } catch (error) {
+    errorEl.textContent = error.message;
+  } finally {
+    $('registration-save-btn').disabled = false;
+  }
+}
+
 async function savePlacesConfig() {
   const errorEl = $('places-config-error');
   errorEl.textContent = '';
@@ -1392,6 +1586,11 @@ function bindEvents() {
   $('google-save-btn')?.addEventListener('click', () => void saveGooglePlacesConfig());
   $('google-clear-btn')?.addEventListener('click', () => void clearGooglePlacesConfig());
   $('maps-save-btn')?.addEventListener('click', () => void saveMapsConfig());
+  $('auth-save-btn')?.addEventListener('click', () => void saveAuthConfig());
+  $('auth-clear-apple-btn')?.addEventListener('click', () => void clearAuthAppleConfig());
+  $('auth-clear-google-btn')?.addEventListener('click', () => void clearAuthGoogleConfig());
+  $('auth-clear-google-secret-btn')?.addEventListener('click', () => void clearAuthGoogleSecret());
+  $('registration-save-btn')?.addEventListener('click', () => void saveRegistrationConfig());
   $('maps-clear-android-btn')?.addEventListener('click', () => void clearMapsAndroidConfig());
   $('maps-clear-ios-btn')?.addEventListener('click', () => void clearMapsIosConfig());
 
@@ -1612,6 +1811,8 @@ async function init() {
       await loadPushConfig();
       await loadPlacesConfig();
       await loadMapsConfig();
+      await loadAuthConfig();
+      await loadRegistrationConfig();
       await loadReports();
       await loadAppeals();
     } catch {

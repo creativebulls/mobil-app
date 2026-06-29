@@ -11,12 +11,14 @@ export async function registerAccount(input: {
   email: string;
   password: string;
   termsConsent: true;
+  accountType?: 'individual' | 'business';
   profilePhotoUri?: string | null;
 }): Promise<RegisterResponse> {
   const formData = new FormData();
   formData.append('email', input.email);
   formData.append('password', input.password);
   formData.append('termsConsent', 'true');
+  formData.append('accountType', input.accountType ?? 'individual');
 
   if (input.profilePhotoUri) {
     formData.append('profilePhoto', {
@@ -72,6 +74,28 @@ export async function loginAccount(email: string, password: string): Promise<Aut
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
     body: { email, password },
+    token: null,
+    skipAuthRefresh: true,
+  });
+}
+
+export async function loginWithApple(input: {
+  idToken: string;
+  givenName?: string | null;
+  surname?: string | null;
+}): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>('/auth/apple', {
+    method: 'POST',
+    body: input,
+    token: null,
+    skipAuthRefresh: true,
+  });
+}
+
+export async function loginWithGoogle(input: { idToken: string }): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>('/auth/google', {
+    method: 'POST',
+    body: input,
     token: null,
     skipAuthRefresh: true,
   });

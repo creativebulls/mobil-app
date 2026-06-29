@@ -1,10 +1,14 @@
 import { Schema, model, type Document, type Types } from 'mongoose';
 
 export type RegistrationStatus = 'pending_email' | 'pending_profile' | 'completed';
+export type AccountType = 'individual' | 'business';
 
 export interface IUser {
   email: string;
-  passwordHash: string;
+  passwordHash?: string;
+  appleId?: string;
+  googleId?: string;
+  accountType: AccountType;
   profilePhotoUrl?: string;
   emailVerified: boolean;
   emailVerificationToken?: string;
@@ -70,7 +74,14 @@ const refreshTokenSchema = new Schema(
 const userSchema = new Schema<UserDocument>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true },
+    passwordHash: { type: String },
+    appleId: { type: String, unique: true, sparse: true, trim: true },
+    googleId: { type: String, unique: true, sparse: true, trim: true },
+    accountType: {
+      type: String,
+      enum: ['individual', 'business'],
+      default: 'individual',
+    },
     profilePhotoUrl: { type: String },
     emailVerified: { type: Boolean, default: false },
     emailVerificationToken: { type: String },
@@ -171,6 +182,7 @@ export function serializeUser(user: UserDocument) {
     gender: user.gender ?? null,
     registrationCompleted: user.registrationCompleted,
     registrationStatus: user.registrationStatus,
+    accountType: user.accountType ?? 'individual',
     parentalConsent: user.parentalConsent,
     statusText: user.statusText ?? null,
     points: user.points ?? 0,

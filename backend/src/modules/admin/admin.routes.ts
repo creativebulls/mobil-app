@@ -48,3 +48,10 @@ adminRouter.delete('/places-config/google', adminController.clearGooglePlacesCon
 adminRouter.get('/maps-config', adminController.getMapsConfig);
 adminRouter.put('/maps-config', adminController.setMapsConfig);
 adminRouter.delete('/maps-config', adminController.clearMapsConfig);
+
+adminRouter.get('/auth-config', adminController.getAuthConfig);
+adminRouter.put('/auth-config', adminController.setAuthConfig);
+adminRouter.delete('/auth-config', adminController.clearAuthConfig);
+
+adminRouter.get('/registration-config', adminController.getRegistrationConfig);
+adminRouter.put('/registration-config', adminController.setRegistrationConfig);

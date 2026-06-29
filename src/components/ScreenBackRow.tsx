@@ -37,6 +37,8 @@ export function ScreenBackRow({ onPress, fallbackHref, variant = 'gradient' }: S
 
 const styles = StyleSheet.create({
   backRow: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
     paddingHorizontal: 24,
     paddingTop: 8,
   },

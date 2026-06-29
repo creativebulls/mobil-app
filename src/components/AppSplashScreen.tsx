@@ -13,11 +13,14 @@ import { useAppList, useAppText } from '../config/ConfigProvider';
 import { SPLASH_TAGLINES } from '../constants/splash';
 import { BrandButton } from './BrandButton';
 import { AppImage } from './AppImage';
-import { colors } from '../theme/colors';
+import { colors, isValidHex } from '../theme/colors';
 
 const SPLASH_BACKGROUND = require('../../assets/splash.png');
 const CRAVE_LOGO = require('../../assets/app-icons/crave-full.png');
-const LOGO_WIDTH = 250;
+const LOGO_WIDTH = 140;
+const LOGO_HEIGHT = Math.round(LOGO_WIDTH * (167 / 590));
+const HORIZONTAL_INSET = 25;
+const DEFAULT_SPLASH_BUTTON_COLOR = '#FD4301';
 
 type AppSplashScreenProps = {
   onLayout?: (event: LayoutChangeEvent) => void;
@@ -29,6 +32,10 @@ export function AppSplashScreen({ onLayout, onGetStarted, onExploreGuest }: AppS
   const insets = useSafeAreaInsets();
   const taglines = useAppList('splash.taglines', SPLASH_TAGLINES);
   const getStartedLabel = useAppText('splash.get_started_button', 'Get started');
+  const getStartedButtonColorRaw = useAppText('splash.get_started_button_color', DEFAULT_SPLASH_BUTTON_COLOR);
+  const getStartedButtonColor = isValidHex(getStartedButtonColorRaw)
+    ? getStartedButtonColorRaw
+    : DEFAULT_SPLASH_BUTTON_COLOR;
   const exploreGuestLabel = useAppText('splash.explore_guest_link', 'Explore as guest');
 
   return (
@@ -59,7 +66,14 @@ export function AppSplashScreen({ onLayout, onGetStarted, onExploreGuest }: AppS
               ))}
             </View>
 
-            <BrandButton label={getStartedLabel} onPress={() => onGetStarted?.()} style={styles.ctaButton} />
+            <BrandButton
+              label={getStartedLabel}
+              onPress={() => onGetStarted?.()}
+              style={[
+                styles.ctaButton,
+                { backgroundColor: getStartedButtonColor, shadowColor: getStartedButtonColor },
+              ]}
+            />
 
             <Pressable
               onPress={() => onExploreGuest?.()}
@@ -88,14 +102,18 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 32,
+    paddingHorizontal: HORIZONTAL_INSET,
   },
   logoWrap: {
-    alignItems: 'center',
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+    overflow: 'visible',
   },
   logo: {
     width: LOGO_WIDTH,
-    aspectRatio: 590 / 167,
+    height: LOGO_HEIGHT,
+    maxWidth: '100%',
+    alignSelf: 'flex-start',
   },
   bottomBlock: {
     gap: 20,
@@ -103,28 +121,28 @@ const styles = StyleSheet.create({
   taglines: {
     gap: 4,
     marginBottom: 4,
+    alignItems: 'flex-start',
   },
   tagline: {
     fontSize: 26,
     fontWeight: '700',
     color: colors.white,
-    textAlign: 'center',
+    textAlign: 'left',
     lineHeight: 34,
     letterSpacing: 0.2,
   },
   ctaButton: {
     marginTop: 0,
     borderRadius: 14,
-    shadowColor: colors.brand,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 6,
   },
   guestLink: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
   },
   guestLinkPressed: {
     opacity: 0.75,
@@ -134,6 +152,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textDecorationLine: 'underline',
-    textAlign: 'center',
+    textAlign: 'left',
   },
 });

@@ -87,3 +87,39 @@ export const adminLiveAudioSchema = z.object({
 export const appConfigSchema = z.object({
   config: z.record(z.string(), z.string().max(5000)),
 });
+
+export const authConfigSchema = z
+  .object({
+    appleEnabled: z.boolean().optional(),
+    appleClientId: z.string().trim().max(256).optional(),
+    googleEnabled: z.boolean().optional(),
+    googleWebClientId: z.string().trim().max(256).optional(),
+    googleIosClientId: z.string().trim().max(256).optional(),
+    googleAndroidClientId: z.string().trim().max(256).optional(),
+    googleClientSecret: z.string().trim().max(512).optional(),
+  })
+  .refine(
+    (data) =>
+      data.appleEnabled !== undefined ||
+      data.appleClientId !== undefined ||
+      data.googleEnabled !== undefined ||
+      data.googleWebClientId !== undefined ||
+      data.googleIosClientId !== undefined ||
+      data.googleAndroidClientId !== undefined ||
+      data.googleClientSecret !== undefined,
+    { message: 'Provide at least one auth setting to update' },
+  );
+
+export const registrationConfigSchema = z
+  .object({
+    businessAccountsEnabled: z.boolean().optional(),
+    currentStep: z.number().int().min(1).max(10).optional(),
+    totalSteps: z.number().int().min(1).max(10).optional(),
+  })
+  .refine(
+    (data) =>
+      data.businessAccountsEnabled !== undefined ||
+      data.currentStep !== undefined ||
+      data.totalSteps !== undefined,
+    { message: 'Provide at least one registration setting to update' },
+  );

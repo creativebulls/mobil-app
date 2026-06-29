@@ -15,6 +15,11 @@ import {
 import { PasswordReset } from './password-reset.model';
 import { User, serializeUser, type UserDocument } from '../users/user.model';
 import { emitToUser, emitToPendingSession } from '../../socket/index';
+import {
+  verifyAppleIdentityToken,
+  verifyGoogleIdentityToken,
+} from './social-auth.service';
+import { getAppConfig } from '../admin/admin.service';
 
 const SALT_ROUNDS = 12;
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -55,7 +60,21 @@ export async function registerUser(input: {
   password: string;
   termsConsent: true;
   profilePhotoUrl?: string;
+  accountType?: 'individual' | 'business';
 }) {
+  const accountType = input.accountType ?? 'individual';
+
+  if (accountType === 'business') {
+    const { config } = await getAppConfig();
+    if (config['registration.business_accounts_enabled'] !== 'true') {
+      throw new AppError(
+        403,
+        'Business account registration is not available',
+        'BUSINESS_ACCOUNTS_DISABLED',
+      );
+    }
+  }
+
   const existing = await User.findOne({ email: input.email.toLowerCase() });
 
   if (existing) {
@@ -69,6 +88,7 @@ export async function registerUser(input: {
     email: input.email.toLowerCase(),
     passwordHash,
     profilePhotoUrl: input.profilePhotoUrl,
+    accountType,
     emailVerified: false,
     emailVerificationToken: hashValue(verificationToken),
     emailVerificationExpires: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
@@ -175,6 +195,14 @@ export async function loginUser(email: string, password: string) {
 
   if (!user) {
     throw new AppError(401, 'Invalid email or password', 'INVALID_CREDENTIALS');
+  }
+
+  if (!user.passwordHash) {
+    throw new AppError(
+      401,
+      'This account uses Apple or Google sign-in',
+      'SOCIAL_ACCOUNT',
+    );
   }
 
   const passwordMatches = await bcrypt.compare(password, user.passwordHash);
@@ -442,4 +470,128 @@ export async function updateProfilePhoto(userId: string, filename: string) {
   await user.save();
 
   return serializeUser(user);
+}
+
+type SocialProfileInput = {
+  givenName?: string | null;
+  surname?: string | null;
+  profilePhotoUrl?: string | null;
+};
+
+async function findOrCreateSocialUser(input: {
+  provider: 'apple' | 'google';
+  providerId: string;
+  email: string | null;
+  emailVerified: boolean;
+  profile?: SocialProfileInput;
+}) {
+  const providerField = input.provider === 'apple' ? 'appleId' : 'googleId';
+
+  let user = await User.findOne({ [providerField]: input.providerId });
+
+  if (user) {
+    return user;
+  }
+
+  if (input.email) {
+    user = await User.findOne({ email: input.email.toLowerCase() });
+
+    if (user) {
+      const existingProviderId = user[providerField as 'appleId' | 'googleId'];
+
+      if (existingProviderId && existingProviderId !== input.providerId) {
+        throw new AppError(
+          409,
+          'This email is linked to a different sign-in method',
+          'PROVIDER_MISMATCH',
+        );
+      }
+
+      user[providerField as 'appleId' | 'googleId'] = input.providerId;
+
+      if (input.emailVerified && !user.emailVerified) {
+        user.emailVerified = true;
+        if (user.registrationStatus === 'pending_email') {
+          user.registrationStatus = 'pending_profile';
+        }
+      }
+
+      if (!user.givenName && input.profile?.givenName) {
+        user.givenName = input.profile.givenName;
+      }
+      if (!user.surname && input.profile?.surname) {
+        user.surname = input.profile.surname;
+      }
+      if (!user.profilePhotoUrl && input.profile?.profilePhotoUrl) {
+        user.profilePhotoUrl = input.profile.profilePhotoUrl;
+      }
+
+      await user.save();
+      return user;
+    }
+  }
+
+  if (!input.email) {
+    throw new AppError(
+      400,
+      'Email is required for your first Apple sign-in. Try again and share your email.',
+      'SOCIAL_EMAIL_REQUIRED',
+    );
+  }
+
+  return User.create({
+    email: input.email.toLowerCase(),
+    appleId: input.provider === 'apple' ? input.providerId : undefined,
+    googleId: input.provider === 'google' ? input.providerId : undefined,
+    accountType: 'individual',
+    emailVerified: input.emailVerified,
+    registrationStatus: 'pending_profile',
+    registrationCompleted: false,
+    termsConsentAt: new Date(),
+    givenName: input.profile?.givenName ?? undefined,
+    surname: input.profile?.surname ?? undefined,
+    profilePhotoUrl: input.profile?.profilePhotoUrl ?? undefined,
+  });
+}
+
+async function completeSocialLogin(user: UserDocument) {
+  const { accessToken, refreshToken } = await issueTokens(user);
+  return buildAuthResponse(user, accessToken, refreshToken);
+}
+
+export async function loginWithApple(input: {
+  idToken: string;
+  givenName?: string | null;
+  surname?: string | null;
+}) {
+  const identity = await verifyAppleIdentityToken(input.idToken);
+  const user = await findOrCreateSocialUser({
+    provider: 'apple',
+    providerId: identity.providerId,
+    email: identity.email,
+    emailVerified: identity.emailVerified || Boolean(identity.email),
+    profile: {
+      givenName: input.givenName,
+      surname: input.surname,
+    },
+  });
+
+  return completeSocialLogin(user);
+}
+
+export async function loginWithGoogle(input: { idToken: string }) {
+  const identity = await verifyGoogleIdentityToken(input.idToken);
+  const user = await findOrCreateSocialUser({
+    provider: 'google',
+    providerId: identity.providerId,
+    email: identity.email,
+    emailVerified: identity.emailVerified || Boolean(identity.email),
+    profile: {
+      givenName: identity.givenName,
+      surname: identity.surname,
+      profilePhotoUrl: identity.picture,
+    },
+  });
+
+  return completeSocialLogin(user);
 }

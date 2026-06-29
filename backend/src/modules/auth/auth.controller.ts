@@ -25,6 +25,8 @@ import {
   updateNamesSchema,
   verifyEmailSchema,
   verifyResetCodeSchema,
+  appleLoginSchema,
+  googleLoginSchema,
 } from './auth.validation';
 import * as authService from './auth.service';
 
@@ -33,6 +35,10 @@ export const register = asyncHandler(async (req: AuthenticatedRequest, res: Resp
     email: req.body.email,
     password: req.body.password,
     termsConsent: req.body.termsConsent === true || req.body.termsConsent === 'true',
+    accountType:
+      req.body.accountType === 'business' || req.body.accountType === 'individual'
+        ? req.body.accountType
+        : 'individual',
   });
   const profilePhotoUrl = req.file
     ? authService.resolveUploadedPhotoUrl(req.file.filename)
@@ -100,6 +106,18 @@ export const resendVerification = asyncHandler(async (req: AuthenticatedRequest,
 export const login = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const body = loginSchema.parse(req.body);
   const result = await authService.loginUser(body.email, body.password);
+  sendSuccess(res, result);
+});
+
+export const loginWithApple = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = appleLoginSchema.parse(req.body);
+  const result = await authService.loginWithApple(body);
+  sendSuccess(res, result);
+});
+
+export const loginWithGoogle = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const body = googleLoginSchema.parse(req.body);
+  const result = await authService.loginWithGoogle(body);
   sendSuccess(res, result);
 });
 

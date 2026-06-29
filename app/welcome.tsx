@@ -1,163 +1,324 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   BackHandler,
-  Dimensions,
-  ImageBackground,
+  FlatList,
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
+  type ListRenderItem,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlossyButton } from '../src/components/GlossyButton';
-import { ScreenBackRow } from '../src/components/ScreenBackRow';
-import { useAppText } from '../src/config/ConfigProvider';
+
+import { useAppList, useAppText } from '../src/config/ConfigProvider';
+import {
+  WELCOME_SLIDE_1,
+  WELCOME_SLIDE_2,
+  WELCOME_SLIDE_3,
+  WELCOME_SLIDE_COUNT,
+} from '../src/constants/welcome';
+import { isGuestMode } from '../src/storage/guest';
 import { markWelcomeCompleted } from '../src/storage/welcome';
-import { colors } from '../src/theme/colors';
+import { colors, isValidHex } from '../src/theme/colors';
 
-const NEW_USER_BUTTON_COLOR = colors.brand;
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const AUTO_ADVANCE_MS = 3800;
+const WELCOME_SLIDE_IMAGES = [
+  require('../assets/welcome.jpg'),
+  require('../assets/welcome-2.jpg'),
+  require('../assets/welcome-3.png'),
+] as const;
+const HORIZONTAL_INSET = 25;
+const SLIDE_INDICES = Array.from({ length: WELCOME_SLIDE_COUNT }, (_, index) => index);
 
-const SLIDES = [
-  { image: require('../assets/welcome.jpg'), text: 'Discover what you crave.' },
-  { image: require('../assets/welcome-2.jpg'), text: 'See what your friends crave.' },
-  { image: require('../assets/welcome-3.png'), text: 'Find your next craving.' },
-];
+type WelcomeLayout = {
+  sectionGap: number;
+  topGap: number;
+  bottomGap: number;
+  headlineSize: number;
+  headlineLineHeight: number;
+  bodySize: number;
+  bodyLineHeight: number;
+  imageWidth: number;
+  imageHeight: number;
+  carouselMinHeight: number;
+};
+
+function getWelcomeLayout(screenWidth: number, screenHeight: number, insetsTop: number, insetsBottom: number): WelcomeLayout {
+  const isVeryCompact = screenHeight < 640;
+  const isCompact = screenHeight < 740;
+
+  const topChrome = insetsTop + 52;
+  const footerChrome = insetsBottom + 132;
+  const carouselMinHeight = Math.max(320, screenHeight - topChrome - footerChrome);
+
+  const imageWidth = screenWidth - HORIZONTAL_INSET * 2;
+  const imageHeightCap = isVeryCompact
+    ? Math.min(150, screenHeight * 0.22)
+    : isCompact
+      ? Math.min(190, screenHeight * 0.26)
+      : Math.min(280, screenHeight * 0.3);
+
+  return {
+    sectionGap: isVeryCompact ? 14 : isCompact ? 18 : 24,
+    topGap: isVeryCompact ? 10 : isCompact ? 14 : 20,
+    bottomGap: isVeryCompact ? 12 : isCompact ? 16 : 20,
+    headlineSize: isVeryCompact ? 26 : isCompact ? 28 : 32,
+    headlineLineHeight: isVeryCompact ? 32 : isCompact ? 36 : 40,
+    bodySize: isVeryCompact ? 15 : isCompact ? 16 : 18,
+    bodyLineHeight: isVeryCompact ? 22 : isCompact ? 24 : 26,
+    imageWidth,
+    imageHeight: Math.min(imageWidth * 0.72, imageHeightCap),
+    carouselMinHeight,
+  };
+}
+
+type WelcomeSlideProps = {
+  headlineLines: string[];
+  accentLine: string;
+  accentColor: string;
+  bodyText: string;
+  layout: WelcomeLayout;
+  imageSource: (typeof WELCOME_SLIDE_IMAGES)[number];
+};
+
+function WelcomeSlide({
+  headlineLines,
+  accentLine,
+  accentColor,
+  bodyText,
+  layout,
+  imageSource,
+}: WelcomeSlideProps) {
+  return (
+    <ScrollView
+      style={styles.slideScroll}
+      contentContainerStyle={[
+        styles.slideScrollContent,
+        {
+          minHeight: layout.carouselMinHeight,
+          paddingTop: layout.topGap,
+          paddingBottom: layout.bottomGap,
+          gap: layout.sectionGap,
+        },
+      ]}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      <View style={styles.headlines}>
+        {headlineLines.map((line) => (
+          <Text
+            key={line}
+            style={[
+              styles.headline,
+              {
+                fontSize: layout.headlineSize,
+                lineHeight: layout.headlineLineHeight,
+              },
+              line.trim() === accentLine.trim() && { color: accentColor },
+            ]}
+          >
+            {line}
+          </Text>
+        ))}
+      </View>
+
+      <View style={styles.flexSpacer} />
+
+      <View style={styles.imageWrap}>
+        <Image
+          source={imageSource}
+          style={{
+            width: layout.imageWidth,
+            height: layout.imageHeight,
+          }}
+          resizeMode="contain"
+          accessibilityLabel=""
+        />
+      </View>
+
+      <View style={styles.flexSpacer} />
+
+      <Text
+        style={[
+          styles.bodyText,
+          {
+            fontSize: layout.bodySize,
+            lineHeight: layout.bodyLineHeight,
+          },
+        ]}
+      >
+        {bodyText}
+      </Text>
+    </ScrollView>
+  );
+}
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const newUserLabel = useAppText('welcome.new_user_button');
-  const existingAccountLabel = useAppText('welcome.existing_account_button');
-
-  const listRef = useRef<Animated.FlatList<(typeof SLIDES)[number]>>(null);
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const listRef = useRef<FlatList<number>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const activeIndexRef = useRef(0);
-  activeIndexRef.current = activeIndex;
-  const captionOpacity = useRef(new Animated.Value(1)).current;
+
+  const layout = useMemo(
+    () => getWelcomeLayout(screenWidth, screenHeight, insets.top, insets.bottom),
+    [insets.bottom, insets.top, screenHeight, screenWidth],
+  );
+
+  const skipLabel = useAppText('welcome.skip_link', 'Skip');
+  const slide1Headlines = useAppList('welcome.headline_lines', WELCOME_SLIDE_1.headlineLines);
+  const slide1Accent = useAppText('welcome.headline_accent_line', WELCOME_SLIDE_1.accentLine);
+  const slide1Body = useAppText('welcome.body_text', WELCOME_SLIDE_1.bodyText);
+  const slide2Headlines = useAppList('welcome.slide2.headline_lines', WELCOME_SLIDE_2.headlineLines);
+  const slide2Accent = useAppText('welcome.slide2.headline_accent_line', WELCOME_SLIDE_2.accentLine);
+  const slide2Body = useAppText('welcome.slide2.body_text', WELCOME_SLIDE_2.bodyText);
+  const slide3Headlines = useAppList('welcome.slide3.headline_lines', WELCOME_SLIDE_3.headlineLines);
+  const slide3Accent = useAppText('welcome.slide3.headline_accent_line', WELCOME_SLIDE_3.accentLine);
+  const slide3Body = useAppText('welcome.slide3.body_text', WELCOME_SLIDE_3.bodyText);
+  const nextLabel = useAppText('welcome.next_button', 'Next');
+  const brandColorRaw = useAppText('theme.brand_color', colors.brand);
+  const brandColor = isValidHex(brandColorRaw) ? brandColorRaw : colors.brand;
+
+  const slideCopy = useMemo(
+    () => [
+      { headlineLines: slide1Headlines, accentLine: slide1Accent, bodyText: slide1Body },
+      { headlineLines: slide2Headlines, accentLine: slide2Accent, bodyText: slide2Body },
+      { headlineLines: slide3Headlines, accentLine: slide3Accent, bodyText: slide3Body },
+    ],
+    [
+      slide1Accent,
+      slide1Body,
+      slide1Headlines,
+      slide2Accent,
+      slide2Body,
+      slide2Headlines,
+      slide3Accent,
+      slide3Body,
+      slide3Headlines,
+    ],
+  );
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => subscription.remove();
   }, []);
 
-  // Auto-advance through the slides; loops back to the first.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const next = (activeIndexRef.current + 1) % SLIDES.length;
-      listRef.current?.scrollToOffset({ offset: next * SCREEN_WIDTH, animated: true });
-    }, AUTO_ADVANCE_MS);
+  async function finishWelcome() {
+    try {
+      await markWelcomeCompleted();
+    } catch {
+      // Navigation should still work even if persistence fails.
+    }
 
-    return () => clearInterval(interval);
-  }, []);
+    if (await isGuestMode()) {
+      router.replace('/home');
+      return;
+    }
 
-  // Cross-fade the caption whenever the active slide changes.
-  useEffect(() => {
-    captionOpacity.setValue(0);
-    Animated.timing(captionOpacity, {
-      toValue: 1,
-      duration: 350,
-      useNativeDriver: true,
-    }).start();
-  }, [activeIndex, captionOpacity]);
+    router.replace('/sign-in');
+  }
+
+  function handleSkip() {
+    void finishWelcome();
+  }
+
+  function handleNext() {
+    if (activeIndex < WELCOME_SLIDE_COUNT - 1) {
+      const nextIndex = activeIndex + 1;
+      listRef.current?.scrollToOffset({ offset: nextIndex * screenWidth, animated: true });
+      setActiveIndex(nextIndex);
+      return;
+    }
+
+    void finishWelcome();
+  }
 
   function handleScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    if (index !== activeIndexRef.current) {
+    const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+    if (index >= 0 && index < WELCOME_SLIDE_COUNT) {
       setActiveIndex(index);
     }
   }
 
-  async function handleNewUser() {
-    router.replace('/sign-up');
+  const renderSlide: ListRenderItem<number> = ({ item }) => {
+    const copy = slideCopy[item] ?? slideCopy[0];
+    return (
+      <View style={[styles.slidePage, { width: screenWidth }]}>
+        <WelcomeSlide
+          headlineLines={copy.headlineLines}
+          accentLine={copy.accentLine}
+          accentColor={brandColor}
+          bodyText={copy.bodyText}
+          layout={layout}
+          imageSource={WELCOME_SLIDE_IMAGES[item] ?? WELCOME_SLIDE_IMAGES[0]}
+        />
+      </View>
+    );
+  };
 
-    try {
-      await markWelcomeCompleted();
-    } catch {
-      // Navigation should still work even if persistence fails.
-    }
-  }
-
-  async function handleExistingAccount() {
-    router.replace('/sign-in');
-
-    try {
-      await markWelcomeCompleted();
-    } catch {
-      // Navigation should still work even if persistence fails.
-    }
-  }
+  const footerBottomPadding = insets.bottom + (screenHeight < 640 ? 16 : 24);
 
   return (
     <View style={styles.root}>
-      <Animated.FlatList
-        ref={listRef}
-        style={StyleSheet.absoluteFill}
-        data={SLIDES}
-        keyExtractor={(item) => item.text}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleScrollEnd}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
-          index,
-        })}
-        renderItem={({ item }) => (
-          <ImageBackground source={item.image} style={styles.slide} resizeMode="cover">
-            <LinearGradient
-              colors={[
-                'rgba(0, 0, 0, 0.35)',
-                'rgba(0, 0, 0, 0.3)',
-                'rgba(0, 0, 0, 0.75)',
-                'rgba(0, 0, 0, 0.96)',
-              ]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.slideScrim}
-            />
-          </ImageBackground>
-        )}
-      />
-
-      <View style={[styles.topBar, { paddingTop: insets.top }]} pointerEvents="box-none">
-        <ScreenBackRow />
+      <View style={[styles.topBar, { paddingTop: insets.top + 8, paddingBottom: layout.topGap }]}>
+        <View style={styles.topBarSpacer} />
+        <Pressable
+          onPress={handleSkip}
+          style={({ pressed }) => [styles.skipButton, pressed && styles.skipPressed]}
+          accessibilityRole="link"
+        >
+          <Text style={styles.skipText}>{skipLabel}</Text>
+        </Pressable>
       </View>
 
-      <View
-        style={[styles.bottomSection, { paddingBottom: insets.bottom + 32 }]}
-        pointerEvents="box-none"
-      >
-        <Animated.Text style={[styles.caption, { opacity: captionOpacity }]}>
-          {SLIDES[activeIndex]?.text}
-        </Animated.Text>
+      <View style={styles.carousel}>
+        <FlatList
+          ref={listRef}
+          style={styles.carouselList}
+          data={SLIDE_INDICES}
+          keyExtractor={(item) => String(item)}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScrollEnd}
+          getItemLayout={(_, index) => ({
+            length: screenWidth,
+            offset: screenWidth * index,
+            index,
+          })}
+          renderItem={renderSlide}
+        />
+      </View>
 
+      <View style={[styles.footer, { paddingBottom: footerBottomPadding, gap: layout.sectionGap }]}>
         <View style={styles.dots}>
-          {SLIDES.map((slide, index) => (
+          {SLIDE_INDICES.map((index) => (
             <View
-              key={slide.text}
-              style={[styles.dot, index === activeIndex && styles.dotActive]}
+              key={index}
+              style={[
+                styles.dot,
+                index === activeIndex && [styles.dotActive, { backgroundColor: brandColor }],
+              ]}
             />
           ))}
         </View>
 
-        <View style={styles.actions}>
-          <Pressable
-            style={({ pressed }) => [styles.newButton, pressed && styles.buttonPressed]}
-            onPress={handleNewUser}
-          >
-            <Text style={styles.newButtonText}>{newUserLabel}</Text>
-          </Pressable>
-
-          <GlossyButton label={existingAccountLabel} onPress={handleExistingAccount} />
-        </View>
+        <Pressable
+          onPress={handleNext}
+          style={({ pressed }) => [
+            styles.nextButton,
+            { backgroundColor: brandColor, shadowColor: brandColor },
+            screenHeight < 640 && styles.nextButtonCompact,
+            pressed && styles.nextPressed,
+          ]}
+        >
+          <Text style={styles.nextButtonText}>{nextLabel}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -166,43 +327,76 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000000',
-  },
-  slide: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-  },
-  slideScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    backgroundColor: colors.white,
   },
   topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: HORIZONTAL_INSET,
     zIndex: 2,
   },
-  bottomSection: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2,
-    paddingHorizontal: 32,
-    gap: 24,
+  topBarSpacer: {
+    flex: 1,
   },
-  caption: {
-    fontSize: 26,
+  skipButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  skipPressed: {
+    opacity: 0.7,
+  },
+  skipText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  carousel: {
+    flex: 1,
+    minHeight: 0,
+  },
+  carouselList: {
+    flex: 1,
+  },
+  slidePage: {
+    flex: 1,
+  },
+  slideScroll: {
+    flex: 1,
+  },
+  slideScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: HORIZONTAL_INSET,
+    justifyContent: 'flex-start',
+  },
+  flexSpacer: {
+    flexGrow: 1,
+    minHeight: 8,
+    maxHeight: 40,
+  },
+  headlines: {
+    gap: 2,
+    alignItems: 'flex-start',
+  },
+  headline: {
     fontWeight: '700',
-    color: colors.textOnGradient,
+    color: colors.text,
+    textAlign: 'left',
+    letterSpacing: -0.3,
+  },
+  imageWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bodyText: {
+    fontWeight: '600',
+    color: colors.text,
     textAlign: 'center',
-    lineHeight: 34,
-    letterSpacing: 0.2,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  footer: {
+    paddingHorizontal: HORIZONTAL_INSET,
+    backgroundColor: colors.white,
   },
   dots: {
     flexDirection: 'row',
@@ -213,37 +407,35 @@ const styles = StyleSheet.create({
   dot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.dotInactive,
+    borderRadius: 999,
+    backgroundColor: colors.labelGray,
   },
   dotActive: {
-    width: 28,
-    backgroundColor: colors.dotActive,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
   },
-  actions: {
-    gap: 16,
-  },
-  newButton: {
-    backgroundColor: NEW_USER_BUTTON_COLOR,
+  nextButton: {
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 20,
     alignItems: 'center',
-    shadowColor: NEW_USER_BUTTON_COLOR,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 6,
   },
-  newButtonText: {
+  nextButtonCompact: {
+    paddingVertical: 14,
+  },
+  nextPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+  },
+  nextButtonText: {
     color: colors.white,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  buttonPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
   },
 });

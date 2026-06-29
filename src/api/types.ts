@@ -31,6 +31,7 @@ export type UserProfile = {
   gender: string | null;
   registrationCompleted: boolean;
   registrationStatus: 'pending_email' | 'pending_profile' | 'completed';
+  accountType: 'individual' | 'business';
   parentalConsent: boolean;
   statusText: string | null;
   points: number;

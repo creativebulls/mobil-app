@@ -1,49 +1,100 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { ScreenSafeArea, STACK_SCREEN_EDGES } from '../src/components/ScreenSafeArea';
-import { AppImage } from '../src/components/AppImage';
 import { loginAccount } from '../src/api/authApi';
 import { getErrorMessage } from '../src/api/types';
-import { AnimatedFormInput } from '../src/components/AnimatedFormInput';
+import { LoginFormField } from '../src/components/LoginFormField';
 import { ScreenBackRow } from '../src/components/ScreenBackRow';
-import { registerForPushNotifications } from '../src/notifications/pushNotifications';
+import { SocialAuthButton } from '../src/components/SocialAuthButton';
+import { useAppText } from '../src/config/ConfigProvider';
+import { routeAfterAuth } from '../src/auth/completeAuthSession';
+import {
+  canPerformSocialAuth,
+  isAppleAuthButtonVisible,
+  isGoogleAuthButtonVisible,
+  isSocialAuthCancellation,
+  signInWithAppleAccount,
+  signInWithGoogleAccount,
+} from '../src/auth/socialAuth';
 import {
   getAccessToken,
   getRefreshToken,
   getStoredUser,
   saveSession,
 } from '../src/storage/authSession';
-import { colors } from '../src/theme/colors';
+import { colors, isValidHex } from '../src/theme/colors';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^\+?[0-9\s().-]{7,}$/;
+const MAX_FAILED_ATTEMPTS = 3;
+const LOCKOUT_MS = 30_000;
 
-function isSignInFormValid(email: string, password: string) {
-  return EMAIL_PATTERN.test(email.trim()) && password.length >= 6;
+function isValidLoginId(value: string): boolean {
+  const trimmed = value.trim();
+  if (EMAIL_PATTERN.test(trimmed)) {
+    return true;
+  }
+  const digits = trimmed.replace(/\D/g, '');
+  return PHONE_PATTERN.test(trimmed) && digits.length >= 7;
+}
+
+function isSignInFormValid(loginId: string, password: string): boolean {
+  return isValidLoginId(loginId) && password.length >= 6;
 }
 
 export default function SignInScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
-  const isFormValid = useMemo(() => isSignInFormValid(email, password), [email, password]);
+  const [lockUntil, setLockUntil] = useState<number | null>(null);
+  const failedAttemptsRef = useRef(0);
 
-  // A logged-in user should never see the login screen. If a completed session
-  // is still saved, bounce straight to home.
+  const title = useAppText('sign_in.title', 'Welcome back 👋');
+  const subtitle = useAppText('sign_in.subtitle', 'Log in to continue your journey.');
+  const appleLabel = useAppText('sign_in.apple_button', 'Continue with Apple');
+  const googleLabel = useAppText('sign_in.google_button', 'Continue with Google');
+  const dividerLabel = useAppText('sign_in.divider', 'or');
+  const loginIdLabel = useAppText('sign_in.login_id_label', 'Email or phone number');
+  const loginIdPlaceholder = useAppText(
+    'sign_in.login_id_placeholder',
+    'Enter your email or phone number',
+  );
+  const passwordLabel = useAppText('sign_in.password_label', 'Password');
+  const passwordPlaceholder = useAppText('sign_in.password_placeholder', 'Enter your password');
+  const forgotLabel = useAppText('sign_in.forgot_password', 'Forgot password?');
+  const submitLabel = useAppText('sign_in.submit_button', 'Log in');
+  const footerText = useAppText('sign_in.footer_text', "Don't have an account?");
+  const registerLabel = useAppText('sign_in.register_link', 'Register');
+  const accentColorRaw = useAppText('splash.get_started_button_color', '#FD4301');
+  const accentColor = isValidHex(accentColorRaw) ? accentColorRaw : '#FD4301';
+  const socialUnavailable = useAppText(
+    'sign_in.social_unavailable',
+    'Social sign-in is coming soon. Use email or phone for now.',
+  );
+  const showAppleAuth = isAppleAuthButtonVisible();
+  const showGoogleAuth = isGoogleAuthButtonVisible();
+  const showSocialAuth = showAppleAuth || showGoogleAuth;
+
+  const isLocked = lockUntil !== null && Date.now() < lockUntil;
+  const isFormValid = useMemo(() => isSignInFormValid(loginId, password), [loginId, password]);
+
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -82,8 +133,32 @@ export default function SignInScreen() {
     return () => subscription.remove();
   }, [router]);
 
+  useEffect(() => {
+    if (!lockUntil) {
+      return;
+    }
+    const remaining = lockUntil - Date.now();
+    if (remaining <= 0) {
+      setLockUntil(null);
+      failedAttemptsRef.current = 0;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLockUntil(null);
+      failedAttemptsRef.current = 0;
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [lockUntil]);
+
+  async function completeLogin(email: string, passwordValue: string) {
+    const result = await loginAccount(email.trim(), passwordValue);
+    await saveSession(result.tokens, result.user);
+    failedAttemptsRef.current = 0;
+    routeAfterAuth(router, result.user);
+  }
+
   async function handleSignIn() {
-    if (!isFormValid || isSubmitting) {
+    if (!isFormValid || isSubmitting || isLocked) {
       return;
     }
 
@@ -91,51 +166,53 @@ export default function SignInScreen() {
     setIsSubmitting(true);
 
     try {
-      const result = await loginAccount(email.trim(), password);
-      await saveSession(result.tokens, result.user);
-
-      if (result.user.suspended) {
-        router.replace('/account-suspended');
-        return;
-      }
-
-      void registerForPushNotifications();
-
-      if (result.user.registrationCompleted) {
-        router.replace('/home');
-        return;
-      }
-
-      if (result.user.givenName && result.user.surname) {
-        router.replace('/registration-details');
-        return;
-      }
-
-      router.replace('/your-name');
+      await completeLogin(loginId, password);
     } catch (signInError) {
-      setError(getErrorMessage(signInError, 'Unable to sign in'));
+      failedAttemptsRef.current += 1;
+      if (failedAttemptsRef.current >= MAX_FAILED_ATTEMPTS) {
+        setLockUntil(Date.now() + LOCKOUT_MS);
+        setError('Too many attempts. Please wait 30 seconds and try again.');
+      } else {
+        setError(getErrorMessage(signInError, 'Unable to sign in'));
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  function handleSignUpPress() {
-    router.push('/sign-up');
-  }
+  async function handleSocialAuth(provider: 'apple' | 'google') {
+    if (isSubmitting || isLocked) {
+      return;
+    }
 
-  function handleResetPasswordPress() {
-    router.push('/reset-password');
-  }
+    if (!canPerformSocialAuth(provider)) {
+      setError(socialUnavailable);
+      return;
+    }
 
-  function handleFacebookLogin() {
-    router.replace('/home');
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const result =
+        provider === 'apple' ? await signInWithAppleAccount() : await signInWithGoogleAccount();
+      await saveSession(result.tokens, result.user);
+      failedAttemptsRef.current = 0;
+      routeAfterAuth(router, result.user);
+    } catch (signInError) {
+      if (!isSocialAuthCancellation(signInError)) {
+        setError(getErrorMessage(signInError, 'Unable to sign in'));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (checkingSession) {
     return (
       <View style={[styles.root, styles.sessionLoader]}>
         <StatusBar style="dark" />
-        <ActivityIndicator color={colors.brand} />
+        <ActivityIndicator color={accentColor} />
       </View>
     );
   }
@@ -144,83 +221,119 @@ export default function SignInScreen() {
     <View style={styles.root}>
       <StatusBar style="dark" />
       <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
-        <View style={styles.topSection}>
-          <ScreenBackRow fallbackHref="/welcome" variant="light" />
-          <View style={styles.logoWrap} pointerEvents="none">
-            <AppImage
-              source={require('../assets/black-logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityLabel="Crave logo"
-            />
-          </View>
-        </View>
-
+        <ScreenBackRow fallbackHref="/welcome" variant="light" />
         <KeyboardAvoidingView
-          style={styles.content}
+          style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.form}>
-            <AnimatedFormInput
-              variant="light"
-              label="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={email}
-              onChangeText={setEmail}
-            />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            </View>
 
-            <AnimatedFormInput
-              variant="light"
-              label="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
+            <View style={styles.form}>
+              {showSocialAuth ? (
+                <>
+                  {showAppleAuth ? (
+                    <SocialAuthButton
+                      provider="apple"
+                      label={appleLabel}
+                      onPress={() => void handleSocialAuth('apple')}
+                      disabled={isSubmitting || isLocked}
+                    />
+                  ) : null}
+                  {showGoogleAuth ? (
+                    <SocialAuthButton
+                      provider="google"
+                      label={googleLabel}
+                      onPress={() => void handleSocialAuth('google')}
+                      disabled={isSubmitting || isLocked}
+                    />
+                  ) : null}
 
-            <Pressable onPress={handleResetPasswordPress} style={styles.forgetPasswordRow}>
-              <Text style={styles.forgetPasswordText}>Forget Password</Text>
-            </Pressable>
+                  <View style={styles.dividerRow}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>{dividerLabel}</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+                </>
+              ) : null}
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              <LoginFormField
+                label={loginIdLabel}
+                value={loginId}
+                onChangeText={setLoginId}
+                placeholder={loginIdPlaceholder}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="username"
+                autoComplete="username"
+                returnKeyType="next"
+                trailingIcon="mail-outline"
+                trailingAccessibilityLabel="Email or phone"
+                editable={!isSubmitting && !isLocked}
+              />
 
-            <Pressable
-              onPress={handleSignIn}
-              disabled={!isFormValid || isSubmitting}
-              style={({ pressed }) => [
-                styles.signInButton,
-                isFormValid ? styles.signInButtonActive : styles.signInButtonDisabled,
-                pressed && isFormValid && styles.signInButtonPressed,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.signInButtonText,
-                  !isFormValid && styles.signInButtonTextDisabled,
+              <LoginFormField
+                label={passwordLabel}
+                value={password}
+                onChangeText={setPassword}
+                placeholder={passwordPlaceholder}
+                secureTextEntry={!passwordVisible}
+                textContentType="password"
+                autoComplete="password"
+                returnKeyType="done"
+                onSubmitEditing={() => void handleSignIn()}
+                trailingIcon={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                onTrailingIconPress={() => setPasswordVisible((visible) => !visible)}
+                trailingAccessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                editable={!isSubmitting && !isLocked}
+              />
+
+              <Pressable onPress={() => router.push('/reset-password')} style={styles.forgotRow}>
+                <Text style={[styles.forgotText, { color: accentColor }]}>{forgotLabel}</Text>
+              </Pressable>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                onPress={() => void handleSignIn()}
+                disabled={!isFormValid || isSubmitting || isLocked}
+                style={({ pressed }) => [
+                  styles.submitButton,
+                  { backgroundColor: accentColor, shadowColor: accentColor },
+                  (!isFormValid || isLocked) && styles.submitButtonDisabled,
+                  pressed && isFormValid && !isSubmitting && !isLocked && styles.submitPressed,
                 ]}
               >
-                Sign In
-              </Text>
-            </Pressable>
-
-            {isSubmitting ? <ActivityIndicator color={colors.brand} /> : null}
-
-            <Pressable
-              style={({ pressed }) => [styles.facebookButton, pressed && styles.facebookButtonPressed]}
-              onPress={handleFacebookLogin}
-            >
-              <Ionicons name="logo-facebook" size={22} color={colors.white} />
-              <Text style={styles.facebookButtonText}>Login with Facebook</Text>
-            </Pressable>
-
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-              <Pressable onPress={handleSignUpPress}>
-                <Text style={styles.footerLink}>Sign Up</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.submitButtonText,
+                      (!isFormValid || isLocked) && styles.submitButtonTextDisabled,
+                    ]}
+                  >
+                    {submitLabel}
+                  </Text>
+                )}
               </Pressable>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>{footerText} </Text>
+                <Pressable onPress={() => router.push('/sign-up')}>
+                  <Text style={[styles.footerLink, { color: accentColor }]}>{registerLabel}</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </ScreenSafeArea>
     </View>
@@ -232,6 +345,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
   },
+  flex: {
+    flex: 1,
+  },
   sessionLoader: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -240,103 +356,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
   },
-  topSection: {
-    position: 'relative',
-    minHeight: 120,
-    justifyContent: 'center',
-  },
-  logoWrap: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
-  },
-  logo: {
-    width: 112,
-    height: 112,
-  },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
-    justifyContent: 'center',
+    paddingBottom: 32,
+  },
+  header: {
+    marginTop: 8,
+    marginBottom: 28,
+    gap: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#6B7280',
   },
   form: {
-    gap: 20,
+    gap: 16,
   },
-  signInButton: {
-    marginTop: 4,
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  signInButtonActive: {
-    backgroundColor: colors.buttonPurple,
-  },
-  signInButtonDisabled: {
-    backgroundColor: colors.buttonDisabled,
-  },
-  signInButtonPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  signInButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  signInButtonTextDisabled: {
-    color: colors.labelGray,
-  },
-  facebookButton: {
+  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: colors.facebook,
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    gap: 12,
+    marginVertical: 4,
   },
-  facebookButtonPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceMutedBorder,
   },
-  facebookButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+  dividerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.labelGray,
   },
-  forgetPasswordRow: {
+  forgotRow: {
     alignSelf: 'flex-end',
-    marginTop: 4,
+    marginTop: -4,
   },
-  forgetPasswordText: {
+  forgotText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.labelGray,
   },
   errorText: {
     fontSize: 14,
-    color: '#DC2626',
+    color: colors.danger,
     fontWeight: '600',
+    lineHeight: 20,
+  },
+  submitButton: {
+    marginTop: 4,
+    borderRadius: 14,
+    minHeight: 52,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  submitButtonDisabled: {
+    backgroundColor: colors.buttonDisabled,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  submitPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+  },
+  submitButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  submitButtonTextDisabled: {
+    color: colors.labelGray,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    flexWrap: 'wrap',
+    marginTop: 8,
   },
   footerText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSecondary,
   },
   footerLink: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    color: colors.primary,
   },
 });

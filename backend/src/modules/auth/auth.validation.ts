@@ -7,12 +7,22 @@ export const passwordSchema = z
   .min(6, 'Password must be at least 6 characters')
   .max(128, 'Password is too long');
 
+export const registerPasswordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(128, 'Password is too long')
+  .regex(/[0-9]/, 'Password must include a number')
+  .regex(/[A-Z]/, 'Password must include an uppercase letter');
+
+export const accountTypeSchema = z.enum(['individual', 'business']);
+
 export const registerSchema = z.object({
   email: emailSchema,
-  password: passwordSchema,
+  password: registerPasswordSchema,
   termsConsent: z.literal(true, {
     errorMap: () => ({ message: 'Terms consent is required' }),
   }),
+  accountType: accountTypeSchema.default('individual'),
 });
 
 export const loginSchema = z.object({
@@ -70,4 +80,14 @@ export const refreshTokenSchema = z.object({
 
 export const resumeVerifiedSessionSchema = z.object({
   pendingSessionToken: z.string().min(1, 'Pending session token is required'),
+});
+
+export const appleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Apple identity token is required'),
+  givenName: z.string().trim().optional().nullable(),
+  surname: z.string().trim().optional().nullable(),
+});
+
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Google identity token is required'),
 });

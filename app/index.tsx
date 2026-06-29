@@ -8,7 +8,6 @@ import { ApiError } from '../src/api/types';
 import { AppSplashScreen } from '../src/components/AppSplashScreen';
 import { getAccessToken, getRefreshToken, getStoredUser, updateStoredUser } from '../src/storage/authSession';
 import { enableGuestMode } from '../src/storage/guest';
-import { markWelcomeCompleted } from '../src/storage/welcome';
 import { colors } from '../src/theme/colors';
 
 type SessionRoute = '/home' | '/sign-in' | '/account-suspended';
@@ -99,10 +98,9 @@ export default function Index() {
   }, [navigateOnce]);
 
   const handleExploreGuest = useCallback(() => {
-    void (async () => {
-      await Promise.all([enableGuestMode(), markWelcomeCompleted()]);
-      navigateOnce('/home');
-    })();
+    void enableGuestMode().then(() => {
+      navigateOnce('/welcome');
+    });
   }, [navigateOnce]);
 
   if (bootstrapState === 'loading' || bootstrapState === 'navigating') {
