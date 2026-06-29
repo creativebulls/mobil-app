@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -43,28 +43,19 @@ import { setSignUpDraft } from '../src/storage/signUpDraft';
 import { colors, isValidHex } from '../src/theme/colors';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TOTAL_STEPS = 4;
 
-function isSignUpFormValid(
-  email: string,
-  password: string,
-  confirmPassword: string,
-  consent: boolean,
-) {
-  return (
-    EMAIL_PATTERN.test(email.trim()) &&
-    meetsPasswordRequirements(password) &&
-    password === confirmPassword &&
-    consent
-  );
+function isEmailStepValid(email: string) {
+  return EMAIL_PATTERN.test(email.trim());
 }
 
-function parseProgressNumber(value: string, fallback: number): number {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function isPasswordStepValid(password: string, confirmPassword: string) {
+  return meetsPasswordRequirements(password) && password === confirmPassword;
 }
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const [currentStep, setCurrentStep] = useState(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -75,8 +66,6 @@ export default function SignUpScreen() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const title = useAppText('sign_up.title', 'Create your account');
-  const subtitle = useAppText('sign_up.subtitle', "Let's get you set up.");
   const progressLabelTemplate = useAppText('sign_up.progress_label', 'Step {step} of {total}');
   const appleLabel = useAppText('sign_up.apple_button', 'Continue with Apple');
   const googleLabel = useAppText('sign_up.google_button', 'Continue with Google');
@@ -96,24 +85,68 @@ export default function SignUpScreen() {
     'Includes an uppercase letter',
   );
   const accountTypeLabel = useAppText('sign_up.account_type_label', 'I am');
-  const individualLabel = useAppText('sign_up.individual_label', 'Individual');
-  const businessLabel = useAppText('sign_up.business_label', 'Business');
+  const individualLabel = useAppText('registration.individual_label', 'Individual');
+  const businessLabel = useAppText('registration.business_label', 'Business');
   const consentPrefix = useAppText('sign_up.consent_prefix', "I agree to Crave's");
   const consentTerms = useAppText('sign_up.consent_terms', 'Terms of Service');
   const consentConjunction = useAppText('sign_up.consent_conjunction', 'and');
   const consentPrivacy = useAppText('sign_up.consent_privacy', 'Privacy Policy');
   const submitLabel = useAppText('sign_up.submit_button', 'Create account');
+  const continueLabel = useAppText('sign_up.continue_button', 'Continue');
   const footerText = useAppText('sign_up.footer_text', 'Already have an account?');
   const loginLabel = useAppText('sign_up.login_link', 'Log in');
   const termsUrl = useAppText('terms_url', 'https://whereabout.app/terms');
   const privacyUrl = useAppText('privacy_url', 'https://whereabout.app/privacy');
   const businessAccountsEnabled =
     useAppText('registration.business_accounts_enabled', 'true') === 'true';
-  const progressStep = parseProgressNumber(useAppText('registration.progress_step', '2'), 2);
-  const progressTotal = parseProgressNumber(useAppText('registration.progress_total', '4'), 4);
-  const progressLabel = progressLabelTemplate
-    .replace('{step}', String(progressStep))
-    .replace('{total}', String(progressTotal));
+  const individualAccountInfo = useAppText(
+    'registration.individual_info',
+    'For personal use. Discover places, connect with friends, and share your experiences on Crave.',
+  );
+  const businessAccountInfo = useAppText(
+    'registration.business_info',
+    'For venues, brands, and teams. Promote your location and reach local customers on Crave.',
+  );
+  const businessUnavailableMessage = useAppText(
+    'registration.business_unavailable_message',
+    'Business accounts are not available right now.',
+  );
+
+  const stepTitle = useAppText(
+    currentStep === 1
+      ? 'sign_up.step1.title'
+      : currentStep === 2
+        ? 'sign_up.step2.title'
+        : currentStep === 3
+          ? 'sign_up.step3.title'
+          : 'sign_up.step4.title',
+    currentStep === 1
+      ? 'Create your account'
+      : currentStep === 2
+        ? 'Create a password'
+        : currentStep === 3
+          ? 'Choose account type'
+          : 'Review and accept',
+  );
+  const stepSubtitle = useAppText(
+    currentStep === 1
+      ? 'sign_up.step1.subtitle'
+      : currentStep === 2
+        ? 'sign_up.step2.subtitle'
+        : currentStep === 3
+          ? 'sign_up.step3.subtitle'
+          : 'sign_up.step4.subtitle',
+    currentStep === 1
+      ? 'Enter your email to get started.'
+      : currentStep === 2
+        ? 'Choose a secure password for your account.'
+        : currentStep === 3
+          ? businessAccountsEnabled
+            ? 'Are you signing up as an individual or a business?'
+            : 'You are creating an individual account.'
+          : 'Accept our terms to finish creating your account.',
+  );
+
   const accentColorRaw = useAppText('splash.get_started_button_color', '#FD4301');
   const accentColor = isValidHex(accentColorRaw) ? accentColorRaw : '#FD4301';
   const socialUnavailable = useAppText(
@@ -124,14 +157,28 @@ export default function SignUpScreen() {
   const showGoogleAuth = isGoogleAuthButtonVisible();
   const showSocialAuth = showAppleAuth || showGoogleAuth;
 
+  const progressLabel = progressLabelTemplate
+    .replace('{step}', String(currentStep))
+    .replace('{total}', String(TOTAL_STEPS));
+
   const passwordsMatch = password.length > 0 && password === confirmPassword;
   const confirmPasswordError =
     confirmPassword.length > 0 && !passwordsMatch ? 'Passwords do not match' : '';
 
-  const isFormValid = useMemo(
-    () => isSignUpFormValid(email, password, confirmPassword, consent),
-    [email, password, confirmPassword, consent],
-  );
+  const isCurrentStepValid = useMemo(() => {
+    switch (currentStep) {
+      case 1:
+        return isEmailStepValid(email);
+      case 2:
+        return isPasswordStepValid(password, confirmPassword);
+      case 3:
+        return true;
+      case 4:
+        return consent;
+      default:
+        return false;
+    }
+  }, [consent, confirmPassword, currentStep, email, password]);
 
   useEffect(() => {
     if (!businessAccountsEnabled && accountType === 'business') {
@@ -139,20 +186,42 @@ export default function SignUpScreen() {
     }
   }, [accountType, businessAccountsEnabled]);
 
+  const handleBack = useCallback(() => {
+    setError('');
+    if (currentStep > 1) {
+      setCurrentStep((step) => step - 1);
+      return;
+    }
+
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/sign-in');
+  }, [currentStep, router]);
+
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (router.canGoBack()) {
-        router.back();
-        return true;
-      }
-      router.replace('/sign-in');
+      handleBack();
       return true;
     });
     return () => subscription.remove();
-  }, [router]);
+  }, [handleBack]);
+
+  function handleContinue() {
+    if (!isCurrentStepValid || isSubmitting) {
+      return;
+    }
+
+    setError('');
+    if (currentStep < TOTAL_STEPS) {
+      setCurrentStep((step) => step + 1);
+    }
+  }
 
   async function handleSignUp() {
-    if (!isFormValid || isSubmitting) {
+    if (!isCurrentStepValid || isSubmitting || currentStep !== TOTAL_STEPS) {
       return;
     }
 
@@ -213,11 +282,14 @@ export default function SignUpScreen() {
     }
   }
 
+  const primaryLabel = currentStep === TOTAL_STEPS ? submitLabel : continueLabel;
+  const onPrimaryPress = currentStep === TOTAL_STEPS ? handleSignUp : handleContinue;
+
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
       <ScreenSafeArea edges={STACK_SCREEN_EDGES} style={styles.container}>
-        <ScreenBackRow fallbackHref="/sign-in" variant="light" />
+        <ScreenBackRow onPress={handleBack} variant="light" />
 
         <KeyboardAvoidingView
           style={styles.flex}
@@ -229,113 +301,173 @@ export default function SignUpScreen() {
             showsVerticalScrollIndicator={false}
           >
             <RegistrationProgress
-              currentStep={progressStep}
-              totalSteps={progressTotal}
+              currentStep={currentStep}
+              totalSteps={TOTAL_STEPS}
               stepLabel={progressLabel}
               accentColor={accentColor}
             />
 
             <View style={styles.header}>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.subtitle}>{subtitle}</Text>
+              <Text style={styles.title}>{stepTitle}</Text>
+              <Text style={styles.subtitle}>{stepSubtitle}</Text>
             </View>
 
             <View style={styles.form}>
-              <LoginFormField
-                label={emailLabel}
-                value={email}
-                onChangeText={setEmail}
-                placeholder={emailPlaceholder}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                textContentType="emailAddress"
-                autoComplete="email"
-                returnKeyType="next"
-                trailingIcon="mail-outline"
-                trailingAccessibilityLabel="Email"
-                editable={!isSubmitting}
-              />
+              {currentStep === 1 ? (
+                <>
+                  <LoginFormField
+                    label={emailLabel}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder={emailPlaceholder}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="emailAddress"
+                    autoComplete="email"
+                    returnKeyType="next"
+                    onSubmitEditing={handleContinue}
+                    trailingIcon="mail-outline"
+                    trailingAccessibilityLabel="Email"
+                    editable={!isSubmitting}
+                  />
 
-              <LoginFormField
-                label={passwordLabel}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={passwordPlaceholder}
-                secureTextEntry={!passwordVisible}
-                textContentType="newPassword"
-                autoComplete="new-password"
-                returnKeyType="next"
-                trailingIcon={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
-                onTrailingIconPress={() => setPasswordVisible((visible) => !visible)}
-                trailingAccessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
-                editable={!isSubmitting}
-              />
+                  {showSocialAuth ? (
+                    <View style={styles.socialSection}>
+                      {showGoogleAuth ? (
+                        <SocialAuthButton
+                          provider="google"
+                          label={googleLabel}
+                          onPress={() => void handleSocialAuth('google')}
+                          disabled={isSubmitting}
+                        />
+                      ) : null}
+                      {showAppleAuth ? (
+                        <SocialAuthButton
+                          provider="apple"
+                          label={appleLabel}
+                          onPress={() => void handleSocialAuth('apple')}
+                          disabled={isSubmitting}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
 
-              <PasswordRequirements
-                password={password}
-                minLengthLabel={passwordReqLength}
-                numberLabel={passwordReqNumber}
-                uppercaseLabel={passwordReqUppercase}
-                accentColor={accentColor}
-              />
-
-              <LoginFormField
-                label={confirmPasswordLabel}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder={confirmPasswordPlaceholder}
-                secureTextEntry={!confirmPasswordVisible}
-                textContentType="newPassword"
-                autoComplete="new-password"
-                returnKeyType="done"
-                onSubmitEditing={() => void handleSignUp()}
-                trailingIcon={confirmPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
-                onTrailingIconPress={() => setConfirmPasswordVisible((visible) => !visible)}
-                trailingAccessibilityLabel={
-                  confirmPasswordVisible ? 'Hide password' : 'Show password'
-                }
-                editable={!isSubmitting}
-              />
-
-              {confirmPasswordError ? (
-                <Text style={styles.errorText}>{confirmPasswordError}</Text>
+                  <View style={styles.footer}>
+                    <Text style={styles.footerText}>{footerText} </Text>
+                    <Pressable onPress={() => router.replace('/sign-in')}>
+                      <Text style={[styles.footerLink, { color: accentColor }]}>{loginLabel}</Text>
+                    </Pressable>
+                  </View>
+                </>
               ) : null}
 
-              {businessAccountsEnabled ? (
-                <AccountTypeSelector
-                  value={accountType}
-                  onChange={setAccountType}
-                  label={accountTypeLabel}
-                  individualLabel={individualLabel}
-                  businessLabel={businessLabel}
-                  accentColor={accentColor}
-                  disabled={isSubmitting}
-                />
+              {currentStep === 2 ? (
+                <>
+                  <LoginFormField
+                    label={passwordLabel}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder={passwordPlaceholder}
+                    secureTextEntry={!passwordVisible}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
+                    returnKeyType="next"
+                    trailingIcon={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+                    onTrailingIconPress={() => setPasswordVisible((visible) => !visible)}
+                    trailingAccessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                    editable={!isSubmitting}
+                  />
+
+                  <PasswordRequirements
+                    password={password}
+                    minLengthLabel={passwordReqLength}
+                    numberLabel={passwordReqNumber}
+                    uppercaseLabel={passwordReqUppercase}
+                    accentColor={accentColor}
+                  />
+
+                  <LoginFormField
+                    label={confirmPasswordLabel}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder={confirmPasswordPlaceholder}
+                    secureTextEntry={!confirmPasswordVisible}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
+                    returnKeyType="done"
+                    onSubmitEditing={handleContinue}
+                    trailingIcon={confirmPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+                    onTrailingIconPress={() => setConfirmPasswordVisible((visible) => !visible)}
+                    trailingAccessibilityLabel={
+                      confirmPasswordVisible ? 'Hide password' : 'Show password'
+                    }
+                    editable={!isSubmitting}
+                  />
+
+                  {confirmPasswordError ? (
+                    <Text style={styles.errorText}>{confirmPasswordError}</Text>
+                  ) : null}
+                </>
               ) : null}
 
-              <TermsConsentRow
-                checked={consent}
-                onToggle={() => setConsent((prev) => !prev)}
-                prefix={consentPrefix}
-                termsLabel={consentTerms}
-                conjunction={consentConjunction}
-                privacyLabel={consentPrivacy}
-                termsUrl={termsUrl}
-                privacyUrl={privacyUrl}
-                accentColor={accentColor}
-              />
+              {currentStep === 3 ? (
+                businessAccountsEnabled ? (
+                  <AccountTypeSelector
+                    value={accountType}
+                    onChange={setAccountType}
+                    label={accountTypeLabel}
+                    individualLabel={individualLabel}
+                    businessLabel={businessLabel}
+                    individualDescription={individualAccountInfo}
+                    businessDescription={businessAccountInfo}
+                    accentColor={accentColor}
+                    disabled={isSubmitting}
+                  />
+                ) : (
+                  <View style={styles.individualOnlyCard}>
+                    <Text style={styles.individualOnlyLabel}>{individualLabel}</Text>
+                    <Text style={styles.individualOnlyDescription}>{individualAccountInfo}</Text>
+                    <Text style={styles.individualOnlyHint}>{businessUnavailableMessage}</Text>
+                  </View>
+                )
+              ) : null}
+
+              {currentStep === 4 ? (
+                <>
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryLabel}>Email</Text>
+                    <Text style={styles.summaryValue}>{email.trim()}</Text>
+                    <Text style={[styles.summaryLabel, styles.summaryLabelSpaced]}>Account type</Text>
+                    <Text style={styles.summaryValue}>
+                      {accountType === 'business' ? businessLabel : individualLabel}
+                    </Text>
+                  </View>
+
+                  <TermsConsentRow
+                    checked={consent}
+                    onToggle={() => setConsent((prev) => !prev)}
+                    prefix={consentPrefix}
+                    termsLabel={consentTerms}
+                    conjunction={consentConjunction}
+                    privacyLabel={consentPrivacy}
+                    termsUrl={termsUrl}
+                    privacyUrl={privacyUrl}
+                    accentColor={accentColor}
+                  />
+                </>
+              ) : null}
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                onPress={() => void handleSignUp()}
-                disabled={!isFormValid || isSubmitting}
+                onPress={() => void onPrimaryPress()}
+                disabled={!isCurrentStepValid || isSubmitting}
                 style={({ pressed }) => [
                   styles.submitButton,
                   { backgroundColor: accentColor, shadowColor: accentColor },
-                  !isFormValid && styles.submitButtonDisabled,
-                  pressed && isFormValid && !isSubmitting && styles.submitPressed,
+                  !isCurrentStepValid && styles.submitButtonDisabled,
+                  pressed && isCurrentStepValid && !isSubmitting && styles.submitPressed,
                 ]}
               >
                 {isSubmitting ? (
@@ -344,41 +476,13 @@ export default function SignUpScreen() {
                   <Text
                     style={[
                       styles.submitButtonText,
-                      !isFormValid && styles.submitButtonTextDisabled,
+                      !isCurrentStepValid && styles.submitButtonTextDisabled,
                     ]}
                   >
-                    {submitLabel}
+                    {primaryLabel}
                   </Text>
                 )}
               </Pressable>
-
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>{footerText} </Text>
-                <Pressable onPress={() => router.replace('/sign-in')}>
-                  <Text style={[styles.footerLink, { color: accentColor }]}>{loginLabel}</Text>
-                </Pressable>
-              </View>
-
-              {showSocialAuth ? (
-                <View style={styles.socialSection}>
-                  {showGoogleAuth ? (
-                    <SocialAuthButton
-                      provider="google"
-                      label={googleLabel}
-                      onPress={() => void handleSocialAuth('google')}
-                      disabled={isSubmitting}
-                    />
-                  ) : null}
-                  {showAppleAuth ? (
-                    <SocialAuthButton
-                      provider="apple"
-                      label={appleLabel}
-                      onPress={() => void handleSocialAuth('apple')}
-                      disabled={isSubmitting}
-                    />
-                  ) : null}
-                </View>
-              ) : null}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -421,6 +525,53 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 16,
+  },
+  individualOnlyCard: {
+    borderWidth: 1,
+    borderColor: colors.surfaceMutedBorder,
+    borderRadius: 14,
+    padding: 16,
+    gap: 6,
+    backgroundColor: colors.white,
+  },
+  individualOnlyLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  individualOnlyDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
+  individualOnlyHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.labelGray,
+    marginTop: 4,
+  },
+  summaryCard: {
+    borderWidth: 1,
+    borderColor: colors.surfaceMutedBorder,
+    borderRadius: 14,
+    padding: 16,
+    backgroundColor: colors.white,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.labelGray,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  summaryLabelSpaced: {
+    marginTop: 14,
+  },
+  summaryValue: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
   },
   errorText: {
     fontSize: 14,
@@ -477,6 +628,6 @@ const styles = StyleSheet.create({
   },
   socialSection: {
     gap: 12,
-    marginTop: 8,
+    marginTop: 4,
   },
 });

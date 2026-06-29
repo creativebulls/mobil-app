@@ -212,13 +212,30 @@
 
           <!-- Users -->
           <section data-view-section="users" class="hidden">
+            <div class="users-summary" id="users-summary">
+              <div class="users-summary-item">
+                <span class="users-summary-value" id="users-summary-total">0</span>
+                <span class="users-summary-label">Total matching</span>
+              </div>
+              <div class="users-summary-item">
+                <span class="users-summary-value" id="users-summary-page">0</span>
+                <span class="users-summary-label">On this page</span>
+              </div>
+              <div class="users-summary-item">
+                <span class="users-summary-value" id="users-summary-filter">All types</span>
+                <span class="users-summary-label">Account filter</span>
+              </div>
+            </div>
+
             <div class="card">
               <div class="card-header">
                 <h2 class="card-title">Users</h2>
-                <p class="card-description">Search, verify, suspend, reset passwords, or delete accounts.</p>
+                <p class="card-description">
+                  Browse accounts, filter by type, and open a profile for full details and actions.
+                </p>
               </div>
               <div class="card-content">
-                <div class="toolbar">
+                <div class="toolbar users-toolbar">
                   <form id="search-form" class="search-wrap">
                     <input
                       id="search-input"
@@ -227,18 +244,24 @@
                       placeholder="Search by name or email…"
                     />
                   </form>
+                  <select id="account-type-filter" class="input select users-filter">
+                    <option value="">All account types</option>
+                    <option value="individual">Individual</option>
+                    <option value="business">Business</option>
+                  </select>
                   <span id="load-indicator" class="badge badge-muted hidden">Loading…</span>
                 </div>
 
-                <div class="table-wrap">
-                  <table>
+                <div class="table-wrap users-table-wrap">
+                  <table class="users-table">
                     <thead>
                       <tr>
                         <th>User</th>
-                        <th>Email status</th>
+                        <th>Account type</th>
+                        <th>Status</th>
                         <th>Registration</th>
                         <th>Joined</th>
-                        <th>Actions</th>
+                        <th class="users-actions-col">Actions</th>
                       </tr>
                     </thead>
                     <tbody id="users-body"></tbody>
@@ -747,6 +770,53 @@
                     step="1"
                     value="4"
                   />
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-individual-label">Individual account label</label>
+                  <input
+                    id="registration-individual-label"
+                    class="input"
+                    type="text"
+                    placeholder="Individual"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-business-label">Business account label</label>
+                  <input
+                    id="registration-business-label"
+                    class="input"
+                    type="text"
+                    placeholder="Business"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-individual-info">Individual account info</label>
+                  <textarea
+                    id="registration-individual-info"
+                    class="input"
+                    rows="3"
+                    placeholder="Describe what an individual account is for…"
+                  ></textarea>
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-business-info">Business account info</label>
+                  <textarea
+                    id="registration-business-info"
+                    class="input"
+                    rows="3"
+                    placeholder="Describe what a business account is for…"
+                  ></textarea>
+                </div>
+                <div class="field">
+                  <label class="label" for="registration-business-unavailable"
+                    >Business unavailable message</label
+                  >
+                  <textarea
+                    id="registration-business-unavailable"
+                    class="input"
+                    rows="2"
+                    placeholder="Shown when business sign-up is disabled…"
+                  ></textarea>
                   <p id="registration-config-error" class="error-text"></p>
                 </div>
                 <div class="actions">
@@ -766,18 +836,23 @@
 
     <!-- User detail modal -->
     <div id="user-modal" class="overlay hidden">
-      <div class="dialog dialog-lg" role="dialog" aria-modal="true">
-        <div class="dialog-header">
-          <h3 class="dialog-title">User overview</h3>
-          <p class="dialog-description" id="user-modal-sub">Profile and activity summary.</p>
+      <div class="dialog dialog-xl user-detail-dialog" role="dialog" aria-modal="true">
+        <div class="dialog-header user-detail-dialog-header">
+          <div>
+            <h3 class="dialog-title">User profile</h3>
+            <p class="dialog-description" id="user-modal-sub">Profile and activity summary.</p>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" data-close="user-modal" aria-label="Close">
+            Close
+          </button>
         </div>
-        <div class="dialog-content">
+        <div class="dialog-content user-detail-dialog-content">
           <div id="user-modal-body">
             <div class="empty-state">Loading…</div>
           </div>
         </div>
-        <div class="dialog-footer">
-          <button type="button" class="btn btn-secondary" data-close="user-modal">Close</button>
+        <div class="dialog-footer user-detail-footer">
+          <div class="user-detail-footer-actions" id="user-modal-actions"></div>
         </div>
       </div>
     </div>

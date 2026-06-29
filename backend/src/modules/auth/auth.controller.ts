@@ -35,10 +35,7 @@ export const register = asyncHandler(async (req: AuthenticatedRequest, res: Resp
     email: req.body.email,
     password: req.body.password,
     termsConsent: req.body.termsConsent === true || req.body.termsConsent === 'true',
-    accountType:
-      req.body.accountType === 'business' || req.body.accountType === 'individual'
-        ? req.body.accountType
-        : 'individual',
+    accountType: req.body.accountType,
   });
   const profilePhotoUrl = req.file
     ? authService.resolveUploadedPhotoUrl(req.file.filename)

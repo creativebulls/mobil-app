@@ -81,6 +81,7 @@ const userSchema = new Schema<UserDocument>(
       type: String,
       enum: ['individual', 'business'],
       default: 'individual',
+      index: true,
     },
     profilePhotoUrl: { type: String },
     emailVerified: { type: Boolean, default: false },

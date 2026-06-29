@@ -7,6 +7,7 @@ export const adminLoginSchema = z.object({
 
 export const adminUsersQuerySchema = z.object({
   search: z.string().trim().optional(),
+  accountType: z.enum(['individual', 'business']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -115,11 +116,21 @@ export const registrationConfigSchema = z
     businessAccountsEnabled: z.boolean().optional(),
     currentStep: z.number().int().min(1).max(10).optional(),
     totalSteps: z.number().int().min(1).max(10).optional(),
+    individualInfo: z.string().max(2000).optional(),
+    businessInfo: z.string().max(2000).optional(),
+    businessUnavailableMessage: z.string().max(500).optional(),
+    individualAccountLabel: z.string().trim().min(1).max(80).optional(),
+    businessAccountLabel: z.string().trim().min(1).max(80).optional(),
   })
   .refine(
     (data) =>
       data.businessAccountsEnabled !== undefined ||
       data.currentStep !== undefined ||
-      data.totalSteps !== undefined,
+      data.totalSteps !== undefined ||
+      data.individualInfo !== undefined ||
+      data.businessInfo !== undefined ||
+      data.businessUnavailableMessage !== undefined ||
+      data.individualAccountLabel !== undefined ||
+      data.businessAccountLabel !== undefined,
     { message: 'Provide at least one registration setting to update' },
   );

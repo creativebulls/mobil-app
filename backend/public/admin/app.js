@@ -7,6 +7,11 @@ let state = {
   page: 1,
   limit: 20,
   search: '',
+  accountTypeFilter: '',
+  accountTypeLabels: {
+    individual: 'Individual',
+    business: 'Business',
+  },
   users: [],
   pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
   activeUser: null,
@@ -142,11 +147,130 @@ function formatDate(value) {
   return new Date(value).toLocaleString();
 }
 
-function statusBadge(user) {
-  if (user.emailVerified) {
-    return '<span class="badge badge-success">Verified</span>';
+function formatRelativeDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  const diffMs = Date.now() - date.getTime();
+  const days = Math.floor(diffMs / 86400000);
+
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  return date.toLocaleDateString();
+}
+
+const REGISTRATION_STATUS_LABELS = {
+  pending_email: 'Pending email',
+  pending_profile: 'Pending profile',
+  completed: 'Complete',
+};
+
+function registrationStatusLabel(status) {
+  return REGISTRATION_STATUS_LABELS[status] ?? status ?? '—';
+}
+
+function userInitials(user) {
+  const name = user.displayName || user.email || '?';
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function userAvatarHtml(user, sizeClass = '') {
+  if (user.profilePhotoUrl) {
+    return `<img class="user-avatar ${sizeClass}" src="${escapeAttr(user.profilePhotoUrl)}" alt="" />`;
   }
-  return '<span class="badge badge-warning">Unverified</span>';
+
+  return `<div class="user-avatar user-avatar-fallback ${sizeClass}" aria-hidden="true">${escapeHtml(
+    userInitials(user),
+  )}</div>`;
+}
+
+function userHandleHtml(user) {
+  if (user.username) {
+    return `<span class="user-handle">@${escapeHtml(user.username)}</span>`;
+  }
+
+  return '';
+}
+
+function userStatusBadges(user, compact = false) {
+  const rowClass = compact ? 'badge-row badge-row-compact' : 'badge-row';
+  const badges = [
+    user.emailVerified
+      ? '<span class="badge badge-success">Verified</span>'
+      : '<span class="badge badge-warning">Unverified</span>',
+    user.suspended ? '<span class="badge badge-warning">Suspended</span>' : '',
+    user.liveAudioEnabled ? '<span class="badge badge-info">Live audio</span>' : '',
+    user.isPrivate ? '<span class="badge badge-muted">Private</span>' : '',
+  ].filter(Boolean);
+
+  return `<div class="${rowClass}">${badges.join('')}</div>`;
+}
+
+function renderUserActionMenu(user) {
+  return `
+    <details class="action-menu" onclick="event.stopPropagation()">
+      <summary class="btn btn-secondary btn-sm action-menu-trigger" aria-label="More actions">⋯</summary>
+      <div class="action-menu-panel">
+        ${
+          user.emailVerified
+            ? ''
+            : `<button type="button" class="action-menu-item" data-action="verify" data-id="${user.id}">Verify email</button>`
+        }
+        ${
+          user.suspended
+            ? `<button type="button" class="action-menu-item" data-action="unsuspend" data-id="${user.id}" data-name="${escapeAttr(
+                user.displayName,
+              )}">Reinstate account</button>`
+            : `<button type="button" class="action-menu-item" data-action="suspend" data-id="${user.id}" data-name="${escapeAttr(
+                user.displayName,
+              )}">Suspend account</button>`
+        }
+        <button type="button" class="action-menu-item" data-action="live-toggle" data-id="${user.id}" data-enabled="${
+          user.liveAudioEnabled ? '1' : '0'
+        }" data-name="${escapeAttr(user.displayName)}">
+          ${user.liveAudioEnabled ? 'Disable live audio' : 'Enable live audio'}
+        </button>
+        ${
+          user.liveAudioEnabled
+            ? `<button type="button" class="action-menu-item" data-action="live" data-id="${user.id}" data-name="${escapeAttr(
+                user.displayName,
+              )}">Listen live</button>`
+            : ''
+        }
+        <button type="button" class="action-menu-item" data-action="reset" data-id="${user.id}" data-name="${escapeAttr(
+          user.displayName,
+        )}">Reset password</button>
+        <button type="button" class="action-menu-item action-menu-item-destructive" data-action="delete" data-id="${
+          user.id
+        }" data-name="${escapeAttr(user.displayName)}">Delete account</button>
+      </div>
+    </details>`;
+}
+
+function updateUsersSummary() {
+  const { users, pagination, accountTypeFilter } = state;
+  const totalEl = $('users-summary-total');
+  const pageEl = $('users-summary-page');
+  const filterEl = $('users-summary-filter');
+
+  if (totalEl) totalEl.textContent = String(pagination.total ?? 0);
+  if (pageEl) pageEl.textContent = String(users.length);
+  if (filterEl) {
+    if (accountTypeFilter === 'business') {
+      filterEl.textContent = state.accountTypeLabels.business;
+    } else if (accountTypeFilter === 'individual') {
+      filterEl.textContent = state.accountTypeLabels.individual;
+    } else {
+      filterEl.textContent = 'All types';
+    }
+  }
 }
 
 function registrationBadge(status) {
@@ -159,66 +283,62 @@ function registrationBadge(status) {
   return `<span class="badge ${cls}">${labels[status] ?? status}</span>`;
 }
 
+function accountTypeBadge(user) {
+  const label =
+    user.accountTypeLabel ??
+    (user.accountType === 'business'
+      ? state.accountTypeLabels.business
+      : state.accountTypeLabels.individual);
+  const cls = user.accountType === 'business' ? 'badge-info' : 'badge-muted';
+  return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
+}
+
 function renderUsers() {
   const tbody = $('users-body');
   const { users, pagination } = state;
 
   if (!users.length) {
     tbody.innerHTML =
-      '<tr><td colspan="5"><div class="empty-state">No users found.</div></td></tr>';
+      '<tr><td colspan="6"><div class="empty-state">No users match your search or filters.</div></td></tr>';
   } else {
     tbody.innerHTML = users
       .map(
         (user) => `
-      <tr>
+      <tr
+        class="user-row"
+        data-user-id="${user.id}"
+        data-user-name="${escapeAttr(user.displayName)}"
+      >
         <td>
-          <div class="user-cell">
-            <span class="user-name">${escapeHtml(user.displayName)}</span>
-            <span class="user-email">${escapeHtml(user.email)}</span>
+          <div class="user-cell user-cell-rich">
+            ${userAvatarHtml(user)}
+            <div class="user-cell-main">
+              <span class="user-name">${escapeHtml(user.displayName)}</span>
+              <span class="user-email">${escapeHtml(user.email)}</span>
+              ${userHandleHtml(user)}
+            </div>
           </div>
         </td>
-        <td>${statusBadge(user)}${
-          user.suspended ? ' <span class="badge badge-warning">Suspended</span>' : ''
-        }${user.liveAudioEnabled ? ' <span class="badge badge-info">Live audio</span>' : ''}</td>
+        <td>${accountTypeBadge(user)}</td>
+        <td>${userStatusBadges(user, true)}</td>
         <td>${registrationBadge(user.registrationStatus)}</td>
-        <td>${formatDate(user.createdAt)}</td>
         <td>
-          <div class="actions">
-            <button class="btn btn-secondary btn-sm" data-action="view" data-id="${user.id}" data-name="${escapeAttr(
-              user.displayName,
-            )}">View</button>
-            ${
-              user.emailVerified
-                ? ''
-                : `<button class="btn btn-secondary btn-sm" data-action="verify" data-id="${user.id}">Verify</button>`
-            }
-            ${
-              user.suspended
-                ? `<button class="btn btn-secondary btn-sm" data-action="unsuspend" data-id="${user.id}" data-name="${escapeAttr(
-                    user.displayName,
-                  )}">Reinstate</button>`
-                : `<button class="btn btn-secondary btn-sm" data-action="suspend" data-id="${user.id}" data-name="${escapeAttr(
-                    user.displayName,
-                  )}">Suspend</button>`
-            }
-            <button class="btn btn-secondary btn-sm" data-action="live-toggle" data-id="${user.id}" data-enabled="${
-              user.liveAudioEnabled ? '1' : '0'
-            }" data-name="${escapeAttr(user.displayName)}">${
-              user.liveAudioEnabled ? 'Disable live' : 'Enable live'
-            }</button>
-            ${
-              user.liveAudioEnabled
-                ? `<button class="btn btn-secondary btn-sm" data-action="live" data-id="${user.id}" data-name="${escapeAttr(
-                    user.displayName,
-                  )}">Listen live</button>`
-                : ''
-            }
-            <button class="btn btn-secondary btn-sm" data-action="reset" data-id="${user.id}" data-name="${escapeAttr(
-              user.displayName,
-            )}">Reset password</button>
-            <button class="btn btn-destructive btn-sm" data-action="delete" data-id="${user.id}" data-name="${escapeAttr(
-              user.displayName,
-            )}">Delete</button>
+          <div class="date-cell">
+            <span class="date-primary">${formatRelativeDate(user.createdAt)}</span>
+            <span class="date-secondary">${formatDate(user.createdAt)}</span>
+          </div>
+        </td>
+        <td>
+          <div class="user-row-actions" onclick="event.stopPropagation()">
+            <button
+              class="btn btn-primary btn-sm"
+              data-action="view"
+              data-id="${user.id}"
+              data-name="${escapeAttr(user.displayName)}"
+            >
+              View
+            </button>
+            ${renderUserActionMenu(user)}
           </div>
         </td>
       </tr>`,
@@ -230,6 +350,7 @@ function renderUsers() {
 
   $('prev-page').disabled = pagination.page <= 1;
   $('next-page').disabled = pagination.page >= pagination.totalPages;
+  updateUsersSummary();
 }
 
 function escapeHtml(value) {
@@ -253,6 +374,9 @@ async function loadUsers() {
     });
     if (state.search) {
       params.set('search', state.search);
+    }
+    if (state.accountTypeFilter) {
+      params.set('accountType', state.accountTypeFilter);
     }
 
     const data = await api(`/users?${params.toString()}`);
@@ -301,64 +425,218 @@ async function loadStats() {
 }
 
 /* ---------- User detail overview ---------- */
-function detailStatItem(label, value) {
+function detailStatItem(label, value, highlight = false) {
   return `
-    <div class="detail-stat">
+    <div class="detail-stat${highlight ? ' detail-stat-highlight' : ''}">
       <div class="detail-stat-value">${value}</div>
       <div class="detail-stat-label">${escapeHtml(label)}</div>
     </div>`;
 }
 
+function detailMetaRow(label, value) {
+  return `
+    <div class="user-detail-meta-row">
+      <dt>${escapeHtml(label)}</dt>
+      <dd>${value}</dd>
+    </div>`;
+}
+
+function renderUserDetailActions(user) {
+  const actions = [
+    !user.emailVerified
+      ? `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="verify">Verify email</button>`
+      : '',
+    user.suspended
+      ? `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="unsuspend">Reinstate account</button>`
+      : `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="suspend">Suspend account</button>`,
+    `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="live-toggle">${
+      user.liveAudioEnabled ? 'Disable live audio' : 'Enable live audio'
+    }</button>`,
+    user.liveAudioEnabled
+      ? `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="live">Listen live</button>`
+      : '',
+    `<button type="button" class="btn btn-secondary btn-sm" data-modal-action="reset">Reset password</button>`,
+    `<button type="button" class="btn btn-destructive btn-sm" data-modal-action="delete">Delete account</button>`,
+  ].filter(Boolean);
+
+  $('user-modal-actions').innerHTML = actions.join('');
+}
+
+function formatOptionalDate(value) {
+  return value ? formatDate(value) : '—';
+}
+
+function formatUserName(user) {
+  if (user.givenName && user.surname) {
+    return `${user.givenName} ${user.surname}`;
+  }
+  if (user.firstName && user.lastName) {
+    return `${user.firstName} ${user.lastName}`;
+  }
+  return '—';
+}
+
 async function openUserDetail(userId, name) {
   openModal('user-modal');
   $('user-modal-sub').textContent = name ? `Overview for ${name}` : 'Profile and activity summary.';
-  $('user-modal-body').innerHTML = '<div class="empty-state">Loading…</div>';
+  $('user-modal-body').innerHTML = '<div class="empty-state">Loading profile…</div>';
+  $('user-modal-actions').innerHTML = '';
 
   try {
     const data = await api(`/users/${userId}`);
     const u = data.user;
     const s = data.stats;
 
+    state.activeUser = {
+      id: u.id,
+      name: u.displayName,
+      emailVerified: u.emailVerified,
+      suspended: u.suspended,
+      liveAudioEnabled: u.liveAudioEnabled,
+    };
+
+    const accountTypeLabel = escapeHtml(
+      u.accountTypeLabel ??
+        (u.accountType === 'business'
+          ? state.accountTypeLabels.business
+          : state.accountTypeLabels.individual),
+    );
+
     const badges = [
       u.online
-        ? '<span class="badge badge-success">Online</span>'
+        ? '<span class="badge badge-success">Online now</span>'
         : '<span class="badge badge-muted">Offline</span>',
+      accountTypeBadge(u),
       u.emailVerified
-        ? '<span class="badge badge-success">Verified</span>'
-        : '<span class="badge badge-warning">Unverified</span>',
+        ? '<span class="badge badge-success">Email verified</span>'
+        : '<span class="badge badge-warning">Email unverified</span>',
+      registrationBadge(u.registrationStatus),
       u.suspended ? '<span class="badge badge-warning">Suspended</span>' : '',
-      u.liveAudioEnabled ? '<span class="badge badge-info">Live audio</span>' : '',
+      u.liveAudioEnabled ? '<span class="badge badge-info">Live audio enabled</span>' : '',
+      u.isPrivate ? '<span class="badge badge-muted">Private profile</span>' : '',
     ]
       .filter(Boolean)
       .join(' ');
 
+    $('user-modal-sub').textContent = `${u.displayName} · ${u.email}`;
+
     $('user-modal-body').innerHTML = `
-      <div class="detail-head">
-        <div class="detail-identity">
-          <div class="detail-name">${escapeHtml(u.displayName)}</div>
-          <div class="user-email">${escapeHtml(u.email)}</div>
+      <div class="user-detail">
+        <div class="user-detail-hero">
+          ${userAvatarHtml(u, 'user-avatar-lg')}
+          <div class="user-detail-identity">
+            <div class="user-detail-name">${escapeHtml(u.displayName)}</div>
+            ${u.username ? `<div class="user-detail-handle">@${escapeHtml(u.username)}</div>` : ''}
+            <div class="user-detail-email">${escapeHtml(u.email)}</div>
+            <div class="user-detail-badges badge-row">${badges}</div>
+            ${
+              u.suspended && u.suspensionReason
+                ? `<div class="user-detail-alert"><strong>Account suspended</strong>${escapeHtml(
+                    u.suspensionReason,
+                  )}</div>`
+                : ''
+            }
+          </div>
         </div>
-        <div class="detail-badges">${badges}</div>
-      </div>
-      <div class="detail-grid">
-        ${detailStatItem('Friends', s.friends)}
-        ${detailStatItem('Pending in', s.pendingIncoming)}
-        ${detailStatItem('Pending out', s.pendingOutgoing)}
-        ${detailStatItem('Blocked', s.blocked)}
-        ${detailStatItem('Blocked by', s.blockedBy)}
-        ${detailStatItem('Restricted', s.restricted)}
-        ${detailStatItem('Posts', s.posts)}
-        ${detailStatItem('Comments', s.comments)}
-        ${detailStatItem('Places visited', s.placeVisits)}
-        ${detailStatItem('Conversations', s.conversations)}
-      </div>
-      <div class="detail-meta">
-        <div><span class="detail-meta-label">Joined</span> ${formatDate(u.createdAt)}</div>
-        <div><span class="detail-meta-label">Registration</span> ${escapeHtml(u.registrationStatus ?? '—')}</div>
-        ${u.suspended && u.suspensionReason ? `<div><span class="detail-meta-label">Suspension reason</span> ${escapeHtml(u.suspensionReason)}</div>` : ''}
+
+        <div class="user-detail-sections">
+          <section class="user-detail-section">
+            <h4 class="user-detail-section-title">Account details</h4>
+            <dl class="user-detail-dl">
+              ${detailMetaRow('Account type', accountTypeLabel)}
+              ${detailMetaRow('Registration', escapeHtml(registrationStatusLabel(u.registrationStatus)))}
+              ${detailMetaRow('Legal name', escapeHtml(formatUserName(u)))}
+              ${detailMetaRow('Points', escapeHtml(String(u.points ?? 0)))}
+              ${detailMetaRow('Joined', escapeHtml(formatDate(u.createdAt)))}
+              ${detailMetaRow('Last updated', escapeHtml(formatDate(u.updatedAt)))}
+              ${detailMetaRow('Birthdate', escapeHtml(formatOptionalDate(u.birthdate)))}
+              ${detailMetaRow('Gender', escapeHtml(u.gender ?? '—'))}
+            </dl>
+          </section>
+
+          <section class="user-detail-section">
+            <h4 class="user-detail-section-title">Activity</h4>
+            <div class="detail-grid-grouped">
+              <div class="detail-grid-titled">
+                <div class="detail-grid-title">Social</div>
+                <div class="detail-grid">
+                  ${detailStatItem('Friends', s.friends, true)}
+                  ${detailStatItem('Pending in', s.pendingIncoming)}
+                  ${detailStatItem('Pending out', s.pendingOutgoing)}
+                  ${detailStatItem('Blocked', s.blocked)}
+                  ${detailStatItem('Blocked by', s.blockedBy)}
+                  ${detailStatItem('Restricted', s.restricted)}
+                </div>
+              </div>
+              <div class="detail-grid-titled">
+                <div class="detail-grid-title">Content</div>
+                <div class="detail-grid">
+                  ${detailStatItem('Posts', s.posts, true)}
+                  ${detailStatItem('Comments', s.comments)}
+                  ${detailStatItem('Places visited', s.placeVisits)}
+                  ${detailStatItem('Conversations', s.conversations)}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>`;
+
+    renderUserDetailActions(u);
   } catch (error) {
     $('user-modal-body').innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function handleUserTableAction(button) {
+  const { action, id, name } = button.dataset;
+  state.activeUser = { id, name };
+
+  if (action === 'view') {
+    void openUserDetail(id, name);
+    return;
+  }
+
+  if (action === 'verify') {
+    void verifyUser(id);
+    return;
+  }
+
+  if (action === 'suspend') {
+    $('suspend-user-name').textContent = name;
+    $('suspend-reason').value = '';
+    $('suspend-error').textContent = '';
+    openModal('suspend-modal');
+    return;
+  }
+
+  if (action === 'unsuspend') {
+    void unsuspendUser(id);
+    return;
+  }
+
+  if (action === 'live-toggle') {
+    const enable = button.dataset.enabled !== '1';
+    void toggleLiveAudio(id, enable);
+    return;
+  }
+
+  if (action === 'live') {
+    void startLive(id, name);
+    return;
+  }
+
+  if (action === 'reset') {
+    $('reset-user-name').textContent = name;
+    $('reset-password').value = '';
+    $('reset-error').textContent = '';
+    openModal('reset-modal');
+    return;
+  }
+
+  if (action === 'delete') {
+    $('delete-user-name').textContent = name;
+    openModal('delete-modal');
   }
 }
 
@@ -966,6 +1244,32 @@ function renderRegistrationStatus(config) {
   if ($('registration-progress-total')) {
     $('registration-progress-total').value = String(config.totalSteps);
   }
+  if ($('registration-individual-info')) {
+    $('registration-individual-info').value = config.individualInfo ?? '';
+  }
+  if ($('registration-business-info')) {
+    $('registration-business-info').value = config.businessInfo ?? '';
+  }
+  if ($('registration-business-unavailable')) {
+    $('registration-business-unavailable').value = config.businessUnavailableMessage ?? '';
+  }
+  if ($('registration-individual-label')) {
+    $('registration-individual-label').value = config.individualAccountLabel ?? 'Individual';
+  }
+  if ($('registration-business-label')) {
+    $('registration-business-label').value = config.businessAccountLabel ?? 'Business';
+  }
+
+  state.accountTypeLabels = {
+    individual: config.individualAccountLabel ?? 'Individual',
+    business: config.businessAccountLabel ?? 'Business',
+  };
+
+  const filter = $('account-type-filter');
+  if (filter) {
+    filter.options[1].textContent = state.accountTypeLabels.individual;
+    filter.options[2].textContent = state.accountTypeLabels.business;
+  }
 }
 
 async function loadRegistrationConfig() {
@@ -1007,6 +1311,11 @@ async function saveRegistrationConfig() {
         businessAccountsEnabled: $('registration-business-enabled')?.checked ?? false,
         currentStep,
         totalSteps,
+        individualInfo: $('registration-individual-info')?.value ?? '',
+        businessInfo: $('registration-business-info')?.value ?? '',
+        businessUnavailableMessage: $('registration-business-unavailable')?.value ?? '',
+        individualAccountLabel: $('registration-individual-label')?.value ?? '',
+        businessAccountLabel: $('registration-business-label')?.value ?? '',
       }),
     });
     renderRegistrationStatus(config);
@@ -1616,6 +1925,12 @@ function bindEvents() {
     void loadUsers();
   });
 
+  $('account-type-filter')?.addEventListener('change', () => {
+    state.accountTypeFilter = $('account-type-filter').value;
+    state.page = 1;
+    void loadUsers();
+  });
+
   $('prev-page').addEventListener('click', () => {
     if (state.page > 1) {
       state.page -= 1;
@@ -1631,24 +1946,37 @@ function bindEvents() {
   });
 
   $('users-body').addEventListener('click', (event) => {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-
-    const { action, id, name } = button.dataset;
-    state.activeUser = { id, name };
-
-    if (action === 'view') {
-      void openUserDetail(id, name);
+    const row = event.target.closest('tr.user-row');
+    if (row && !event.target.closest('button[data-action], .action-menu')) {
+      void openUserDetail(row.dataset.userId, row.dataset.userName);
       return;
     }
 
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+
+    const details = button.closest('details.action-menu');
+    if (details) {
+      details.removeAttribute('open');
+    }
+
+    handleUserTableAction(button);
+  });
+
+  $('user-modal-actions')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-modal-action]');
+    if (!button || !state.activeUser?.id) return;
+
+    const user = state.activeUser;
+    const action = button.dataset.modalAction;
+
     if (action === 'verify') {
-      void verifyUser(id);
+      void verifyUser(user.id);
       return;
     }
 
     if (action === 'suspend') {
-      $('suspend-user-name').textContent = name;
+      $('suspend-user-name').textContent = user.name;
       $('suspend-reason').value = '';
       $('suspend-error').textContent = '';
       openModal('suspend-modal');
@@ -1656,23 +1984,22 @@ function bindEvents() {
     }
 
     if (action === 'unsuspend') {
-      void unsuspendUser(id);
+      void unsuspendUser(user.id);
       return;
     }
 
     if (action === 'live-toggle') {
-      const enable = button.dataset.enabled !== '1';
-      void toggleLiveAudio(id, enable);
+      void toggleLiveAudio(user.id, !user.liveAudioEnabled);
       return;
     }
 
     if (action === 'live') {
-      void startLive(id, name);
+      void startLive(user.id, user.name);
       return;
     }
 
     if (action === 'reset') {
-      $('reset-user-name').textContent = name;
+      $('reset-user-name').textContent = user.name;
       $('reset-password').value = '';
       $('reset-error').textContent = '';
       openModal('reset-modal');
@@ -1680,7 +2007,7 @@ function bindEvents() {
     }
 
     if (action === 'delete') {
-      $('delete-user-name').textContent = name;
+      $('delete-user-name').textContent = user.name;
       openModal('delete-modal');
     }
   });

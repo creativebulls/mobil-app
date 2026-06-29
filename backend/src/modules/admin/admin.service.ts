@@ -12,7 +12,7 @@ import {
 import { Comment } from '../posts/comment.model';
 import { Post } from '../posts/post.model';
 import { PostSave } from '../posts/post-save.model';
-import { User, getUserDisplayName, serializeUser } from '../users/user.model';
+import { User, getUserDisplayName, serializeUser, type AccountType } from '../users/user.model';
 import { Appeal } from '../moderation/appeal.model';
 import { Report } from '../moderation/report.model';
 import { FriendRequest } from '../friends/friend-request.model';
@@ -143,8 +143,21 @@ const PLACES_CATEGORIES_SETTING = 'places_category_keys';
 const REGISTRATION_BUSINESS_ENABLED_SETTING = 'registration_business_enabled';
 const REGISTRATION_PROGRESS_STEP_SETTING = 'registration_progress_step';
 const REGISTRATION_PROGRESS_TOTAL_SETTING = 'registration_progress_total';
+const REGISTRATION_INDIVIDUAL_INFO_SETTING = 'registration_individual_info';
+const REGISTRATION_BUSINESS_INFO_SETTING = 'registration_business_info';
+const REGISTRATION_BUSINESS_UNAVAILABLE_SETTING = 'registration_business_unavailable_message';
+const REGISTRATION_INDIVIDUAL_LABEL_SETTING = 'registration_individual_label';
+const REGISTRATION_BUSINESS_LABEL_SETTING = 'registration_business_label';
 const DEFAULT_REGISTRATION_PROGRESS_STEP = 2;
 const DEFAULT_REGISTRATION_PROGRESS_TOTAL = 4;
+const DEFAULT_REGISTRATION_INDIVIDUAL_INFO =
+  'For personal use. Discover places, connect with friends, and share your experiences on Crave.';
+const DEFAULT_REGISTRATION_BUSINESS_INFO =
+  'For venues, brands, and teams. Promote your location and reach local customers on Crave.';
+const DEFAULT_REGISTRATION_BUSINESS_UNAVAILABLE =
+  'Business accounts are not available right now.';
+const DEFAULT_REGISTRATION_INDIVIDUAL_LABEL = 'Individual';
+const DEFAULT_REGISTRATION_BUSINESS_LABEL = 'Business';
 
 const VALID_PROVIDERS: PlacesProviderName[] = ['foursquare', 'google', 'opentripmap', 'sample'];
 
@@ -586,11 +599,40 @@ function clampRegistrationStep(value: number, total: number): number {
   return Math.min(total, Math.max(1, Math.round(value)));
 }
 
+async function getAccountTypeLabels() {
+  const config = await getRegistrationConfig();
+  return {
+    individual: config.individualAccountLabel,
+    business: config.businessAccountLabel,
+  };
+}
+
+function resolveAccountTypeLabel(
+  accountType: AccountType | undefined,
+  labels: { individual: string; business: string },
+): string {
+  return accountType === 'business' ? labels.business : labels.individual;
+}
+
 export async function getRegistrationConfig() {
-  const [businessDoc, stepDoc, totalDoc] = await Promise.all([
+  const [
+    businessDoc,
+    stepDoc,
+    totalDoc,
+    individualInfoDoc,
+    businessInfoDoc,
+    businessUnavailableDoc,
+    individualLabelDoc,
+    businessLabelDoc,
+  ] = await Promise.all([
     AppSetting.findOne({ key: REGISTRATION_BUSINESS_ENABLED_SETTING }),
     AppSetting.findOne({ key: REGISTRATION_PROGRESS_STEP_SETTING }),
     AppSetting.findOne({ key: REGISTRATION_PROGRESS_TOTAL_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_INDIVIDUAL_INFO_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_BUSINESS_INFO_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_BUSINESS_UNAVAILABLE_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_INDIVIDUAL_LABEL_SETTING }),
+    AppSetting.findOne({ key: REGISTRATION_BUSINESS_LABEL_SETTING }),
   ]);
 
   const totalStepsRaw = totalDoc?.value ? Number.parseInt(totalDoc.value, 10) : DEFAULT_REGISTRATION_PROGRESS_TOTAL;
@@ -608,7 +650,23 @@ export async function getRegistrationConfig() {
     businessAccountsEnabled: parseRegistrationBoolean(businessDoc?.value),
     currentStep,
     totalSteps,
-    updatedAt: businessDoc?.updatedAt ?? stepDoc?.updatedAt ?? totalDoc?.updatedAt ?? null,
+    individualInfo: individualInfoDoc?.value?.trim() || DEFAULT_REGISTRATION_INDIVIDUAL_INFO,
+    businessInfo: businessInfoDoc?.value?.trim() || DEFAULT_REGISTRATION_BUSINESS_INFO,
+    businessUnavailableMessage:
+      businessUnavailableDoc?.value?.trim() || DEFAULT_REGISTRATION_BUSINESS_UNAVAILABLE,
+    individualAccountLabel:
+      individualLabelDoc?.value?.trim() || DEFAULT_REGISTRATION_INDIVIDUAL_LABEL,
+    businessAccountLabel: businessLabelDoc?.value?.trim() || DEFAULT_REGISTRATION_BUSINESS_LABEL,
+    updatedAt:
+      businessDoc?.updatedAt ??
+      stepDoc?.updatedAt ??
+      totalDoc?.updatedAt ??
+      individualInfoDoc?.updatedAt ??
+      businessInfoDoc?.updatedAt ??
+      businessUnavailableDoc?.updatedAt ??
+      individualLabelDoc?.updatedAt ??
+      businessLabelDoc?.updatedAt ??
+      null,
   };
 }
 
@@ -616,6 +674,11 @@ export async function setRegistrationConfig(input: {
   businessAccountsEnabled?: boolean;
   currentStep?: number;
   totalSteps?: number;
+  individualInfo?: string;
+  businessInfo?: string;
+  businessUnavailableMessage?: string;
+  individualAccountLabel?: string;
+  businessAccountLabel?: string;
 }) {
   if (input.businessAccountsEnabled !== undefined) {
     await AppSetting.findOneAndUpdate(
@@ -642,10 +705,55 @@ export async function setRegistrationConfig(input: {
     );
   }
 
+  if (input.individualInfo !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_INDIVIDUAL_INFO_SETTING },
+      { value: input.individualInfo.trim() },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.businessInfo !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_BUSINESS_INFO_SETTING },
+      { value: input.businessInfo.trim() },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.businessUnavailableMessage !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_BUSINESS_UNAVAILABLE_SETTING },
+      { value: input.businessUnavailableMessage.trim() },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.individualAccountLabel !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_INDIVIDUAL_LABEL_SETTING },
+      { value: input.individualAccountLabel.trim() },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.businessAccountLabel !== undefined) {
+    await AppSetting.findOneAndUpdate(
+      { key: REGISTRATION_BUSINESS_LABEL_SETTING },
+      { value: input.businessAccountLabel.trim() },
+      { upsert: true, new: true },
+    );
+  }
+
   if (
     input.businessAccountsEnabled === undefined &&
     input.currentStep === undefined &&
-    input.totalSteps === undefined
+    input.totalSteps === undefined &&
+    input.individualInfo === undefined &&
+    input.businessInfo === undefined &&
+    input.businessUnavailableMessage === undefined &&
+    input.individualAccountLabel === undefined &&
+    input.businessAccountLabel === undefined
   ) {
     throw new AppError(400, 'Provide at least one registration setting', 'INVALID_REGISTRATION_CONFIG');
   }
@@ -659,6 +767,11 @@ export async function getPublicRegistrationConfig(): Promise<Record<string, stri
     'registration.business_accounts_enabled': config.businessAccountsEnabled ? 'true' : 'false',
     'registration.progress_step': String(config.currentStep),
     'registration.progress_total': String(config.totalSteps),
+    'registration.individual_info': config.individualInfo,
+    'registration.business_info': config.businessInfo,
+    'registration.business_unavailable_message': config.businessUnavailableMessage,
+    'registration.individual_label': config.individualAccountLabel,
+    'registration.business_label': config.businessAccountLabel,
   };
 }
 
@@ -810,6 +923,10 @@ export async function getUserDetail(userId: string) {
       ...serializeUser(user),
       displayName: getUserDisplayName(user),
       online: isUserOnline(user._id.toString()),
+      accountTypeLabel: resolveAccountTypeLabel(
+        user.accountType,
+        await getAccountTypeLabels(),
+      ),
     },
     stats: {
       friends,
@@ -922,6 +1039,13 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   'registration.business_accounts_enabled': 'true',
   'registration.progress_step': '2',
   'registration.progress_total': '4',
+  'registration.individual_info':
+    'For personal use. Discover places, connect with friends, and share your experiences on Crave.',
+  'registration.business_info':
+    'For venues, brands, and teams. Promote your location and reach local customers on Crave.',
+  'registration.business_unavailable_message': 'Business accounts are not available right now.',
+  'registration.individual_label': 'Individual',
+  'registration.business_label': 'Business',
 
   // Home feed section titles & labels
   'home.meet_friends_title': 'Meet Friends',
@@ -989,8 +1113,17 @@ export async function setAppConfig(config: Record<string, string>) {
   return { config: normalized, updatedAt: doc?.updatedAt ?? new Date() };
 }
 
-export async function listUsers(input: { search?: string; page: number; limit: number }) {
+export async function listUsers(input: {
+  search?: string;
+  page: number;
+  limit: number;
+  accountType?: AccountType;
+}) {
   const query: Record<string, unknown> = {};
+
+  if (input.accountType) {
+    query.accountType = input.accountType;
+  }
 
   if (input.search) {
     const escaped = input.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1004,6 +1137,7 @@ export async function listUsers(input: { search?: string; page: number; limit: n
   }
 
   const skip = (input.page - 1) * input.limit;
+  const accountTypeLabels = await getAccountTypeLabels();
 
   const [users, total] = await Promise.all([
     User.find(query).sort({ createdAt: -1 }).skip(skip).limit(input.limit),
@@ -1014,6 +1148,7 @@ export async function listUsers(input: { search?: string; page: number; limit: n
     users: users.map((user) => ({
       ...serializeUser(user),
       displayName: getUserDisplayName(user),
+      accountTypeLabel: resolveAccountTypeLabel(user.accountType, accountTypeLabels),
     })),
     pagination: {
       page: input.page,
