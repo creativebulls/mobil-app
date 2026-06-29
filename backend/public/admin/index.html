@@ -545,11 +545,11 @@
 
             <div class="card">
               <div class="card-header">
-                <h2 class="card-title">Google Maps (Android)</h2>
+                <h2 class="card-title">Google Maps</h2>
                 <p class="card-description">
-                  API key for the friends map on Android (Maps SDK for Android). The mobile app
-                  downloads this from the server — restrict the key to your Android app package and
-                  signing certificate SHA-1 in Google Cloud Console.
+                  API keys for the friends map. Android and iOS use separate keys in Google Cloud
+                  Console (Maps SDK for Android / Maps SDK for iOS). Restrict each key to your app
+                  bundle ID or signing certificate.
                 </p>
               </div>
               <div class="card-content">
@@ -565,6 +565,17 @@
                     type="text"
                     autocomplete="off"
                     placeholder="Paste your Google Maps Android API key…"
+                    style="font-family: monospace"
+                  />
+                </div>
+                <div class="field" style="margin-top: 0.75rem">
+                  <label class="label" for="maps-ios-api-key">Google Maps iOS API key</label>
+                  <input
+                    id="maps-ios-api-key"
+                    class="input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Paste your Google Maps iOS API key…"
                     style="font-family: monospace"
                   />
                   <p id="maps-config-error" class="error-text"></p>
@@ -587,11 +598,12 @@
                 </div>
                 <div class="actions">
                   <button id="maps-save-btn" type="button" class="btn btn-primary btn-sm">Save</button>
-                  <button id="maps-clear-btn" type="button" class="btn btn-destructive btn-sm">Remove key</button>
+                  <button id="maps-clear-android-btn" type="button" class="btn btn-destructive btn-sm">Remove Android key</button>
+                  <button id="maps-clear-ios-btn" type="button" class="btn btn-destructive btn-sm">Remove iOS key</button>
                 </div>
                 <p class="card-description" style="margin-top: 0.5rem">
-                  After saving, rebuild the Android app so the native manifest picks up the key.
-                  Existing installs receive updates on the next app launch for in-app validation.
+                  After saving keys, rebuild the native app (Android and/or iOS) so the SDK picks up
+                  the key. Zoom level updates on next app launch without a rebuild.
                 </p>
               </div>
             </div>

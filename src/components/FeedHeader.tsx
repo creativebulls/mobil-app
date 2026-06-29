@@ -9,6 +9,8 @@ import { colors } from '../theme/colors';
 
 type FeedHeaderProps = {
   title?: string;
+  /** When false, hides the centered/left title (logo + actions only). */
+  showTitle?: boolean;
   onNotificationsPress?: () => void;
   onMessagesPress?: () => void;
   onAddPress?: () => void;
@@ -24,6 +26,7 @@ type FeedHeaderProps = {
 
 export function FeedHeader({
   title = 'My Feed',
+  showTitle = true,
   onNotificationsPress,
   onMessagesPress,
   onAddPress,
@@ -52,15 +55,17 @@ export function FeedHeader({
         accessibilityLabel="Crave logo"
       />
 
-      {alignTitleLeft ? (
-        <Text style={styles.titleLeft} numberOfLines={1}>
-          {title}
-        </Text>
-      ) : (
-        <Text style={styles.title} numberOfLines={1} pointerEvents="none">
-          {title}
-        </Text>
-      )}
+      {showTitle ? (
+        alignTitleLeft ? (
+          <Text style={styles.titleLeft} numberOfLines={1}>
+            {title}
+          </Text>
+        ) : (
+          <Text style={styles.title} numberOfLines={1} pointerEvents="none">
+            {title}
+          </Text>
+        )
+      ) : null}
 
       <View style={styles.actions}>
         {onCallsPress ? (

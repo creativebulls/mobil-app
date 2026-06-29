@@ -728,21 +728,24 @@ function renderMapsStatus(config) {
   }
 
   const zoomLabel = typeof config.defaultZoom === 'number' ? `zoom: ${config.defaultZoom}` : null;
+  const android = config.android ?? { configured: config.configured, maskedKey: config.maskedKey };
+  const ios = config.ios ?? { configured: false, maskedKey: null };
+  const anyKey = android.configured || ios.configured;
 
-  if (config.configured) {
+  if (anyKey) {
     badge.className = 'badge badge-success';
     badge.textContent = 'Configured';
     const parts = [];
-    if (config.maskedKey) parts.push(`key: ${config.maskedKey}`);
+    if (android.configured && android.maskedKey) parts.push(`Android: ${android.maskedKey}`);
+    if (ios.configured && ios.maskedKey) parts.push(`iOS: ${ios.maskedKey}`);
     if (zoomLabel) parts.push(zoomLabel);
-    if (config.updatedAt) parts.push(`key updated ${formatDate(config.updatedAt)}`);
     detail.textContent = parts.join(' · ');
   } else {
     badge.className = 'badge badge-muted';
-    badge.textContent = 'No key';
+    badge.textContent = 'No keys';
     detail.textContent = zoomLabel
-      ? `${zoomLabel} · Add a Google Maps Android API key for the map.`
-      : 'Add a Google Maps Android API key for the friends map.';
+      ? `${zoomLabel} · Add Google Maps API keys for Android and/or iOS.`
+      : 'Add Google Maps API keys for the friends map.';
   }
 }
 
@@ -759,11 +762,12 @@ async function saveMapsConfig() {
   const errorEl = $('maps-config-error');
   errorEl.textContent = '';
   const apiKey = $('maps-api-key').value.trim();
+  const iosApiKey = $('maps-ios-api-key')?.value.trim() ?? '';
   const zoomRaw = $('maps-default-zoom')?.value;
   const defaultZoom = zoomRaw === '' || zoomRaw == null ? undefined : Number.parseInt(String(zoomRaw), 10);
 
-  if (!apiKey && defaultZoom === undefined) {
-    errorEl.textContent = 'Enter an API key and/or default zoom level.';
+  if (!apiKey && !iosApiKey && defaultZoom === undefined) {
+    errorEl.textContent = 'Enter at least one API key and/or default zoom level.';
     return;
   }
 
@@ -776,6 +780,7 @@ async function saveMapsConfig() {
   try {
     const payload = {};
     if (apiKey) payload.apiKey = apiKey;
+    if (iosApiKey) payload.iosApiKey = iosApiKey;
     if (defaultZoom !== undefined) payload.defaultZoom = defaultZoom;
 
     const config = await api('/maps-config', {
@@ -784,7 +789,8 @@ async function saveMapsConfig() {
     });
     renderMapsStatus(config);
     $('maps-api-key').value = '';
-    toast(apiKey ? 'Google Maps settings saved' : 'Map zoom saved');
+    if ($('maps-ios-api-key')) $('maps-ios-api-key').value = '';
+    toast('Google Maps settings saved');
   } catch (error) {
     errorEl.textContent = error.message;
   } finally {
@@ -792,8 +798,8 @@ async function saveMapsConfig() {
   }
 }
 
-async function clearMapsConfig() {
-  $('maps-clear-btn').disabled = true;
+async function clearMapsAndroidConfig() {
+  $('maps-clear-android-btn').disabled = true;
   try {
     const config = await api('/maps-config', { method: 'DELETE' });
     renderMapsStatus(config);
@@ -801,7 +807,20 @@ async function clearMapsConfig() {
   } catch (error) {
     toast(error.message, 'error');
   } finally {
-    $('maps-clear-btn').disabled = false;
+    $('maps-clear-android-btn').disabled = false;
+  }
+}
+
+async function clearMapsIosConfig() {
+  $('maps-clear-ios-btn').disabled = true;
+  try {
+    const config = await api('/maps-config?platform=ios', { method: 'DELETE' });
+    renderMapsStatus(config);
+    toast('Google Maps iOS key removed');
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    $('maps-clear-ios-btn').disabled = false;
   }
 }
 
@@ -1373,7 +1392,8 @@ function bindEvents() {
   $('google-save-btn')?.addEventListener('click', () => void saveGooglePlacesConfig());
   $('google-clear-btn')?.addEventListener('click', () => void clearGooglePlacesConfig());
   $('maps-save-btn')?.addEventListener('click', () => void saveMapsConfig());
-  $('maps-clear-btn')?.addEventListener('click', () => void clearMapsConfig());
+  $('maps-clear-android-btn')?.addEventListener('click', () => void clearMapsAndroidConfig());
+  $('maps-clear-ios-btn')?.addEventListener('click', () => void clearMapsIosConfig());
 
   $('config-add')?.addEventListener('click', () => {
     syncConfigFromInputs();

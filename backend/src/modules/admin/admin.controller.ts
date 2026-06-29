@@ -123,13 +123,15 @@ export const setMapsConfig = asyncHandler(async (req: AdminRequest, res: Respons
   const body = googleMapsConfigSchema.parse(req.body);
   const result = await adminService.setMapsConfig({
     apiKey: body.apiKey,
+    iosApiKey: body.iosApiKey,
     defaultZoom: body.defaultZoom,
   });
   sendSuccess(res, result);
 });
 
-export const clearMapsConfig = asyncHandler(async (_req: AdminRequest, res: Response) => {
-  const result = await adminService.clearMapsConfig();
+export const clearMapsConfig = asyncHandler(async (req: AdminRequest, res: Response) => {
+  const platform = req.query.platform === 'ios' ? 'ios' : 'android';
+  const result = await adminService.clearMapsConfig(platform);
   sendSuccess(res, result);
 });
 

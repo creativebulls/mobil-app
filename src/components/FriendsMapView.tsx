@@ -8,19 +8,31 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
+import { fetchFriendLocations, type FriendLocation } from '../api/profileApi';
 import type { Place } from '../api/types';
 import { useAppText } from '../config/ConfigProvider';
 import { useMapMarkerAssets } from '../hooks/useMapMarkerAssets';
 import { usePlaceMapPhotos } from '../hooks/usePlaceMapPhotos';
 import { usePlaces } from '../hooks/usePlaces';
+import { useUnreadMessageCount } from '../hooks/useUnreadMessageCount';
 import { getStoredUser } from '../storage/authSession';
+import {
+  MAP_FILTER_TABS,
+  placeMatchesMapTab,
+  showsFriendsOnMap,
+  showsPlacesOnMap,
+  type MapFilterTab,
+} from '../utils/mapPlaceCategories';
 import { BrandButton } from './BrandButton';
+import { FeedHeader } from './FeedHeader';
+import { FeedHeaderActions } from './FeedHeaderActions';
 import { colors } from '../theme/colors';
 
 const REFRESH_INTERVAL_MS = 30 * 1000;
@@ -28,7 +40,7 @@ const DEFAULT_MAP_ZOOM = 16;
 const MIN_MAP_ZOOM = 10;
 const MAX_MAP_ZOOM = 20;
 const PLACE_MARKER_SIZE = 40;
-const HOME_PLACES_LIMIT = 16;
+const MAP_PLACES_LIMIT = 30;
 
 function parseMapZoom(raw: string): number {
   const parsed = Number.parseInt(raw, 10);
@@ -128,6 +140,89 @@ function MeMarker({
   );
 }
 
+function FriendMarker({
+  friend,
+  avatarUrl,
+  freezeSnapshot,
+  onPress,
+}: {
+  friend: FriendLocation;
+  avatarUrl: string | null;
+  freezeSnapshot: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Marker
+      coordinate={{ latitude: friend.latitude, longitude: friend.longitude }}
+      onPress={onPress}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={Platform.OS === 'android' && !freezeSnapshot}
+    >
+      <View style={styles.markerWrap} collapsable={false}>
+        <View style={styles.markerBubble} collapsable={false}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.meMarkerImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.meMarkerImage, styles.meMarkerPlaceholder]} collapsable={false}>
+              <Text style={styles.meMarkerInitials}>{getInitials(friend.name)}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.markerLabel} numberOfLines={1}>
+          {friend.name.split(' ')[0]}
+        </Text>
+      </View>
+    </Marker>
+  );
+}
+
+function MapAppHeader({ messagesBadge }: { messagesBadge: number }) {
+  return (
+    <View style={styles.appHeaderClip}>
+      <FeedHeader showActions={false} messagesBadge={messagesBadge} />
+      <View style={styles.appHeaderFloatingActions}>
+        <FeedHeaderActions side="both" messagesBadge={messagesBadge} />
+      </View>
+    </View>
+  );
+}
+
+function MapFilterTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: MapFilterTab;
+  onChange: (tab: MapFilterTab) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tabsRow}
+      style={styles.tabsScroll}
+    >
+      {MAP_FILTER_TABS.map((tab) => {
+        const active = tab.id === activeTab;
+        return (
+          <Pressable
+            key={tab.id}
+            onPress={() => onChange(tab.id)}
+            style={({ pressed }) => [
+              styles.tabChip,
+              active && styles.tabChipActive,
+              pressed && styles.tabChipPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+          >
+            <Text style={[styles.tabChipText, active && styles.tabChipTextActive]}>{tab.label}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 function PlaceMarker({
   place,
   imageUrl,
@@ -170,7 +265,11 @@ function PlaceMarker({
 
 export function FriendsMapView() {
   const router = useRouter();
+  const unreadMessages = useUnreadMessageCount();
   const androidMapsApiKey = useAppText('maps.google_android_api_key');
+  const iosMapsApiKey = useAppText('maps.google_ios_api_key');
+  const googleMapsConfigured =
+    Platform.OS === 'android' ? androidMapsApiKey.trim().length > 0 : iosMapsApiKey.trim().length > 0;
   const mapZoomRaw = useAppText('maps.default_zoom', String(DEFAULT_MAP_ZOOM));
   const mapZoom = useMemo(() => parseMapZoom(mapZoomRaw), [mapZoomRaw]);
   const mapRef = useRef<MapView | null>(null);
@@ -180,7 +279,10 @@ export function FriendsMapView() {
     locationGranted,
     isLoading: placesLoading,
     refresh: refreshPlaces,
-  } = usePlaces(HOME_PLACES_LIMIT);
+  } = usePlaces(MAP_PLACES_LIMIT);
+  const [activeTab, setActiveTab] = useState<MapFilterTab>('all');
+  const [friends, setFriends] = useState<FriendLocation[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(true);
   const [me, setMe] = useState<{ name: string; avatarUri: string | null } | null>(null);
   const [meLoaded, setMeLoaded] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -217,17 +319,51 @@ export function FriendsMapView() {
   }, [places, locationGranted]);
 
   const placeIds = useMemo(() => mapPlaces.map((place) => place.id), [mapPlaces]);
+  const friendAvatarById = useMemo(() => {
+    const entries: Record<string, string | null> = {};
+    for (const friend of friends) {
+      entries[friend.id] = friend.avatarUri;
+    }
+    return entries;
+  }, [friends]);
+
   const { photoById, isLoading: photosLoading } = usePlaceMapPhotos(mapPlaces);
-  const { resolvedAvatar, resolvedPhotos, isReady: assetsReady } = useMapMarkerAssets(
-    me?.avatarUri,
-    photoById,
-    placeIds,
-  );
+  const { resolvedAvatar, resolvedPhotos, resolvedFriendAvatars, isReady: assetsReady } =
+    useMapMarkerAssets(me?.avatarUri, photoById, placeIds, friendAvatarById);
+
+  const visibleFriends = useMemo(() => {
+    if (!showsFriendsOnMap(activeTab)) {
+      return [];
+    }
+    return friends;
+  }, [activeTab, friends]);
+
+  const visiblePlaces = useMemo(() => {
+    if (!showsPlacesOnMap(activeTab)) {
+      return [];
+    }
+    if (activeTab === 'all') {
+      return mapPlaces;
+    }
+    return mapPlaces.filter((place) => placeMatchesMapTab(place, activeTab));
+  }, [activeTab, mapPlaces]);
+
+  const loadFriends = useCallback(async () => {
+    try {
+      const result = await fetchFriendLocations();
+      setFriends(result.friends);
+    } catch {
+      setFriends([]);
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, []);
 
   const screenReady =
     meLoaded &&
     !placesLoading &&
     !photosLoading &&
+    !friendsLoading &&
     assetsReady &&
     mapReady &&
     myCoords !== null;
@@ -241,7 +377,7 @@ export function FriendsMapView() {
     setFreezeMarkerSnapshots(false);
     const timer = setTimeout(() => setFreezeMarkerSnapshots(true), Platform.OS === 'android' ? 2000 : 400);
     return () => clearTimeout(timer);
-  }, [screenReady, resolvedAvatar, resolvedPhotos, mapPlaces]);
+  }, [activeTab, screenReady, resolvedAvatar, resolvedPhotos, resolvedFriendAvatars, visibleFriends, visiblePlaces]);
 
   const focusOnUser = useCallback(
     (animated = true) => {
@@ -262,20 +398,25 @@ export function FriendsMapView() {
 
   const refreshAll = useCallback(() => {
     setFreezeMarkerSnapshots(false);
+    setFriendsLoading(true);
     refreshPlaces();
-  }, [refreshPlaces]);
+    void loadFriends();
+  }, [loadFriends, refreshPlaces]);
 
   useFocusEffect(
     useCallback(() => {
       hasFocusedUserRef.current = false;
+      setFriendsLoading(true);
       refreshPlaces();
+      void loadFriends();
 
       const interval = setInterval(() => {
         refreshPlaces();
+        void loadFriends();
       }, REFRESH_INTERVAL_MS);
 
       return () => clearInterval(interval);
-    }, [refreshPlaces]),
+    }, [loadFriends, refreshPlaces]),
   );
 
   useEffect(() => {
@@ -330,28 +471,34 @@ export function FriendsMapView() {
     }
   }
 
-  if (Platform.OS === 'android' && !androidMapsApiKey.trim()) {
+  if (!googleMapsConfigured) {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="map-outline" size={40} color={colors.labelGray} />
-        <Text style={styles.emptyTitle}>Map not configured</Text>
-        <Text style={styles.emptySubtitle}>
-          Ask your admin to add the Google Maps Android API key in the admin panel, then rebuild the
-          app.
-        </Text>
+      <View style={styles.root}>
+        <MapAppHeader messagesBadge={unreadMessages} />
+        <View style={styles.centered}>
+          <Ionicons name="map-outline" size={40} color={colors.labelGray} />
+          <Text style={styles.emptyTitle}>Map not configured</Text>
+          <Text style={styles.emptySubtitle}>
+            Ask your admin to add the Google Maps {Platform.OS === 'android' ? 'Android' : 'iOS'} API
+            key in the admin panel, then rebuild the app.
+          </Text>
+        </View>
       </View>
     );
   }
 
   if (locationGranted === false) {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="location-outline" size={40} color={colors.brand} />
-        <Text style={styles.emptyTitle}>Location access needed</Text>
-        <Text style={styles.emptySubtitle}>
-          Enable location to see nearby places on the map and your profile marker.
-        </Text>
-        <BrandButton label="Enable location" onPress={() => void handleEnableLocation()} style={styles.cta} />
+      <View style={styles.root}>
+        <MapAppHeader messagesBadge={unreadMessages} />
+        <View style={styles.centered}>
+          <Ionicons name="location-outline" size={40} color={colors.brand} />
+          <Text style={styles.emptyTitle}>Location access needed</Text>
+          <Text style={styles.emptySubtitle}>
+            Enable location to see nearby places on the map and your profile marker.
+          </Text>
+          <BrandButton label="Enable location" onPress={() => void handleEnableLocation()} style={styles.cta} />
+        </View>
       </View>
     );
   }
@@ -370,35 +517,40 @@ export function FriendsMapView() {
         style={[styles.screenContent, !screenReady && styles.screenContentHidden]}
         pointerEvents={screenReady ? 'auto' : 'none'}
       >
-        <View style={styles.header}>
-        <Text style={styles.headerTitle}>Map</Text>
-        <View style={styles.headerActions}>
-          {myCoords ? (
-            <Pressable
-              onPress={() => focusOnUser(true)}
-              style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Center on my location"
-            >
-              <Ionicons name="locate" size={20} color={colors.brand} />
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={refreshAll}
-            style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh map"
-          >
-            <Ionicons name="refresh" size={20} color={colors.brand} />
-          </Pressable>
+        <View style={styles.mapHeader}>
+          <MapAppHeader messagesBadge={unreadMessages} />
+          <View style={styles.tabsToolbar}>
+            <View style={styles.tabsFlex}>
+              <MapFilterTabs activeTab={activeTab} onChange={setActiveTab} />
+            </View>
+            <View style={styles.headerActions}>
+              {myCoords ? (
+                <Pressable
+                  onPress={() => focusOnUser(true)}
+                  style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Center on my location"
+                >
+                  <Ionicons name="locate" size={20} color={colors.brand} />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={refreshAll}
+                style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh map"
+              >
+                <Ionicons name="refresh" size={20} color={colors.brand} />
+              </Pressable>
+            </View>
+          </View>
         </View>
-      </View>
 
       <View style={styles.mapContainer}>
         <MapView
           ref={mapRef}
           style={styles.map}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          provider={googleMapsConfigured ? PROVIDER_GOOGLE : undefined}
           initialRegion={initialRegion}
           customMapStyle={MAP_STYLE}
           showsUserLocation={false}
@@ -415,7 +567,18 @@ export function FriendsMapView() {
             />
           ) : null}
           {screenReady
-            ? mapPlaces.map((place) => (
+            ? visibleFriends.map((friend) => (
+                <FriendMarker
+                  key={friend.id}
+                  friend={friend}
+                  avatarUrl={resolvedFriendAvatars[friend.id] ?? null}
+                  freezeSnapshot={freezeMarkerSnapshots}
+                  onPress={() => router.push(`/user/${friend.id}`)}
+                />
+              ))
+            : null}
+          {screenReady
+            ? visiblePlaces.map((place) => (
                 <PlaceMarker
                   key={place.id}
                   place={place}
@@ -436,25 +599,14 @@ export function FriendsMapView() {
             : null}
         </MapView>
 
-        {screenReady && mapPlaces.length === 0 ? (
+        {screenReady && visibleFriends.length === 0 && visiblePlaces.length === 0 ? (
           <View style={styles.emptyOverlay}>
-            <Text style={styles.emptyOverlayTitle}>No places nearby yet</Text>
+            <Text style={styles.emptyOverlayTitle}>Nothing to show</Text>
             <Text style={styles.emptyOverlaySubtitle}>
-              Nearby places from the app feed will appear here on the map.
+              {activeTab === 'friends' || activeTab === 'all'
+                ? 'Friends appear when they share a recent location. Try another tab for nearby places.'
+                : `No nearby ${activeTab} found. Try the All or Friends tab.`}
             </Text>
-          </View>
-        ) : null}
-
-        {screenReady && mapPlaces.length > 0 ? (
-          <View style={styles.legend}>
-            <View style={styles.legendItem}>
-              <View style={styles.legendDotMe} />
-              <Text style={styles.legendText}>You</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={styles.legendDotPlace} />
-              <Text style={styles.legendText}>Places</Text>
-            </View>
           </View>
         ) : null}
       </View>
@@ -494,19 +646,64 @@ const styles = StyleSheet.create({
     color: colors.labelGray,
     textAlign: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  mapHeader: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.surfaceMutedBorder,
+    backgroundColor: colors.white,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  appHeaderClip: {
+    height: 56,
+    position: 'relative',
+    backgroundColor: colors.white,
+  },
+  appHeaderFloatingActions: {
+    position: 'absolute',
+    right: 20,
+    top: 8,
+  },
+  tabsToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+    gap: 4,
+  },
+  tabsFlex: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tabsScroll: {
+    flexGrow: 0,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    paddingTop: 2,
+  },
+  tabChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.surfaceMutedBorder,
+  },
+  tabChipActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  tabChipPressed: {
+    opacity: 0.85,
+  },
+  tabChipText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.text,
+  },
+  tabChipTextActive: {
+    color: colors.white,
   },
   headerActions: {
     flexDirection: 'row',
@@ -618,45 +815,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     overflow: 'hidden',
-  },
-  legend: {
-    position: 'absolute',
-    top: 12,
-    left: 16,
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.surfaceMutedBorder,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  legendDotMe: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.brand,
-    backgroundColor: colors.white,
-  },
-  legendDotPlace: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: colors.brand,
-    backgroundColor: colors.surfaceMuted,
-  },
-  legendText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
   },
   emptyOverlay: {
     position: 'absolute',

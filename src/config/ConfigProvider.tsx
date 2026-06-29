@@ -48,8 +48,9 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   'home.view_all_label': 'View all',
   'home.search_placeholder': 'Search friends, places, posts…',
 
-  // Google Maps SDK for Android (friends map). Loaded from admin maps-config.
+  // Google Maps SDK keys (friends map). Loaded from admin maps-config.
   'maps.google_android_api_key': '',
+  'maps.google_ios_api_key': '',
   // Map camera zoom when centered on the user (10–20). Loaded from admin maps-config.
   'maps.default_zoom': '16',
 };

@@ -61,7 +61,7 @@ export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBar
         accessibilityState={{ selected: activeTab === 'home' }}
       >
         <Ionicons
-          name={activeTab === 'home' ? 'home' : 'home-outline'}
+          name="home-outline"
           size={TAB_ICON_SIZE}
           color={activeTab === 'home' ? colors.brand : colors.labelGray}
         />
@@ -75,7 +75,7 @@ export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBar
         accessibilityState={{ selected: activeTab === 'map' }}
       >
         <Ionicons
-          name={activeTab === 'map' ? 'map' : 'map-outline'}
+          name="map-outline"
           size={TAB_ICON_SIZE}
           color={activeTab === 'map' ? colors.brand : colors.labelGray}
         />
@@ -88,7 +88,7 @@ export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBar
         accessibilityLabel="Create post"
       >
         <View style={styles.createButton}>
-          <Ionicons name="add" size={22} color={colors.white} />
+          <Ionicons name="add-outline" size={22} color={colors.white} />
         </View>
       </Pressable>
 
@@ -109,7 +109,7 @@ export function BottomTabBar({ activeTab = null, profileImageUri }: BottomTabBar
           </View>
         ) : (
           <Ionicons
-            name={activeTab === 'profile' ? 'person-circle' : 'person-circle-outline'}
+            name="person-circle-outline"
             size={TAB_ICON_SIZE + 2}
             color={activeTab === 'profile' ? colors.brand : colors.labelGray}
           />

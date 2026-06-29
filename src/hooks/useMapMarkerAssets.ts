@@ -6,6 +6,7 @@ import { resolveMediaUrl } from '../utils/mediaUrl';
 type MapMarkerAssets = {
   resolvedAvatar: string | null;
   resolvedPhotos: Record<string, string | null>;
+  resolvedFriendAvatars: Record<string, string | null>;
   isReady: boolean;
 };
 
@@ -17,18 +18,25 @@ export function useMapMarkerAssets(
   avatarUri: string | null | undefined,
   photoById: Record<string, string | null>,
   placeIds: string[],
+  friendAvatarById: Record<string, string | null> = {},
 ): MapMarkerAssets {
   const [resolvedAvatar, setResolvedAvatar] = useState<string | null>(null);
   const [resolvedPhotos, setResolvedPhotos] = useState<Record<string, string | null>>({});
+  const [resolvedFriendAvatars, setResolvedFriendAvatars] = useState<Record<string, string | null>>({});
   const [isReady, setIsReady] = useState(false);
+
+  const friendIds = useMemo(() => Object.keys(friendAvatarById).sort(), [friendAvatarById]);
 
   const assetKey = useMemo(() => {
     const parts = [avatarUri ?? ''];
     for (const id of placeIds) {
-      parts.push(`${id}:${photoById[id] ?? ''}`);
+      parts.push(`p:${id}:${photoById[id] ?? ''}`);
+    }
+    for (const id of friendIds) {
+      parts.push(`f:${id}:${friendAvatarById[id] ?? ''}`);
     }
     return parts.join('|');
-  }, [avatarUri, photoById, placeIds]);
+  }, [avatarUri, friendAvatarById, friendIds, photoById, placeIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +46,16 @@ export function useMapMarkerAssets(
       const photoEntries = await Promise.all(
         placeIds.map(async (id) => {
           const url = photoById[id];
+          if (!url) {
+            return [id, null] as const;
+          }
+          return [id, await resolveMediaUrl(url)] as const;
+        }),
+      );
+
+      const friendEntries = await Promise.all(
+        friendIds.map(async (id) => {
+          const url = friendAvatarById[id];
           if (!url) {
             return [id, null] as const;
           }
@@ -55,12 +73,19 @@ export function useMapMarkerAssets(
         nextPhotos[id] = url;
       }
 
+      const nextFriendAvatars: Record<string, string | null> = {};
+      for (const [id, url] of friendEntries) {
+        nextFriendAvatars[id] = url;
+      }
+
       setResolvedAvatar(avatar);
       setResolvedPhotos(nextPhotos);
+      setResolvedFriendAvatars(nextFriendAvatars);
 
       const prefetchUrls = [
         avatar,
         ...photoEntries.map(([, url]) => url).filter((url): url is string => Boolean(url)),
+        ...friendEntries.map(([, url]) => url).filter((url): url is string => Boolean(url)),
       ];
 
       if (prefetchUrls.length > 0) {
@@ -71,7 +96,6 @@ export function useMapMarkerAssets(
         return;
       }
 
-      // Give Android a moment to commit prefetched bitmaps before MapView snapshots markers.
       setTimeout(() => {
         if (!cancelled) {
           setIsReady(true);
@@ -82,7 +106,7 @@ export function useMapMarkerAssets(
     return () => {
       cancelled = true;
     };
-  }, [assetKey, avatarUri, photoById, placeIds]);
+  }, [assetKey, avatarUri, friendAvatarById, friendIds, photoById, placeIds]);
 
-  return { resolvedAvatar, resolvedPhotos, isReady };
+  return { resolvedAvatar, resolvedPhotos, resolvedFriendAvatars, isReady };
 }

@@ -16,7 +16,7 @@ const IS_PRODUCTION =
   process.env.APP_VARIANT === 'production' ||
   process.env.EAS_BUILD_PROFILE === 'production';
 
-function fetchAndroidMapsApiKey() {
+function fetchMapsApiKeys() {
   const apiUrl = (process.env.EXPO_PUBLIC_API_URL || 'https://mobilevps.tech').replace(/\/$/, '');
   try {
     const raw = execSync(
@@ -24,10 +24,15 @@ function fetchAndroidMapsApiKey() {
       { encoding: 'utf8' },
     );
     const payload = JSON.parse(raw);
-    const key = payload?.data?.config?.['maps.google_android_api_key'];
-    return typeof key === 'string' && key.trim() ? key.trim() : null;
+    const config = payload?.data?.config ?? {};
+    const android = config['maps.google_android_api_key'];
+    const ios = config['maps.google_ios_api_key'];
+    return {
+      android: typeof android === 'string' && android.trim() ? android.trim() : null,
+      ios: typeof ios === 'string' && ios.trim() ? ios.trim() : null,
+    };
   } catch {
-    return null;
+    return { android: null, ios: null };
   }
 }
 
@@ -70,17 +75,30 @@ module.exports = ({ config }) => {
     },
   };
 
-  const mapsApiKey =
-    fetchAndroidMapsApiKey() ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? null;
+  const remoteKeys = fetchMapsApiKeys();
+  const androidMapsApiKey =
+    remoteKeys.android ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY ?? null;
+  const iosMapsApiKey =
+    remoteKeys.ios ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY ?? null;
 
-  if (mapsApiKey) {
+  if (androidMapsApiKey) {
     config.android = {
       ...(config.android ?? {}),
       config: {
         ...(config.android?.config ?? {}),
         googleMaps: {
-          apiKey: mapsApiKey,
+          apiKey: androidMapsApiKey,
         },
+      },
+    };
+  }
+
+  if (iosMapsApiKey) {
+    config.ios = {
+      ...(config.ios ?? {}),
+      config: {
+        ...(config.ios?.config ?? {}),
+        googleMapsApiKey: iosMapsApiKey,
       },
     };
   }

@@ -121,6 +121,7 @@ const FOURSQUARE_API_KEY_SETTING = 'foursquare_api_key';
 const FOURSQUARE_PRO_FIELDS_SETTING = 'foursquare_pro_fields';
 const GOOGLE_API_KEY_SETTING = 'google_places_api_key';
 const GOOGLE_MAPS_ANDROID_API_KEY_SETTING = 'google_maps_android_api_key';
+const GOOGLE_MAPS_IOS_API_KEY_SETTING = 'google_maps_ios_api_key';
 const MAP_DEFAULT_ZOOM_SETTING = 'map_default_zoom';
 const DEFAULT_MAP_ZOOM = 16;
 const MIN_MAP_ZOOM = 10;
@@ -303,6 +304,12 @@ export async function getGoogleMapsAndroidApiKey(): Promise<string | null> {
   return key || null;
 }
 
+export async function getGoogleMapsIosApiKey(): Promise<string | null> {
+  const doc = await AppSetting.findOne({ key: GOOGLE_MAPS_IOS_API_KEY_SETTING });
+  const key = doc?.value?.trim();
+  return key || null;
+}
+
 function clampMapZoom(value: number): number {
   return Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, Math.round(value)));
 }
@@ -317,23 +324,39 @@ export async function getMapDefaultZoom(): Promise<number> {
 }
 
 export async function getMapsConfig() {
-  const [keyDoc, zoomDoc] = await Promise.all([
+  const [androidDoc, iosDoc, zoomDoc] = await Promise.all([
     AppSetting.findOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING }),
+    AppSetting.findOne({ key: GOOGLE_MAPS_IOS_API_KEY_SETTING }),
     AppSetting.findOne({ key: MAP_DEFAULT_ZOOM_SETTING }),
   ]);
-  const key = keyDoc?.value?.trim() || null;
+  const androidKey = androidDoc?.value?.trim() || null;
+  const iosKey = iosDoc?.value?.trim() || null;
   const defaultZoom = await getMapDefaultZoom();
 
   return {
-    configured: Boolean(key),
-    maskedKey: key ? maskKey(key) : null,
-    updatedAt: keyDoc?.updatedAt ?? null,
+    configured: Boolean(androidKey),
+    maskedKey: androidKey ? maskKey(androidKey) : null,
+    updatedAt: androidDoc?.updatedAt ?? null,
+    android: {
+      configured: Boolean(androidKey),
+      maskedKey: androidKey ? maskKey(androidKey) : null,
+      updatedAt: androidDoc?.updatedAt ?? null,
+    },
+    ios: {
+      configured: Boolean(iosKey),
+      maskedKey: iosKey ? maskKey(iosKey) : null,
+      updatedAt: iosDoc?.updatedAt ?? null,
+    },
     defaultZoom,
     zoomUpdatedAt: zoomDoc?.updatedAt ?? null,
   };
 }
 
-export async function setMapsConfig(input: { apiKey?: string; defaultZoom?: number }) {
+export async function setMapsConfig(input: {
+  apiKey?: string;
+  iosApiKey?: string;
+  defaultZoom?: number;
+}) {
   if (input.apiKey !== undefined) {
     const trimmed = input.apiKey.trim();
     if (!trimmed) {
@@ -341,6 +364,18 @@ export async function setMapsConfig(input: { apiKey?: string; defaultZoom?: numb
     }
     await AppSetting.findOneAndUpdate(
       { key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING },
+      { value: trimmed },
+      { upsert: true, new: true },
+    );
+  }
+
+  if (input.iosApiKey !== undefined) {
+    const trimmed = input.iosApiKey.trim();
+    if (!trimmed) {
+      throw new AppError(400, 'Google Maps iOS API key is required', 'INVALID_GOOGLE_MAPS_IOS_KEY');
+    }
+    await AppSetting.findOneAndUpdate(
+      { key: GOOGLE_MAPS_IOS_API_KEY_SETTING },
       { value: trimmed },
       { upsert: true, new: true },
     );
@@ -354,15 +389,23 @@ export async function setMapsConfig(input: { apiKey?: string; defaultZoom?: numb
     );
   }
 
-  if (input.apiKey === undefined && input.defaultZoom === undefined) {
+  if (
+    input.apiKey === undefined &&
+    input.iosApiKey === undefined &&
+    input.defaultZoom === undefined
+  ) {
     throw new AppError(400, 'Provide an API key and/or default zoom level', 'INVALID_MAPS_CONFIG');
   }
 
   return getMapsConfig();
 }
 
-export async function clearMapsConfig() {
-  await AppSetting.deleteOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
+export async function clearMapsConfig(platform: 'android' | 'ios' = 'android') {
+  if (platform === 'ios') {
+    await AppSetting.deleteOne({ key: GOOGLE_MAPS_IOS_API_KEY_SETTING });
+  } else {
+    await AppSetting.deleteOne({ key: GOOGLE_MAPS_ANDROID_API_KEY_SETTING });
+  }
   return getMapsConfig();
 }
 
@@ -371,6 +414,10 @@ export async function getPublicAppConfig() {
   const mapsKey = await getGoogleMapsAndroidApiKey();
   if (mapsKey) {
     config['maps.google_android_api_key'] = mapsKey;
+  }
+  const iosMapsKey = await getGoogleMapsIosApiKey();
+  if (iosMapsKey) {
+    config['maps.google_ios_api_key'] = iosMapsKey;
   }
   config['maps.default_zoom'] = String(await getMapDefaultZoom());
   return { config, updatedAt };
