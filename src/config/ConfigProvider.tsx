@@ -38,6 +38,11 @@ export const DEFAULT_APP_TEXT: Record<string, string> = {
   'welcome.new_user_button': "I'm new to Crave",
   'welcome.existing_account_button': 'I have an account',
 
+  // Splash / first-run landing screen (one tagline per line).
+  'splash.taglines': 'Real experiences.\nReal people.\nRemember more.',
+  'splash.get_started_button': 'Get started',
+  'splash.explore_guest_link': 'Explore as guest',
+
   'home.meet_friends_title': 'Meet Friends',
   'home.discover_title': 'Discover Top Places',
   'home.discover_near_title': 'Discover Places Near You',

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AuthTokens, UserProfile } from '../api/types';
 import { emitSessionCleared } from '../auth/sessionEvents';
+import { clearGuestMode } from './guest';
 import { clearOfflineCache } from './offlineCache';
 
 const ACCESS_TOKEN_KEY = '@whereabout/access_token';
@@ -17,6 +18,7 @@ export async function saveSession(tokens: AuthTokens, user: UserProfile): Promis
     [USER_KEY, JSON.stringify(user)],
   ]);
   await AsyncStorage.removeItem(PENDING_SESSION_KEY);
+  await clearGuestMode();
 }
 
 export async function savePendingSessionToken(token: string): Promise<void> {
@@ -50,6 +52,7 @@ export async function clearSession(): Promise<void> {
   ]);
   // Drop cached API data so the next account never sees the previous user's data.
   await clearOfflineCache();
+  await clearGuestMode();
   emitSessionCleared();
 }
 

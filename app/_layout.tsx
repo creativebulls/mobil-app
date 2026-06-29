@@ -8,6 +8,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 
 import { onAccountSuspended, onSessionCleared, consumeLogoutNavigation } from '../src/auth/sessionEvents';
 import { getRefreshToken, getStoredUser } from '../src/storage/authSession';
+import { isGuestMode } from '../src/storage/guest';
 import { AppErrorBoundary } from '../src/components/AppErrorBoundary';
 import { CallProvider } from '../src/calls/CallProvider';
 import { LiveAudioProvider } from '../src/calls/LiveAudioProvider';
@@ -38,6 +39,8 @@ const PUBLIC_ROUTES = [
   '/verification-code',
 ];
 
+const GUEST_ROUTES = ['/home', '/map', '/places', '/place-detail'];
+
 /**
  * Watches for the session being cleared (invalid refresh token or explicit
  * logout) and immediately routes the user away from authenticated screens.
@@ -58,11 +61,25 @@ function SessionGuard() {
     }
 
     let cancelled = false;
-    void Promise.all([getRefreshToken(), getStoredUser()]).then(([refreshToken, user]) => {
-      if (!cancelled && (!refreshToken || !user)) {
-        router.replace('/sign-in');
-      }
-    });
+    void Promise.all([getRefreshToken(), getStoredUser(), isGuestMode()]).then(
+      ([refreshToken, user, guestMode]) => {
+        if (cancelled) {
+          return;
+        }
+
+        const isGuestRoute = GUEST_ROUTES.some(
+          (route) => pathname === route || pathname.startsWith(`${route}/`),
+        );
+
+        if (guestMode && isGuestRoute) {
+          return;
+        }
+
+        if (!refreshToken || !user) {
+          router.replace('/sign-in');
+        }
+      },
+    );
 
     return () => {
       cancelled = true;

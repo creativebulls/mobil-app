@@ -600,6 +600,11 @@ const DEFAULT_APP_CONFIG: Record<string, string> = {
   'welcome.new_user_button': "I'm new to Crave",
   'welcome.existing_account_button': 'I have an account',
 
+  // Splash / first-run landing screen (one tagline per line).
+  'splash.taglines': 'Real experiences.\nReal people.\nRemember more.',
+  'splash.get_started_button': 'Get started',
+  'splash.explore_guest_link': 'Explore as guest',
+
   // Home feed section titles & labels
   'home.meet_friends_title': 'Meet Friends',
   // Discover section has three variants depending on location; use {place} as a

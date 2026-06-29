@@ -1,31 +1,31 @@
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { fetchCurrentUser } from '../src/api/authApi';
 import { ApiError } from '../src/api/types';
 import { AppSplashScreen } from '../src/components/AppSplashScreen';
 import { getAccessToken, getRefreshToken, getStoredUser, updateStoredUser } from '../src/storage/authSession';
-import { isWelcomeCompleted } from '../src/storage/welcome';
-
-const SPLASH_MIN_DURATION_MS = 3000;
+import { enableGuestMode } from '../src/storage/guest';
+import { markWelcomeCompleted } from '../src/storage/welcome';
+import { colors } from '../src/theme/colors';
 
 type SessionRoute = '/home' | '/sign-in' | '/account-suspended';
+type BootstrapState = 'loading' | 'splash' | 'navigating';
 
-async function resolveActiveSessionRoute(): Promise<SessionRoute> {
+async function resolveActiveSessionRoute(): Promise<SessionRoute | null> {
   const [accessToken, refreshToken, storedUser] = await Promise.all([
     getAccessToken(),
     getRefreshToken(),
     getStoredUser(),
   ]);
 
-  // No saved session at all → straight to sign-in.
   if ((!accessToken && !refreshToken) || !storedUser) {
-    return '/sign-in';
+    return null;
   }
 
   try {
-    // Validates the token and transparently refreshes an expired access token.
     const user = await fetchCurrentUser();
     await updateStoredUser(user);
     if (user.suspended) {
@@ -33,16 +33,14 @@ async function resolveActiveSessionRoute(): Promise<SessionRoute> {
     }
     return user.registrationStatus === 'completed' ? '/home' : '/sign-in';
   } catch (error) {
-    // Token is genuinely invalid / refresh failed → session was cleared.
     if (error instanceof ApiError && error.status === 401) {
-      return '/sign-in';
+      return null;
     }
 
     if (storedUser.suspended) {
       return '/account-suspended';
     }
 
-    // Offline or transient error → trust the cached session.
     return storedUser.registrationStatus === 'completed' ? '/home' : '/sign-in';
   }
 }
@@ -50,45 +48,85 @@ async function resolveActiveSessionRoute(): Promise<SessionRoute> {
 export default function Index() {
   const router = useRouter();
   const hasNavigated = useRef(false);
+  const [bootstrapState, setBootstrapState] = useState<BootstrapState>('loading');
 
-  const handleSplashLayout = useCallback(() => {
+  const hideNativeSplash = useCallback(() => {
     SplashScreen.hideAsync().catch(() => undefined);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function run() {
-      const startTime = Date.now();
+    async function bootstrap() {
+      const destination = await resolveActiveSessionRoute();
 
-      const welcomeDone = await isWelcomeCompleted();
-
-      let destination: '/welcome' | SessionRoute;
-
-      if (!welcomeDone) {
-        destination = '/welcome';
-      } else {
-        destination = await resolveActiveSessionRoute();
-      }
-
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, SPLASH_MIN_DURATION_MS - elapsed);
-      await new Promise((resolve) => setTimeout(resolve, remaining));
-
-      if (cancelled || hasNavigated.current) {
+      if (cancelled) {
         return;
       }
-      hasNavigated.current = true;
 
-      router.replace(destination);
+      if (destination) {
+        hasNavigated.current = true;
+        setBootstrapState('navigating');
+        hideNativeSplash();
+        router.replace(destination);
+        return;
+      }
+
+      setBootstrapState('splash');
+      hideNativeSplash();
     }
 
-    run();
+    void bootstrap();
 
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [hideNativeSplash, router]);
 
-  return <AppSplashScreen onLayout={handleSplashLayout} />;
+  const navigateOnce = useCallback(
+    (destination: '/welcome' | '/home') => {
+      if (hasNavigated.current) {
+        return;
+      }
+      hasNavigated.current = true;
+      router.replace(destination);
+    },
+    [router],
+  );
+
+  const handleGetStarted = useCallback(() => {
+    navigateOnce('/welcome');
+  }, [navigateOnce]);
+
+  const handleExploreGuest = useCallback(() => {
+    void (async () => {
+      await Promise.all([enableGuestMode(), markWelcomeCompleted()]);
+      navigateOnce('/home');
+    })();
+  }, [navigateOnce]);
+
+  if (bootstrapState === 'loading' || bootstrapState === 'navigating') {
+    return (
+      <View style={styles.bootLoader}>
+        <ActivityIndicator size="large" color={colors.brand} />
+      </View>
+    );
+  }
+
+  return (
+    <AppSplashScreen
+      onGetStarted={handleGetStarted}
+      onExploreGuest={handleExploreGuest}
+      onLayout={hideNativeSplash}
+    />
+  );
 }
+
+const styles = StyleSheet.create({
+  bootLoader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+});

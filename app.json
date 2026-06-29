@@ -59,14 +59,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/app-icons/crave-black.png",
-          "imageWidth": 300,
-          "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF",
-          "dark": {
-            "image": "./assets/app-icons/crave-full.png",
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#000000"
         }
       ],
       "./plugins/withWhereaboutNetworkSecurity",

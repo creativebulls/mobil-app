@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -14,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchFriendLocations, type FriendLocation } from '../api/profileApi';
 import type { Place } from '../api/types';
@@ -359,14 +361,27 @@ export function FriendsMapView() {
     }
   }, []);
 
-  const screenReady =
+  const dataReady =
     meLoaded &&
     !placesLoading &&
     !photosLoading &&
     !friendsLoading &&
     assetsReady &&
-    mapReady &&
-    myCoords !== null;
+    (myCoords !== null || locationGranted);
+
+  const screenReady = dataReady && mapReady;
+
+  useEffect(() => {
+    if (mapReady) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setMapReady(true);
+    }, Platform.OS === 'ios' ? 5000 : 8000);
+
+    return () => clearTimeout(timer);
+  }, [mapReady]);
 
   useEffect(() => {
     if (!screenReady) {
@@ -505,18 +520,7 @@ export function FriendsMapView() {
 
   return (
     <View style={styles.root}>
-      {!screenReady ? (
-        <View style={styles.fullScreenLoader}>
-          <ActivityIndicator size="large" color={colors.brand} />
-          <Text style={styles.loaderTitle}>Loading map</Text>
-          <Text style={styles.loaderSubtitle}>Fetching places and photos…</Text>
-        </View>
-      ) : null}
-
-      <View
-        style={[styles.screenContent, !screenReady && styles.screenContentHidden]}
-        pointerEvents={screenReady ? 'auto' : 'none'}
-      >
+      <View style={styles.screenContent} pointerEvents={screenReady ? 'auto' : 'none'}>
         <View style={styles.mapHeader}>
           <MapAppHeader messagesBadge={unreadMessages} />
           <View style={styles.tabsToolbar}>
@@ -611,6 +615,18 @@ export function FriendsMapView() {
         ) : null}
       </View>
       </View>
+
+      {!dataReady ? (
+        <Modal visible animationType="fade" transparent={false} statusBarTranslucent={false}>
+          <SafeAreaView style={styles.loaderScreen} edges={['top', 'left', 'right', 'bottom']}>
+            <View style={styles.loaderContent}>
+              <ActivityIndicator size="large" color={colors.brand} />
+              <Text style={styles.loaderTitle}>Loading map</Text>
+              <Text style={styles.loaderSubtitle}>Fetching places and photos…</Text>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -623,15 +639,14 @@ const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
   },
-  screenContentHidden: {
-    opacity: 0,
+  loaderScreen: {
+    flex: 1,
+    backgroundColor: colors.white,
   },
-  fullScreenLoader: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 10,
+  loaderContent: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
     gap: 10,
     paddingHorizontal: 32,
   },
